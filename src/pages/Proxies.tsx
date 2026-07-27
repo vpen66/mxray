@@ -528,6 +528,12 @@ export const ProxiesPage: React.FC = () => {
                                     </span>
                                   )}
 
+                                  {node.security === 'tls' && (
+                                    <span className="px-1.5 py-0.5 rounded border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 font-semibold flex items-center gap-0.5">
+                                      <Shield className="w-2.5 h-2.5" /> TLS
+                                    </span>
+                                  )}
+
                                   {node.flow && (
                                     <span className="px-1.5 py-0.5 rounded border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">
                                       Vision
