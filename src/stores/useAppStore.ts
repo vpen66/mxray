@@ -18,7 +18,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
   coreState: {
     isRunning: true,
-    version: 'Xray 1.8.24 (Xray-core)',
+    version: 'Xray 26.3.27 (Xray-core)',
     uptime: 3600,
     mode: 'rule',
     systemProxy: false,

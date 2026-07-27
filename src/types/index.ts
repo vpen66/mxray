@@ -110,3 +110,23 @@ export interface XrayCustomConfig {
   policy?: Record<string, any>;
   customJsonPatch?: string; // JSON Patch or JSON Merge string
 }
+
+export type KernelSourceType = 'bundled' | 'custom' | 'installed';
+
+export interface KernelInfo {
+  name: String;
+  version: String;
+  path: String;
+  kernel_type: KernelSourceType;
+  is_valid: boolean;
+  error?: string;
+}
+
+export interface RemoteRelease {
+  version: string;
+  tag_name: string;
+  name: string;
+  published_at: string;
+  download_url: string;
+}
+

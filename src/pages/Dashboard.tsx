@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Activity, ShieldCheck, Radio, Sparkles } from 'luci
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAppStore } from '../stores/useAppStore';
 import { useProxyStore } from '../stores/useProxyStore';
+import { useKernelStore } from '../stores/useKernelStore';
 
 const MOCK_SPEED_HISTORY = [
   { time: '10:45', up: 12, down: 120 },
@@ -17,6 +18,7 @@ const MOCK_SPEED_HISTORY = [
 export const DashboardPage: React.FC = () => {
   const { coreState, trafficStats, setMode, updateTraffic } = useAppStore();
   const { profiles, selectedNodeId } = useProxyStore();
+  const { activeKernel } = useKernelStore();
 
   const activeNode = profiles
     .flatMap((p) => p.nodes)
@@ -49,9 +51,9 @@ export const DashboardPage: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Xray-core Engine
+              <Sparkles className="w-3 h-3" /> {activeKernel.name}
             </span>
-            <span className="text-xs text-slate-400">v1.8.24</span>
+            <span className="text-xs text-slate-400">{activeKernel.version}</span>
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">网络传输控制台</h2>
           <p className="text-sm text-slate-400">

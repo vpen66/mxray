@@ -16,7 +16,7 @@ interface ProxyStore {
 const INITIAL_NODES: ProxyNode[] = [
   {
     id: 'node-vless-reality-1',
-    name: '🇺🇸 美国 01 | VLESS-REALITY-Vision',
+    name: '美国 01 | VLESS-REALITY-Vision',
     protocol: 'vless',
     server: 'us01.mxray.net',
     port: 443,
@@ -31,7 +31,7 @@ const INITIAL_NODES: ProxyNode[] = [
   },
   {
     id: 'node-vless-reality-2',
-    name: '🇯🇵 日本 01 | VLESS-REALITY-gRPC',
+    name: '日本 01 | VLESS-REALITY-gRPC',
     protocol: 'vless',
     server: 'jp01.mxray.net',
     port: 443,
@@ -46,7 +46,7 @@ const INITIAL_NODES: ProxyNode[] = [
   },
   {
     id: 'node-hy2-1',
-    name: '🇭🇰 香港 01 | Hysteria2 高速专线',
+    name: '香港 01 | Hysteria2 高速专线',
     protocol: 'hysteria2',
     server: 'hk01.mxray.net',
     port: 8443,
@@ -57,7 +57,7 @@ const INITIAL_NODES: ProxyNode[] = [
   },
   {
     id: 'node-vmess-ws-1',
-    name: '🇸🇬 新加坡 01 | VMess-WS-TLS',
+    name: '新加坡 01 | VMess-WS-TLS',
     protocol: 'vmess',
     server: 'sg01.mxray.net',
     port: 443,
@@ -71,7 +71,7 @@ const INITIAL_NODES: ProxyNode[] = [
   },
   {
     id: 'node-trojan-1',
-    name: '🇩🇪 德国 01 | Trojan-TLS',
+    name: '德国 01 | Trojan-TLS',
     protocol: 'trojan',
     server: 'de01.mxray.net',
     port: 443,
@@ -86,7 +86,7 @@ const INITIAL_NODES: ProxyNode[] = [
 const INITIAL_PROFILES: Profile[] = [
   {
     id: 'prof-1',
-    name: '🚀 Premium 核心订阅',
+    name: 'Premium 核心订阅',
     url: 'https://sub.mxray.net/api/v1/sub?token=demo',
     type: 'remote',
     updatedAt: Date.now() - 3600000 * 2,
@@ -97,7 +97,7 @@ const INITIAL_PROFILES: Profile[] = [
   },
   {
     id: 'prof-2',
-    name: '📁 本地备用配置 (Clash/JSON 导入)',
+    name: '本地备用配置 (Clash/JSON 导入)',
     type: 'local',
     updatedAt: Date.now() - 3600000 * 24,
     nodeCount: 1,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Link2, Trash2, Sparkles, Code2 } from 'lucide-react';
+import { Plus, Link2, Trash2, Sparkles, Code2, X, Globe, FileText } from 'lucide-react';
 import { useProxyStore } from '../stores/useProxyStore';
 import type { Profile } from '../types';
 
@@ -106,7 +106,8 @@ export const ProfilesPage: React.FC = () => {
             <div className="flex items-start justify-between">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${profile.type === 'remote' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${profile.type === 'remote' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                    {profile.type === 'remote' ? <Globe className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
                     {profile.type === 'remote' ? '远程订阅' : '本地文件'}
                   </span>
                   <h3 className="text-base font-bold text-white">{profile.name}</h3>
@@ -136,7 +137,9 @@ export const ProfilesPage: React.FC = () => {
           <div className="glass-card max-w-lg w-full p-6 rounded-2xl space-y-5 border border-white/15 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="text-lg font-bold text-white">导入订阅或链接</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Type selector */}

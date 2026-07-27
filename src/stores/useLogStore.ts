@@ -18,7 +18,7 @@ const MOCK_INITIAL_LOGS: LogEntry[] = [
     id: '1',
     timestamp: new Date(Date.now() - 60000 * 5).toLocaleTimeString(),
     level: 'info',
-    message: '[MXray Core] Starting Xray-core v1.8.24 (Xray, Penetrates Everything.)',
+    message: '[MXray Core] Starting Xray-core v26.3.27 (Xray, Penetrates Everything.)',
   },
   {
     id: '2',

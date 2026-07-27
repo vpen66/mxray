@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, Check, Search, RefreshCw, Cpu } from 'lucide-react';
+import { Zap, Check, Search, RefreshCw, Cpu, Server } from 'lucide-react';
 import { useProxyStore } from '../stores/useProxyStore';
 import type { ProtocolType } from '../types';
 
@@ -114,9 +114,12 @@ export const ProxiesPage: React.FC = () => {
 
               {/* Node Title & Server */}
               <div className="pr-8 space-y-1">
-                <h3 className="text-sm font-bold text-white group-hover:text-blue-300 transition-colors line-clamp-1">
-                  {node.name}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <Server className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-400 shrink-0 transition-colors" />
+                  <h3 className="text-sm font-bold text-white group-hover:text-blue-300 transition-colors line-clamp-1">
+                    {node.name}
+                  </h3>
+                </div>
                 <p className="text-xs text-slate-400 font-mono truncate">
                   {node.server}:{node.port}
                 </p>
