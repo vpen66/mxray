@@ -1,0 +1,32 @@
+[package]
+name = "mxray"
+version = "0.1.0"
+description = "MXray - Modern Cross-Platform Xray-core GUI Desktop Client"
+authors = ["vpen"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = ["tray-icon"] }
+tauri-plugin-shell = "2.0"
+tauri-plugin-process = "2.0"
+tauri-plugin-dialog = "2.0"
+tauri-plugin-fs = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+json-patch = "3.0"
+url = "2.5"
+urlencoding = "2.1"
+base64 = "0.22"
+log = "0.4"
+env_logger = "0.11"
+anyhow = "1.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
