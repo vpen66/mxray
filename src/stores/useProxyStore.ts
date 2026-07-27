@@ -7,7 +7,7 @@ function triggerConfigSync(get: () => ProxyStore) {
   setTimeout(() => {
     const state = get();
     const allNodes = state.profiles.flatMap((p) => p.nodes);
-    useConfigStore.getState().syncNodesAndGroups(allNodes, state.proxyGroups);
+    useConfigStore.getState().syncNodesAndGroups(allNodes, state.proxyGroups, state.selectedNodeId);
   }, 0);
 }
 
@@ -81,14 +81,19 @@ export const useProxyStore = create<ProxyStore>()(
       proxyGroups: INITIAL_GROUPS,
       isTestingLatency: false,
 
-      selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
+      selectNode: (nodeId) => {
+        set({ selectedNodeId: nodeId });
+        triggerConfigSync(get);
+      },
 
-      selectGroupNode: (groupId, nodeIdOrTag) =>
+      selectGroupNode: (groupId, nodeIdOrTag) => {
         set((state) => ({
           proxyGroups: state.proxyGroups.map((g) =>
             g.id === groupId ? { ...g, selectedNodeId: nodeIdOrTag } : g
           ),
-        })),
+        }));
+        triggerConfigSync(get);
+      },
 
       testNodeLatency: async (nodeId) => {
         await new Promise((res) => setTimeout(res, 200 + Math.random() * 300));

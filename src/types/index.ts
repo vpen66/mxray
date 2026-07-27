@@ -103,6 +103,7 @@ export interface XrayInbound {
     enabled: boolean;
     destOverride?: string[];
   };
+  streamSettings?: Record<string, any>;
 }
 
 export interface XrayOutbound {

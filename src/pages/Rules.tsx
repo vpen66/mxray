@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { RoutingRule } from '../types';
 import { useProxyStore } from '../stores/useProxyStore';
+import { useConfigStore } from '../stores/useConfigStore';
 import { OutboundSelect } from '../components/OutboundSelect';
 import { ConfirmModal } from '../components/ConfirmModal';
 
@@ -55,6 +56,9 @@ const DEFAULT_RULES: RoutingRule[] = [
 
 export const RulesPage: React.FC = () => {
   const { proxyGroups, profiles } = useProxyStore();
+  const { profiles: configProfiles, selectedProfileId, activeProfileId, updateProfile } = useConfigStore();
+  const targetConfigProfile = configProfiles.find((p) => p.id === (selectedProfileId || activeProfileId)) || configProfiles[0];
+
   const [rules, setRules] = useState<RoutingRule[]>(DEFAULT_RULES);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeOpenRuleId, setActiveOpenRuleId] = useState<string | null>(null);
@@ -65,6 +69,31 @@ export const RulesPage: React.FC = () => {
   const [deletingRule, setDeletingRule] = useState<RoutingRule | null>(null);
 
   const allNodes = profiles.flatMap((p) => p.nodes);
+
+  const updateRulesAndSync = (newRules: RoutingRule[]) => {
+    setRules(newRules);
+    if (!targetConfigProfile) return;
+
+    try {
+      const config = JSON.parse(targetConfigProfile.content || '{}');
+      if (!config.routing) {
+        config.routing = { domainStrategy: 'IPIfNonMatch', rules: [] };
+      }
+      const xrayRules = newRules
+        .filter((r) => r.enabled !== false)
+        .map((r) => ({
+          type: r.type || 'field',
+          outboundTag: r.outboundTag,
+          domain: r.domain && r.domain.length > 0 ? r.domain : undefined,
+          port: r.port || undefined,
+          protocol: r.protocol && r.protocol.length > 0 ? r.protocol : undefined,
+        }));
+      config.routing.rules = xrayRules;
+      updateProfile(targetConfigProfile.id, { content: JSON.stringify(config, null, 2) });
+    } catch {
+      // ignore
+    }
+  };
 
   const handleOpenCreateModal = () => {
     setEditingRule(null);
@@ -77,7 +106,7 @@ export const RulesPage: React.FC = () => {
   };
 
   const handleToggleEnable = (id: string) => {
-    setRules((prev) => prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
+    updateRulesAndSync(rules.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
   };
 
   const handleDeleteRule = (rule: RoutingRule) => {
@@ -86,7 +115,7 @@ export const RulesPage: React.FC = () => {
 
   const handleConfirmDeleteRule = () => {
     if (deletingRule) {
-      setRules((prev) => prev.filter((r) => r.id !== deletingRule.id));
+      updateRulesAndSync(rules.filter((r) => r.id !== deletingRule.id));
       setDeletingRule(null);
     }
   };
@@ -97,7 +126,7 @@ export const RulesPage: React.FC = () => {
       id: `rule-${Date.now()}`,
       description: `${rule.description} (副本)`,
     };
-    setRules([cloned, ...rules]);
+    updateRulesAndSync([cloned, ...rules]);
   };
 
   const handleMoveUp = (index: number) => {
@@ -106,7 +135,7 @@ export const RulesPage: React.FC = () => {
     const temp = newRules[index - 1];
     newRules[index - 1] = newRules[index];
     newRules[index] = temp;
-    setRules(newRules);
+    updateRulesAndSync(newRules);
   };
 
   const handleMoveDown = (index: number) => {
@@ -115,14 +144,14 @@ export const RulesPage: React.FC = () => {
     const temp = newRules[index + 1];
     newRules[index + 1] = newRules[index];
     newRules[index] = temp;
-    setRules(newRules);
+    updateRulesAndSync(newRules);
   };
 
   const handleSaveRule = (savedRule: RoutingRule) => {
     if (editingRule) {
-      setRules((prev) => prev.map((r) => (r.id === savedRule.id ? savedRule : r)));
+      updateRulesAndSync(rules.map((r) => (r.id === savedRule.id ? savedRule : r)));
     } else {
-      setRules([savedRule, ...rules]);
+      updateRulesAndSync([savedRule, ...rules]);
     }
     setIsModalOpen(false);
   };

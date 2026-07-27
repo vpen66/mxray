@@ -174,7 +174,12 @@ AI Agent 在修改或新增本项目的代码时，必须严格遵守以下指�
 - 修改 `xrayMapper.ts` 或 Rust 后端 `builder.rs` 时，必须同步更新 `src/types/index.ts` 中的 TypeScript 接口定义。
 - 所有的 JSON 解析与反序列化逻辑必须包含异常捕获（`try-catch` 或 Rust `Result`），防止因用户导入非法 JSON 导致应用崩溃。
 
-### 5. 任务完成前验证命令
+### 5. UI 组件与下拉框统一规范（Dropdown UI Standard）
+- **禁止使用原生 HTML `<select>` 标签**：为确保跨平台 UI 风格高度一致、现代化与极佳的暗黑美学体验，应用中所有下拉选择组件（如入站/出站协议选择、传输安全设置、路由规则目标及网络类型等）严禁使用浏览器原生 `<select>` 标签。
+- **统一使用自定义下拉组件**：必须统一使用 `CustomSelect`（`src/components/CustomSelect.tsx`）或 `OutboundSelect`（`src/components/OutboundSelect.tsx`）。
+- **统一设计风格**：下拉菜单需采用深色半透明玻璃材质（`bg-slate-900/98 backdrop-blur-2xl`）、细微边框高亮、选中项 Check 标识、圆角与平滑过渡动画，保持与分流规则中的下拉框（`OutboundSelect`）完全统一的视觉与交互规范。
+
+### 6. 任务完成前验证命令
 在向用户汇报任务完成前，必须执行以下命令确保代码编译无误：
 - 前端构建检查：`pnpm build`
 - 前端代码检查：`pnpm lint`（运行 oxlint）

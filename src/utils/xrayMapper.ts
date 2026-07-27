@@ -303,7 +303,8 @@ export function xrayOutboundToNode(outbound: XrayOutbound, profileId: string = '
 export function syncNodesAndGroupsToConfigJson(
   rawConfigJson: string,
   nodes: ProxyNode[],
-  groups: ProxyGroup[] = []
+  groups: ProxyGroup[] = [],
+  selectedNodeId?: string
 ): string {
   let config: XrayConfigObject = {};
 
@@ -343,7 +344,17 @@ export function syncNodesAndGroupsToConfigJson(
 
   // Default "proxy" outbound tag pointing to selected node or first node if available
   let primaryProxyOutbound: XrayOutbound | null = null;
-  if (nodeOutbounds.length > 0) {
+  if (selectedNodeId) {
+    const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+    if (selectedNode) {
+      primaryProxyOutbound = {
+        ...nodeToXrayOutbound(selectedNode),
+        tag: 'proxy',
+      };
+    }
+  }
+
+  if (!primaryProxyOutbound && nodeOutbounds.length > 0) {
     primaryProxyOutbound = {
       ...nodeOutbounds[0],
       tag: 'proxy', // Standard primary proxy outbound tag for default rules

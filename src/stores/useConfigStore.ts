@@ -24,7 +24,7 @@ interface ConfigStore {
   setDnsStrategy: (strategy: string) => void;
   toggleFakeDns: () => void;
   toggleSniffing: () => void;
-  syncNodesAndGroups: (nodes: any[], groups: any[]) => void;
+  syncNodesAndGroups: (nodes: any[], groups: any[], selectedNodeId?: string) => void;
 }
 
 export const TEMPLATE_STANDARD = `{
@@ -423,13 +423,18 @@ export const useConfigStore = create<ConfigStore>()(
       toggleFakeDns: () => set((state) => ({ enableFakeDns: !state.enableFakeDns })),
       toggleSniffing: () => set((state) => ({ sniffingEnabled: !state.sniffingEnabled })),
       
-      syncNodesAndGroups: (nodes, groups) => {
+      syncNodesAndGroups: (nodes, groups, selectedNodeId) => {
         const state = get();
         const activeId = state.selectedProfileId || state.activeProfileId;
         const currentProfile = state.profiles.find((p) => p.id === activeId) || state.profiles[0];
         if (!currentProfile) return;
 
-        const updatedContent = syncNodesAndGroupsToConfigJson(currentProfile.content, nodes, groups);
+        const updatedContent = syncNodesAndGroupsToConfigJson(
+          currentProfile.content,
+          nodes,
+          groups,
+          selectedNodeId
+        );
         state.updateProfile(currentProfile.id, { content: updatedContent });
       },
     }),

@@ -16,7 +16,6 @@ import {
   X,
   Code2,
   Eye,
-  RefreshCw,
   Server,
   Layers,
   ArrowRight,
@@ -24,10 +23,67 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { useConfigStore, TEMPLATE_STANDARD, TEMPLATE_TUN, TEMPLATE_MINIMAL } from '../stores/useConfigStore';
-import { useProxyStore } from '../stores/useProxyStore';
 import { useAppStore } from '../stores/useAppStore';
 import { extractNodesFromConfigJson, type XrayConfigObject } from '../utils/xrayMapper';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { CustomSelect } from '../components/CustomSelect';
+
+const INBOUND_PROTOCOL_OPTIONS = [
+  { value: 'socks', label: 'socks (SOCKS5 代理)' },
+  { value: 'http', label: 'http (HTTP 代理)' },
+  { value: 'dokodemo-door', label: 'dokodemo-door / Tunnel (任意门端口转发)' },
+  { value: 'vless', label: 'vless (VLESS 入站)' },
+  { value: 'vmess', label: 'vmess (VMess 入站)' },
+  { value: 'trojan', label: 'trojan (Trojan 入站)' },
+  { value: 'shadowsocks', label: 'shadowsocks (SS 入站)' },
+  { value: 'hysteria2', label: 'hysteria2 (Hysteria 2 入站)' },
+  { value: 'wireguard', label: 'wireguard (WireGuard 入站)' },
+  { value: 'freedom', label: 'freedom (自由直连入站)' },
+  { value: 'blackhole', label: 'blackhole (黑洞阻断入站)' },
+  { value: 'loopback', label: 'loopback (回环链式入站)' },
+  { value: 'custom', label: '自定义扩展协议...' },
+];
+
+const INBOUND_NETWORK_OPTIONS = [
+  { value: 'tcp,udp', label: 'tcp,udp (双协议)' },
+  { value: 'tcp', label: 'tcp (仅 TCP)' },
+  { value: 'udp', label: 'udp (仅 UDP)' },
+];
+
+const SHADOWSOCKS_METHOD_OPTIONS = [
+  { value: '2022-blake3-aes-128-gcm', label: '2022-blake3-aes-128-gcm (推荐)' },
+  { value: '2022-blake3-aes-256-gcm', label: '2022-blake3-aes-256-gcm' },
+  { value: 'aes-128-gcm', label: 'aes-128-gcm' },
+  { value: 'aes-256-gcm', label: 'aes-256-gcm' },
+  { value: 'chacha20-poly1305', label: 'chacha20-poly1305' },
+];
+
+const SOCKS_AUTH_OPTIONS = [
+  { value: 'noauth', label: 'noauth (无需密码)' },
+  { value: 'password', label: 'password (账号密码认证)' },
+];
+
+const OUTBOUND_PROTOCOL_OPTIONS = [
+  { value: 'vless', label: 'VLESS' },
+  { value: 'vmess', label: 'VMess' },
+  { value: 'trojan', label: 'Trojan' },
+  { value: 'shadowsocks', label: 'Shadowsocks' },
+  { value: 'freedom', label: 'Freedom (自由直连)' },
+  { value: 'blackhole', label: 'Blackhole (阻断拦截)' },
+];
+
+const OUTBOUND_SECURITY_OPTIONS = [
+  { value: 'none', label: 'none (明文)' },
+  { value: 'tls', label: 'tls' },
+  { value: 'reality', label: 'reality' },
+];
+
+const RULE_NETWORK_OPTIONS = [
+  { value: '', label: '全部网络 (All)' },
+  { value: 'tcp,udp', label: 'tcp,udp' },
+  { value: 'tcp', label: 'tcp' },
+  { value: 'udp', label: 'udp' },
+];
 
 export const JsonConfigPage: React.FC = () => {
   const {
@@ -40,10 +96,8 @@ export const JsonConfigPage: React.FC = () => {
     duplicateProfile,
     setActiveProfileId,
     setSelectedProfileId,
-    syncNodesAndGroups,
   } = useConfigStore();
 
-  const { profiles: proxyProfiles, proxyGroups } = useProxyStore();
   const { coreState, setCoreRunning } = useAppStore();
 
   const [viewMode, setViewMode] = useState<'visual' | 'code'>('visual');
@@ -75,7 +129,20 @@ export const JsonConfigPage: React.FC = () => {
     listen: string;
     port: number | string;
     sniffing: boolean;
-    uuidPassword?: string;
+    // dokodemo-door / tunnel settings
+    targetAddress: string;
+    targetPort: number | string;
+    network: string;
+    followRedirect: boolean;
+    // socks / http settings
+    auth: string;
+    username: string;
+    userPassword: string;
+    udp: boolean;
+    // vless / vmess / trojan / hysteria2 / shadowsocks settings
+    uuidPassword: string;
+    flow: string;
+    ssMethod: string;
   }>({
     isOpen: false,
     index: null,
@@ -85,7 +152,17 @@ export const JsonConfigPage: React.FC = () => {
     listen: '127.0.0.1',
     port: 10808,
     sniffing: true,
+    targetAddress: '8.8.8.8',
+    targetPort: 53,
+    network: 'tcp,udp',
+    followRedirect: false,
+    auth: 'noauth',
+    username: '',
+    userPassword: '',
+    udp: true,
     uuidPassword: '',
+    flow: 'xtls-rprx-vision',
+    ssMethod: '2022-blake3-aes-128-gcm',
   });
 
   // Outbound Modal State
@@ -197,6 +274,10 @@ export const JsonConfigPage: React.FC = () => {
         uuidPassword = ib.settings.clients[0].id;
       } else if (ib.settings?.clients?.[0]?.password) {
         uuidPassword = ib.settings.clients[0].password;
+      } else if (ib.settings?.users?.[0]?.password) {
+        uuidPassword = ib.settings.users[0].password;
+      } else if (ib.settings?.password) {
+        uuidPassword = ib.settings.password;
       }
 
       const isKnown = knownProtocols.includes(ib.protocol);
@@ -208,9 +289,19 @@ export const JsonConfigPage: React.FC = () => {
         protocol: isKnown ? ib.protocol : 'custom',
         customProtocol: isKnown ? '' : ib.protocol || '',
         listen: ib.listen || '127.0.0.1',
-        port: ib.port || 10808,
+        port: ib.port ?? 10808,
         sniffing: ib.sniffing?.enabled ?? true,
+        targetAddress: ib.settings?.address || '8.8.8.8',
+        targetPort: ib.settings?.port ?? 53,
+        network: ib.settings?.network || 'tcp,udp',
+        followRedirect: Boolean(ib.settings?.followRedirect),
+        auth: ib.settings?.auth || (ib.settings?.accounts?.length ? 'password' : 'noauth'),
+        username: ib.settings?.accounts?.[0]?.user || '',
+        userPassword: ib.settings?.accounts?.[0]?.pass || '',
+        udp: ib.settings?.udp ?? true,
         uuidPassword,
+        flow: ib.settings?.clients?.[0]?.flow || 'xtls-rprx-vision',
+        ssMethod: ib.settings?.method || '2022-blake3-aes-128-gcm',
       });
     } else {
       const count = parsedConfig?.inbounds?.length || 0;
@@ -223,7 +314,17 @@ export const JsonConfigPage: React.FC = () => {
         listen: '127.0.0.1',
         port: count === 0 ? 10808 : count === 1 ? 10809 : 10810 + count,
         sniffing: true,
+        targetAddress: '8.8.8.8',
+        targetPort: 53,
+        network: 'tcp,udp',
+        followRedirect: false,
+        auth: 'noauth',
+        username: '',
+        userPassword: '',
+        udp: true,
         uuidPassword: '',
+        flow: 'xtls-rprx-vision',
+        ssMethod: '2022-blake3-aes-128-gcm',
       });
     }
   };
@@ -249,21 +350,53 @@ export const JsonConfigPage: React.FC = () => {
         };
       }
 
-      if (targetProtocol === 'socks' || targetProtocol === 'http') {
-        newInbound.settings = { auth: 'noauth', udp: true };
-      } else if (targetProtocol === 'vless' || targetProtocol === 'vmess') {
-        if (inboundModal.uuidPassword) {
-          newInbound.settings = {
-            clients: [{ id: inboundModal.uuidPassword, flow: 'xtls-rprx-vision' }],
-            decryption: 'none',
-          };
-        }
-      } else if (targetProtocol === 'trojan' || targetProtocol === 'shadowsocks' || targetProtocol === 'hysteria2') {
-        if (inboundModal.uuidPassword) {
-          newInbound.settings = {
-            clients: [{ password: inboundModal.uuidPassword }],
-          };
-        }
+      if (targetProtocol === 'dokodemo-door') {
+        newInbound.settings = {
+          address: inboundModal.targetAddress || '127.0.0.1',
+          port: Number(inboundModal.targetPort) || 53,
+          network: inboundModal.network || 'tcp,udp',
+          followRedirect: inboundModal.followRedirect,
+        };
+      } else if (targetProtocol === 'socks') {
+        newInbound.settings = {
+          auth: inboundModal.auth || 'noauth',
+          udp: inboundModal.udp,
+          ...(inboundModal.auth === 'password' && inboundModal.username
+            ? { accounts: [{ user: inboundModal.username, pass: inboundModal.userPassword }] }
+            : {}),
+        };
+      } else if (targetProtocol === 'http') {
+        newInbound.settings = inboundModal.username
+          ? { accounts: [{ user: inboundModal.username, pass: inboundModal.userPassword }] }
+          : {};
+      } else if (targetProtocol === 'vless') {
+        newInbound.settings = {
+          clients: [
+            {
+              id: inboundModal.uuidPassword,
+              ...(inboundModal.flow ? { flow: inboundModal.flow } : {}),
+            },
+          ],
+          decryption: 'none',
+        };
+      } else if (targetProtocol === 'vmess') {
+        newInbound.settings = {
+          clients: [{ id: inboundModal.uuidPassword, alterId: 0 }],
+        };
+      } else if (targetProtocol === 'trojan') {
+        newInbound.settings = {
+          clients: [{ password: inboundModal.uuidPassword }],
+        };
+      } else if (targetProtocol === 'shadowsocks') {
+        newInbound.settings = {
+          method: inboundModal.ssMethod || '2022-blake3-aes-128-gcm',
+          password: inboundModal.uuidPassword,
+          network: inboundModal.network || 'tcp,udp',
+        };
+      } else if (targetProtocol === 'hysteria2') {
+        newInbound.settings = {
+          users: [{ password: inboundModal.uuidPassword }],
+        };
       }
 
       if (inboundModal.index !== null && inboundModal.index < config.inbounds.length) {
@@ -546,13 +679,6 @@ export const JsonConfigPage: React.FC = () => {
     }
   };
 
-  const handleSyncWithProxyStore = () => {
-    const allNodes = proxyProfiles.flatMap((p) => p.nodes);
-    syncNodesAndGroups(allNodes, proxyGroups);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
-  };
-
   const handleLaunchProfile = (profileId: string) => {
     const target = profiles.find((p) => p.id === profileId);
     if (!target) return;
@@ -830,35 +956,24 @@ export const JsonConfigPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Line 2: Toolbar Action Buttons */}
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
-                <button
-                  onClick={handleSyncWithProxyStore}
-                  title="强行将节点代理管理页面中的节点与策略重新写入此 config.json"
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-medium flex items-center gap-1.5 transition-all"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>同步 GUI 节点与策略</span>
-                </button>
-
-                {viewMode === 'code' && (
-                  <>
-                    <button
-                      onClick={handleFormatJson}
-                      className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium border border-white/10 flex items-center gap-1.5 transition-all"
-                    >
-                      <Code2 className="w-3.5 h-3.5 text-cyan-400" /> 格式化
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      disabled={!!jsonError}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold border border-white/10 flex items-center gap-1.5 transition-all"
-                    >
-                      <Save className="w-3.5 h-3.5 text-blue-400" /> 保存
-                    </button>
-                  </>
-                )}
-              </div>
+              {/* Line 2: Toolbar Action Buttons (Code Mode) */}
+              {viewMode === 'code' && (
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
+                  <button
+                    onClick={handleFormatJson}
+                    className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium border border-white/10 flex items-center gap-1.5 transition-all"
+                  >
+                    <Code2 className="w-3.5 h-3.5 text-cyan-400" /> 格式化
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={!!jsonError}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold border border-white/10 flex items-center gap-1.5 transition-all"
+                  >
+                    <Save className="w-3.5 h-3.5 text-blue-400" /> 保存
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1280,140 +1395,327 @@ export const JsonConfigPage: React.FC = () => {
       )}
 
       {/* Edit / Add Inbound Modal */}
-      {inboundModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-          <div className="w-full max-w-md glass-card bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <SlidersHorizontal className="w-5 h-5 text-cyan-400" />
-                {inboundModal.index !== null ? '编辑入站配置 (Inbound)' : '新增入站配置 (Inbound)'}
-              </h3>
-              <button
-                onClick={() => setInboundModal((prev) => ({ ...prev, isOpen: false }))}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {inboundModal.isOpen && (() => {
+        const effectiveProtocol =
+          inboundModal.protocol === 'custom' ? inboundModal.customProtocol : inboundModal.protocol;
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">入站 Tag (标识名)</label>
-                <input
-                  type="text"
-                  placeholder="如: socks-in 或 http-in"
-                  value={inboundModal.tag}
-                  onChange={(e) => setInboundModal((prev) => ({ ...prev, tag: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                />
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+            <div className="w-full max-w-lg glass-card bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <SlidersHorizontal className="w-5 h-5 text-cyan-400" />
+                  {inboundModal.index !== null ? '编辑入站配置 (Inbound)' : '新增入站配置 (Inbound)'}
+                </h3>
+                <button
+                  onClick={() => setInboundModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">协议 Protocol</label>
-                  <select
-                    value={inboundModal.protocol}
-                    onChange={(e) => setInboundModal((prev) => ({ ...prev, protocol: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
-                  >
-                    <option value="socks">socks (SOCKS5)</option>
-                    <option value="http">http (HTTP 代理)</option>
-                    <option value="dokodemo-door">dokodemo-door (任意门/透明代理)</option>
-                    <option value="vless">vless (VLESS 入站)</option>
-                    <option value="vmess">vmess (VMess 入站)</option>
-                    <option value="trojan">trojan (Trojan 入站)</option>
-                    <option value="shadowsocks">shadowsocks (SS 入站)</option>
-                    <option value="hysteria2">hysteria2 (Hysteria 2 入站)</option>
-                    <option value="wireguard">wireguard (WireGuard 入站)</option>
-                    <option value="freedom">freedom (自由直连入站)</option>
-                    <option value="blackhole">blackhole (黑洞阻断入站)</option>
-                    <option value="loopback">loopback (回环链式入站)</option>
-                    <option value="custom">自定义扩展协议...</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">监听端口 Port</label>
-                  <input
-                    type="number"
-                    placeholder="10808"
-                    value={inboundModal.port}
-                    onChange={(e) => setInboundModal((prev) => ({ ...prev, port: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {inboundModal.protocol === 'custom' && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">自定义协议名称 Custom Protocol</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">入站 Tag (标识名)</label>
                   <input
                     type="text"
-                    placeholder="例如: socks, http, dokodemo-door 等"
-                    value={inboundModal.customProtocol}
-                    onChange={(e) => setInboundModal((prev) => ({ ...prev, customProtocol: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-cyan-500/50 text-xs text-white font-mono focus:outline-none"
+                    placeholder="如: socks-in, http-in 或 tunnel-in"
+                    value={inboundModal.tag}
+                    onChange={(e) => setInboundModal((prev) => ({ ...prev, tag: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                   />
                 </div>
-              )}
 
-              {['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2'].includes(
-                inboundModal.protocol === 'custom' ? inboundModal.customProtocol : inboundModal.protocol
-              ) && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">协议 Protocol</label>
+                    <CustomSelect
+                      value={inboundModal.protocol}
+                      onChange={(val) => setInboundModal((prev) => ({ ...prev, protocol: val }))}
+                      options={INBOUND_PROTOCOL_OPTIONS}
+                      accentColor="cyan"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">监听端口 Port</label>
+                    <input
+                      type="number"
+                      placeholder="10808"
+                      value={inboundModal.port}
+                      onChange={(e) => setInboundModal((prev) => ({ ...prev, port: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {inboundModal.protocol === 'custom' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">自定义协议名称 Custom Protocol</label>
+                    <input
+                      type="text"
+                      placeholder="例如: socks, http, dokodemo-door 等"
+                      value={inboundModal.customProtocol}
+                      onChange={(e) => setInboundModal((prev) => ({ ...prev, customProtocol: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-cyan-500/50 text-xs text-white font-mono focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                {/* --- Protocol Specific Configuration Section --- */}
+
+                {/* 1. Dokodemo-door (Tunnel / 任意门) */}
+                {effectiveProtocol === 'dokodemo-door' && (
+                  <div className="p-3 bg-cyan-950/20 border border-cyan-500/20 rounded-xl space-y-3">
+                    <div className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      Dokodemo-door (Tunnel 任意门/端口映射) 设置
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">目标地址 Target Address</label>
+                        <input
+                          type="text"
+                          placeholder="例如: 8.8.8.8 或 127.0.0.1"
+                          value={inboundModal.targetAddress}
+                          onChange={(e) => setInboundModal((prev) => ({ ...prev, targetAddress: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">目标端口 Target Port</label>
+                        <input
+                          type="number"
+                          placeholder="例如: 53 或 80"
+                          value={inboundModal.targetPort}
+                          onChange={(e) => setInboundModal((prev) => ({ ...prev, targetPort: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">传输网络 Network</label>
+                      <CustomSelect
+                        value={inboundModal.network}
+                        onChange={(val) => setInboundModal((prev) => ({ ...prev, network: val }))}
+                        options={INBOUND_NETWORK_OPTIONS}
+                        accentColor="cyan"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-lg border border-white/5">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200">透明代理重定向 (followRedirect)</div>
+                        <div className="text-[10px] text-slate-400">自动识别 iptables/nftables 捕获的真实目的地 IP 和端口</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={inboundModal.followRedirect}
+                        onChange={(e) => setInboundModal((prev) => ({ ...prev, followRedirect: e.target.checked }))}
+                        className="w-4 h-4 rounded border-white/20 bg-slate-900 text-cyan-600 focus:ring-cyan-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. SOCKS5 */}
+                {effectiveProtocol === 'socks' && (
+                  <div className="p-3 bg-slate-950/40 border border-white/10 rounded-xl space-y-3">
+                    <div className="text-xs font-bold text-cyan-400">SOCKS5 协议高级设置</div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">认证方式 Auth</label>
+                        <CustomSelect
+                          value={inboundModal.auth}
+                          onChange={(val) => setInboundModal((prev) => ({ ...prev, auth: val }))}
+                          options={SOCKS_AUTH_OPTIONS}
+                          accentColor="cyan"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-white/10 mt-5">
+                        <span className="text-xs font-semibold text-slate-200">支持 UDP 转发</span>
+                        <input
+                          type="checkbox"
+                          checked={inboundModal.udp}
+                          onChange={(e) => setInboundModal((prev) => ({ ...prev, udp: e.target.checked }))}
+                          className="w-4 h-4 rounded border-white/20 bg-slate-900 text-cyan-600 focus:ring-cyan-500"
+                        />
+                      </div>
+                    </div>
+
+                    {inboundModal.auth === 'password' && (
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">账号 Username</label>
+                          <input
+                            type="text"
+                            placeholder="用户名"
+                            value={inboundModal.username}
+                            onChange={(e) => setInboundModal((prev) => ({ ...prev, username: e.target.value }))}
+                            className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">密码 Password</label>
+                          <input
+                            type="password"
+                            placeholder="密码"
+                            value={inboundModal.userPassword}
+                            onChange={(e) => setInboundModal((prev) => ({ ...prev, userPassword: e.target.value }))}
+                            className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. HTTP */}
+                {effectiveProtocol === 'http' && (
+                  <div className="p-3 bg-slate-950/40 border border-white/10 rounded-xl space-y-3">
+                    <div className="text-xs font-bold text-cyan-400">HTTP 代理认证设置 (可选)</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">账号 Username</label>
+                        <input
+                          type="text"
+                          placeholder="留空即为无密码代理"
+                          value={inboundModal.username}
+                          onChange={(e) => setInboundModal((prev) => ({ ...prev, username: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">密码 Password</label>
+                        <input
+                          type="password"
+                          placeholder="密码"
+                          value={inboundModal.userPassword}
+                          onChange={(e) => setInboundModal((prev) => ({ ...prev, userPassword: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Shadowsocks */}
+                {effectiveProtocol === 'shadowsocks' && (
+                  <div className="p-3 bg-slate-950/40 border border-white/10 rounded-xl space-y-3">
+                    <div className="text-xs font-bold text-cyan-400">Shadowsocks 入站设置</div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">加密方式 Encryption Method</label>
+                      <CustomSelect
+                        value={inboundModal.ssMethod}
+                        onChange={(val) => setInboundModal((prev) => ({ ...prev, ssMethod: val }))}
+                        options={SHADOWSOCKS_METHOD_OPTIONS}
+                        accentColor="cyan"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">服务密码 Password</label>
+                      <input
+                        type="text"
+                        placeholder="密码"
+                        value={inboundModal.uuidPassword}
+                        onChange={(e) => setInboundModal((prev) => ({ ...prev, uuidPassword: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">传输网络 Network</label>
+                      <CustomSelect
+                        value={inboundModal.network}
+                        onChange={(val) => setInboundModal((prev) => ({ ...prev, network: val }))}
+                        options={INBOUND_NETWORK_OPTIONS}
+                        accentColor="cyan"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. VLESS / VMess / Trojan / Hysteria 2 */}
+                {['vless', 'vmess', 'trojan', 'hysteria2'].includes(effectiveProtocol) && (
+                  <div className="p-3 bg-slate-950/40 border border-white/10 rounded-xl space-y-3">
+                    <div className="text-xs font-bold text-cyan-400">{effectiveProtocol.toUpperCase()} 入站认证设置</div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+                        {effectiveProtocol === 'vless' || effectiveProtocol === 'vmess' ? '客户端 UUID' : '客户端连接密码 Password'}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="填入客户端连接所需 UUID 或密码"
+                        value={inboundModal.uuidPassword || ''}
+                        onChange={(e) => setInboundModal((prev) => ({ ...prev, uuidPassword: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    {effectiveProtocol === 'vless' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">流控算法 Flow (可选)</label>
+                        <input
+                          type="text"
+                          placeholder="例如: xtls-rprx-vision"
+                          value={inboundModal.flow || ''}
+                          onChange={(e) => setInboundModal((prev) => ({ ...prev, flow: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* --- Common Listen & Sniffing Section --- */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">客户端认证 UUID / 密码 Password</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">监听地址 Listen Address</label>
                   <input
                     type="text"
-                    placeholder="填入客户端连接所需 UUID 或密码"
-                    value={inboundModal.uuidPassword || ''}
-                    onChange={(e) => setInboundModal((prev) => ({ ...prev, uuidPassword: e.target.value }))}
+                    placeholder="127.0.0.1 或 0.0.0.0"
+                    value={inboundModal.listen}
+                    onChange={(e) => setInboundModal((prev) => ({ ...prev, listen: e.target.value }))}
                     className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                   />
                 </div>
-              )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">监听地址 Listen Address</label>
-                <input
-                  type="text"
-                  placeholder="127.0.0.1 或 0.0.0.0"
-                  value={inboundModal.listen}
-                  onChange={(e) => setInboundModal((prev) => ({ ...prev, listen: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-950/60 rounded-xl border border-white/5">
-                <div>
-                  <div className="text-xs font-semibold text-slate-200">开启流量嗅探 (Sniffing)</div>
-                  <div className="text-[10px] text-slate-400">自动重定向 HTTP/TLS 域名至真实 Host</div>
+                <div className="flex items-center justify-between p-3 bg-slate-950/60 rounded-xl border border-white/5">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-200">开启流量嗅探 (Sniffing)</div>
+                    <div className="text-[10px] text-slate-400">自动重定向 HTTP/TLS/QUIC 域名至真实 Host</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={inboundModal.sniffing}
+                    onChange={(e) => setInboundModal((prev) => ({ ...prev, sniffing: e.target.checked }))}
+                    className="w-4 h-4 rounded border-white/20 bg-slate-900 text-cyan-600 focus:ring-cyan-500"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={inboundModal.sniffing}
-                  onChange={(e) => setInboundModal((prev) => ({ ...prev, sniffing: e.target.checked }))}
-                  className="w-4 h-4 rounded border-white/20 bg-slate-900 text-cyan-600 focus:ring-cyan-500"
-                />
               </div>
-            </div>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
-              <button
-                onClick={() => setInboundModal((prev) => ({ ...prev, isOpen: false }))}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSaveInbound}
-                className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg shadow-cyan-600/30 transition-all"
-              >
-                保存设置
-              </button>
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <button
+                  onClick={() => setInboundModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveInbound}
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg shadow-cyan-600/30 transition-all"
+                >
+                  保存设置
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Edit / Add Outbound Modal */}
       {outboundModal.isOpen && (
@@ -1447,32 +1749,23 @@ export const JsonConfigPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">协议 Protocol</label>
-                  <select
+                  <CustomSelect
                     value={outboundModal.protocol}
-                    onChange={(e) => setOutboundModal((prev) => ({ ...prev, protocol: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="vless">VLESS</option>
-                    <option value="vmess">VMess</option>
-                    <option value="trojan">Trojan</option>
-                    <option value="shadowsocks">Shadowsocks</option>
-                    <option value="freedom">Freedom (自由直连)</option>
-                    <option value="blackhole">Blackhole (阻断拦截)</option>
-                  </select>
+                    onChange={(val) => setOutboundModal((prev) => ({ ...prev, protocol: val }))}
+                    options={OUTBOUND_PROTOCOL_OPTIONS}
+                    accentColor="blue"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">传输安全 Security</label>
-                  <select
+                  <CustomSelect
                     value={outboundModal.security}
-                    onChange={(e) => setOutboundModal((prev) => ({ ...prev, security: e.target.value }))}
+                    onChange={(val) => setOutboundModal((prev) => ({ ...prev, security: val }))}
+                    options={OUTBOUND_SECURITY_OPTIONS}
                     disabled={outboundModal.protocol === 'freedom' || outboundModal.protocol === 'blackhole'}
-                    className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
-                  >
-                    <option value="none">none (明文)</option>
-                    <option value="tls">tls</option>
-                    <option value="reality">reality</option>
-                  </select>
+                    accentColor="blue"
+                  />
                 </div>
               </div>
 
@@ -1554,20 +1847,20 @@ export const JsonConfigPage: React.FC = () => {
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">目标出站 Target Outbound</label>
-                <select
+                <CustomSelect
                   value={ruleModal.outboundTag}
-                  onChange={(e) => setRuleModal((prev) => ({ ...prev, outboundTag: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-                >
-                  {(parsedConfig?.outbounds || []).map((ob) => (
-                    <option key={ob.tag} value={ob.tag}>
-                      {ob.tag} ({ob.protocol})
-                    </option>
-                  ))}
-                  <option value="proxy">proxy</option>
-                  <option value="direct">direct</option>
-                  <option value="block">block</option>
-                </select>
+                  onChange={(val) => setRuleModal((prev) => ({ ...prev, outboundTag: val }))}
+                  options={[
+                    ...(parsedConfig?.outbounds || []).map((ob) => ({
+                      value: ob.tag,
+                      label: `${ob.tag} (${ob.protocol})`,
+                    })),
+                    ...(!parsedConfig?.outbounds?.some((ob) => ob.tag === 'proxy') ? [{ value: 'proxy', label: 'proxy' }] : []),
+                    ...(!parsedConfig?.outbounds?.some((ob) => ob.tag === 'direct') ? [{ value: 'direct', label: 'direct' }] : []),
+                    ...(!parsedConfig?.outbounds?.some((ob) => ob.tag === 'block') ? [{ value: 'block', label: 'block' }] : []),
+                  ]}
+                  accentColor="emerald"
+                />
               </div>
 
               <div>
@@ -1594,16 +1887,12 @@ export const JsonConfigPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">网络协议 Network</label>
-                <select
+                <CustomSelect
                   value={ruleModal.network}
-                  onChange={(e) => setRuleModal((prev) => ({ ...prev, network: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="">全部网络 (All)</option>
-                  <option value="tcp,udp">tcp,udp</option>
-                  <option value="tcp">tcp</option>
-                  <option value="udp">udp</option>
-                </select>
+                  onChange={(val) => setRuleModal((prev) => ({ ...prev, network: val }))}
+                  options={RULE_NETWORK_OPTIONS}
+                  accentColor="emerald"
+                />
               </div>
             </div>
 
