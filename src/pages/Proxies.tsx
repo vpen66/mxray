@@ -45,7 +45,7 @@ export const ProxiesPage: React.FC = () => {
       {/* Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">节点与代理选择 (Proxies)</h2>
+          <h2 className="text-xl font-bold text-white tracking-tight">节点与代理选择</h2>
           <p className="text-xs text-slate-400">选择当前全局/规则出站节点，测试 TCP & TLS 延迟</p>
         </div>
 

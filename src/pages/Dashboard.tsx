@@ -73,7 +73,7 @@ export const DashboardPage: React.FC = () => {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              {m === 'rule' ? '规则模式 Rule' : m === 'global' ? '全局代理 Global' : '直连模式 Direct'}
+              {m === 'rule' ? '规则模式' : m === 'global' ? '全局代理' : '直连模式'}
             </button>
           ))}
         </div>
@@ -141,14 +141,14 @@ export const DashboardPage: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-blue-400" />
-            <h3 className="text-base font-bold text-white">网络吞吐趋势图 (Real-time Speed)</h3>
+            <h3 className="text-base font-bold text-white">网络吞吐趋势图</h3>
           </div>
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-1.5 text-cyan-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" /> 下载 (Download)
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" /> 下载
             </div>
             <div className="flex items-center gap-1.5 text-blue-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-400" /> 上传 (Upload)
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-400" /> 上传
             </div>
           </div>
         </div>

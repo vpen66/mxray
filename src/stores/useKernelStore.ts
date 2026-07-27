@@ -56,7 +56,7 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
         {
           version: 'v26.3.27',
           tag_name: 'v26.3.27',
-          name: 'Xray-core v26.3.27 (Latest Release)',
+          name: 'Xray-core v26.3.27',
           published_at: '2026-03-27',
           download_url: 'https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-64.zip',
         },

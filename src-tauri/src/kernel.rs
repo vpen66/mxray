@@ -179,7 +179,7 @@ pub async fn fetch_remote_releases() -> Result<Vec<RemoteRelease>, String> {
         RemoteRelease {
             version: "v26.3.27".to_string(),
             tag_name: "v26.3.27".to_string(),
-            name: "Xray-core v26.3.27 (Latest Release)".to_string(),
+            name: "Xray-core v26.3.27".to_string(),
             published_at: "2026-03-27".to_string(),
             download_url: "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-64.zip".to_string(),
         },

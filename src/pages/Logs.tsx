@@ -29,7 +29,7 @@ export const LogsPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">实时运行日志 (Logs)</h2>
+          <h2 className="text-xl font-bold text-white tracking-tight">实时运行日志</h2>
           <p className="text-xs text-slate-400">对接 Xray LoggerService gRPC 实时日志管道与控制台输出</p>
         </div>
 

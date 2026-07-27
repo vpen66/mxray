@@ -39,7 +39,7 @@ export const JsonConfigPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">高级 JSON 扩展与 Patch (Advanced JSON)</h2>
+          <h2 className="text-xl font-bold text-white tracking-tight">高级 JSON 扩展与 Patch</h2>
           <p className="text-xs text-slate-400">高度自定义 Xray 原生 `config.json` 覆盖、注入 RFC 6902 JSON Patch</p>
         </div>
 
@@ -88,7 +88,7 @@ export const JsonConfigPage: React.FC = () => {
           </div>
         ) : (
           <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5" /> 语法校验正确 (Valid JSON)
+            <Sparkles className="w-3.5 h-3.5" /> 语法校验正确
           </span>
         )}
       </div>

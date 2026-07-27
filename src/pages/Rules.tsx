@@ -9,7 +9,7 @@ const DEFAULT_RULES: RoutingRule[] = [
     outboundTag: 'direct',
     domain: ['geosite:cn', 'geosite:private', 'domain:baidu.com', 'domain:qq.com'],
     enabled: true,
-    description: '国内常见域名与局域网 (CN Domains & Private IPs)',
+    description: '国内常见域名与局域网',
   },
   {
     id: 'rule-2',
@@ -17,7 +17,7 @@ const DEFAULT_RULES: RoutingRule[] = [
     outboundTag: 'direct',
     ip: ['geoip:cn', 'geoip:private'],
     enabled: true,
-    description: '中国大陆 IP 与局域网 (CN IP Range)',
+    description: '中国大陆 IP 与局域网',
   },
   {
     id: 'rule-3',
@@ -25,7 +25,7 @@ const DEFAULT_RULES: RoutingRule[] = [
     outboundTag: 'block',
     domain: ['geosite:category-ads-all'],
     enabled: true,
-    description: '全网广告域名拦截 (Advertising Blocklist)',
+    description: '全网广告域名拦截',
   },
   {
     id: 'rule-4',
@@ -33,7 +33,7 @@ const DEFAULT_RULES: RoutingRule[] = [
     outboundTag: 'proxy',
     domain: ['geosite:google', 'geosite:github', 'geosite:gfw', 'geosite:telegram'],
     enabled: true,
-    description: '常用代理域名 (Google, GitHub, Telegram)',
+    description: '常用代理域名',
   },
 ];
 
@@ -62,7 +62,7 @@ export const RulesPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">路由与 Geo 规则管理 (Rules)</h2>
+          <h2 className="text-xl font-bold text-white tracking-tight">路由与 Geo 规则管理</h2>
           <p className="text-xs text-slate-400">设置基于 geoip.dat 与 geosite.dat 的分流路由规则</p>
         </div>
 
@@ -89,7 +89,7 @@ export const RulesPage: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border uppercase ${getOutboundBadge(rule.outboundTag)}`}>
-                    {rule.outboundTag === 'proxy' ? '代理 Proxy' : rule.outboundTag === 'direct' ? '直连 Direct' : '拦截 Block'}
+                    {rule.outboundTag === 'proxy' ? '代理' : rule.outboundTag === 'direct' ? '直连' : '拦截'}
                   </span>
                   <h4 className="text-sm font-bold text-white">{rule.description}</h4>
                 </div>

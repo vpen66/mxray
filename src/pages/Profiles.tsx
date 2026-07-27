@@ -3,6 +3,9 @@ import { Plus, Link2, Trash2, Sparkles, Code2, X, Globe, FileText } from 'lucide
 import { useProxyStore } from '../stores/useProxyStore';
 import type { Profile } from '../types';
 
+import { parseSubscriptionContent, fetchAndParseSubscriptionUrl } from '../utils/subParser';
+import type { ProxyNode } from '../types';
+
 export const ProfilesPage: React.FC = () => {
   const { profiles, addProfile, removeProfile } = useProxyStore();
 
@@ -11,74 +14,88 @@ export const ProfilesPage: React.FC = () => {
   const [subUrl, setSubUrl] = useState('');
   const [rawConfigText, setRawConfigText] = useState('');
   const [importType, setImportType] = useState<'url' | 'clash' | 'link'>('url');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleImport = () => {
-    if (!subName.trim()) return;
+  const handleImport = async () => {
+    if (!subName.trim()) {
+      setErrorMsg('请输入订阅/配置名称');
+      return;
+    }
+    setErrorMsg('');
+    setLoading(true);
 
-    if (importType === 'url') {
+    try {
+      let parsedNodes: ProxyNode[] = [];
+
+      if (importType === 'url') {
+        const urlToFetch = subUrl.trim();
+        if (!urlToFetch) {
+          setErrorMsg('请输入有效的订阅 URL 或节点链接');
+          setLoading(false);
+          return;
+        }
+
+        // If user directly pasted a vless/vmess/trojan/hy2 link or base64 into the URL input
+        if (
+          urlToFetch.startsWith('vless://') ||
+          urlToFetch.startsWith('vmess://') ||
+          urlToFetch.startsWith('trojan://') ||
+          urlToFetch.startsWith('hy2://') ||
+          urlToFetch.startsWith('hysteria2://')
+        ) {
+          parsedNodes = parseSubscriptionContent(urlToFetch);
+        } else {
+          try {
+            parsedNodes = await fetchAndParseSubscriptionUrl(urlToFetch);
+          } catch (err: any) {
+            console.warn('Fetch failed, trying raw text fallback:', err);
+            if (rawConfigText.trim()) {
+              parsedNodes = parseSubscriptionContent(rawConfigText);
+            } else {
+              throw new Error(`无法获取或解析该订阅地址: ${err.message || '网络或跨域错误'}`);
+            }
+          }
+        }
+      } else if (importType === 'link') {
+        const textToParse = rawConfigText.trim() || subUrl.trim();
+        if (!textToParse) {
+          setErrorMsg('请输入节点分享码或 Base64 订阅内容');
+          setLoading(false);
+          return;
+        }
+        parsedNodes = parseSubscriptionContent(textToParse);
+      } else if (importType === 'clash') {
+        parsedNodes = parseSubscriptionContent(rawConfigText);
+      }
+
+      if (parsedNodes.length === 0) {
+        throw new Error('未解析到任何有效节点，请检查链接或文本格式是否正确');
+      }
+
       const newProfile: Profile = {
         id: `prof-${Date.now()}`,
         name: subName,
-        url: subUrl,
-        type: 'remote',
+        url: importType === 'url' ? subUrl : undefined,
+        type: importType === 'url' ? 'remote' : 'local',
         updatedAt: Date.now(),
-        nodeCount: 3,
-        autoUpdate: true,
+        nodeCount: parsedNodes.length,
+        autoUpdate: importType === 'url',
         updateInterval: 12,
-        nodes: [
-          {
-            id: `node-${Date.now()}-1`,
-            name: `${subName} - 节点 01 (VLESS)`,
-            protocol: 'vless',
-            server: 'node1.sub.com',
-            port: 443,
-            uuid: 'a3e56226-5c08-4747-97fa-da3e2006ac6b',
-            security: 'reality',
-            sni: 'dl.google.com',
-            delay: 45,
-          },
-          {
-            id: `node-${Date.now()}-2`,
-            name: `${subName} - 节点 02 (Hysteria2)`,
-            protocol: 'hysteria2',
-            server: 'node2.sub.com',
-            port: 8443,
-            password: 'sub-hy2-pass',
-            sni: 'node2.sub.com',
-            delay: 32,
-          },
-        ],
+        nodes: parsedNodes,
       };
-      addProfile(newProfile);
-    } else if (importType === 'clash') {
-      const newProfile: Profile = {
-        id: `prof-${Date.now()}`,
-        name: `${subName} (Clash 转码)`,
-        type: 'local',
-        updatedAt: Date.now(),
-        nodeCount: 2,
-        autoUpdate: false,
-        updateInterval: 0,
-        nodes: [
-          {
-            id: `node-${Date.now()}-1`,
-            name: `[Clash 转码] 香港 01`,
-            protocol: 'trojan',
-            server: 'hk.clash.net',
-            port: 443,
-            password: 'clash-pass-123',
-            security: 'tls',
-            delay: 54,
-          },
-        ],
-      };
-      addProfile(newProfile);
-    }
 
-    setShowAddModal(false);
-    setSubName('');
-    setSubUrl('');
-    setRawConfigText('');
+      addProfile(newProfile);
+      setShowAddModal(false);
+      setSubName('');
+      setSubUrl('');
+      setRawConfigText('');
+      setErrorMsg('');
+    } catch (err: any) {
+      setErrorMsg(err.message || '导入失败');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,7 +103,7 @@ export const ProfilesPage: React.FC = () => {
       {/* Top Action Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">订阅与配置管理 (Profiles)</h2>
+          <h2 className="text-xl font-bold text-white tracking-tight">订阅与配置管理</h2>
           <p className="text-xs text-slate-400">导入订阅链接、单个节点分享码或 Clash YAML 配置文件</p>
         </div>
 
@@ -170,12 +187,18 @@ export const ProfilesPage: React.FC = () => {
               </button>
             </div>
 
+            {errorMsg && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300">
+                {errorMsg}
+              </div>
+            )}
+
             <div className="space-y-3 text-xs">
               <div>
                 <label className="block text-slate-300 font-medium mb-1">订阅 / 配置名称</label>
                 <input
                   type="text"
-                  placeholder="例如: 机场专线订阅 2026"
+                  placeholder="例如: 我的 VLESS 节点订阅"
                   value={subName}
                   onChange={(e) => setSubName(e.target.value)}
                   className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
@@ -187,10 +210,23 @@ export const ProfilesPage: React.FC = () => {
                   <label className="block text-slate-300 font-medium mb-1">订阅链接地址 (HTTP/HTTPS)</label>
                   <input
                     type="text"
-                    placeholder="https://example.com/api/v1/client/subscribe?token=xxx"
+                    placeholder="https://example.com/api/v1/client/subscribe?token=xxx 或 vless://..."
                     value={subUrl}
                     onChange={(e) => setSubUrl(e.target.value)}
                     className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+
+              {importType === 'link' && (
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">粘贴节点分享码 (vless://, vmess://, trojan://, hy2:// 或 Base64)</label>
+                  <textarea
+                    rows={4}
+                    placeholder="粘贴节点分享码，如:\nvless://uuid@ip:port?security=reality&...#nodeName"
+                    value={rawConfigText}
+                    onChange={(e) => setRawConfigText(e.target.value)}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white font-mono text-[11px] focus:outline-none focus:border-blue-500"
                   />
                 </div>
               )}
@@ -212,15 +248,17 @@ export const ProfilesPage: React.FC = () => {
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                disabled={loading}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 text-xs font-semibold"
               >
                 取消
               </button>
               <button
                 onClick={handleImport}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-600/30"
+                disabled={loading}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-lg shadow-blue-600/30 flex items-center gap-2"
               >
-                确认导入
+                {loading ? '解析中...' : '确认导入'}
               </button>
             </div>
           </div>

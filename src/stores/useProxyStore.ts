@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Profile, ProxyNode } from '../types';
 
 interface ProxyStore {
@@ -107,51 +108,64 @@ const INITIAL_PROFILES: Profile[] = [
   },
 ];
 
-export const useProxyStore = create<ProxyStore>((set, get) => ({
-  profiles: INITIAL_PROFILES,
-  selectedNodeId: 'node-vless-reality-2',
-  isTestingLatency: false,
+export const useProxyStore = create<ProxyStore>()(
+  persist(
+    (set, get) => ({
+      profiles: INITIAL_PROFILES,
+      selectedNodeId: 'node-vless-reality-2',
+      isTestingLatency: false,
 
-  selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
+      selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
 
-  testNodeLatency: async (nodeId) => {
-    await new Promise((res) => setTimeout(res, 300 + Math.random() * 400));
-    const randomLatency = Math.floor(20 + Math.random() * 150);
+      testNodeLatency: async (nodeId) => {
+        await new Promise((res) => setTimeout(res, 300 + Math.random() * 400));
+        const randomLatency = Math.floor(20 + Math.random() * 150);
 
-    set((state) => ({
-      profiles: state.profiles.map((profile) => ({
-        ...profile,
-        nodes: profile.nodes.map((node) =>
-          node.id === nodeId ? { ...node, delay: randomLatency } : node
-        ),
-      })),
-    }));
-  },
+        set((state) => ({
+          profiles: state.profiles.map((profile) => ({
+            ...profile,
+            nodes: profile.nodes.map((node) =>
+              node.id === nodeId ? { ...node, delay: randomLatency } : node
+            ),
+          })),
+        }));
+      },
 
-  testAllLatencies: async () => {
-    set({ isTestingLatency: true });
-    const allNodeIds = get()
-      .profiles.flatMap((p) => p.nodes)
-      .map((n) => n.id);
+      testAllLatencies: async () => {
+        set({ isTestingLatency: true });
+        const allNodeIds = get()
+          .profiles.flatMap((p) => p.nodes)
+          .map((n) => n.id);
 
-    for (const id of allNodeIds) {
-      await get().testNodeLatency(id);
+        for (const id of allNodeIds) {
+          await get().testNodeLatency(id);
+        }
+        set({ isTestingLatency: false });
+      },
+
+      addProfile: (profile) =>
+        set((state) => ({
+          profiles: [...state.profiles, profile],
+        })),
+
+      removeProfile: (profileId) =>
+        set((state) => ({
+          profiles: state.profiles.filter((p) => p.id !== profileId),
+        })),
+
+      updateProfile: (updated) =>
+        set((state) => ({
+          profiles: state.profiles.map((p) => (p.id === updated.id ? updated : p)),
+        })),
+    }),
+    {
+      name: 'mxray-proxy-store',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        profiles: state.profiles,
+        selectedNodeId: state.selectedNodeId,
+      }),
     }
-    set({ isTestingLatency: false });
-  },
+  )
+);
 
-  addProfile: (profile) =>
-    set((state) => ({
-      profiles: [...state.profiles, profile],
-    })),
-
-  removeProfile: (profileId) =>
-    set((state) => ({
-      profiles: state.profiles.filter((p) => p.id !== profileId),
-    })),
-
-  updateProfile: (updated) =>
-    set((state) => ({
-      profiles: state.profiles.map((p) => (p.id === updated.id ? updated : p)),
-    })),
-}));
