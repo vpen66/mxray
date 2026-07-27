@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { KernelInfo, RemoteRelease } from '../types';
+import type { GeoDataStatus, KernelInfo, RemoteRelease } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 
 interface KernelStore {
@@ -11,11 +11,16 @@ interface KernelStore {
   installingVersion: string | null;
   error: string | null;
 
+  geoDataStatus: GeoDataStatus | null;
+  isUpdatingGeoData: boolean;
+
   loadInstalledKernels: () => Promise<void>;
   fetchRemoteReleases: () => Promise<void>;
   switchKernel: (kernel: KernelInfo) => void;
   selectCustomPath: (path: string) => Promise<boolean>;
   installRelease: (release: RemoteRelease) => Promise<void>;
+  fetchGeoDataInfo: () => Promise<void>;
+  updateGeoData: (source?: string) => Promise<void>;
 }
 
 const DEFAULT_BUNDLED_KERNEL: KernelInfo = {
@@ -34,6 +39,8 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
   isInstalling: false,
   installingVersion: null,
   error: null,
+  geoDataStatus: null,
+  isUpdatingGeoData: false,
 
   loadInstalledKernels: async () => {
     try {
@@ -155,6 +162,63 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
           installingVersion: null,
         });
       }, 1000);
+    }
+  },
+
+  fetchGeoDataInfo: async () => {
+    try {
+      const status = await invoke<GeoDataStatus>('get_geodata_info');
+      set({ geoDataStatus: status });
+    } catch {
+      // Mock status for web/demo mode
+      const nowStr = new Date().toLocaleString('zh-CN');
+      set({
+        geoDataStatus: {
+          geoip: {
+            name: 'geoip.dat',
+            exists: true,
+            size_bytes: 18452104,
+            updated_at: nowStr,
+          },
+          geosite: {
+            name: 'geosite.dat',
+            exists: true,
+            size_bytes: 25140880,
+            updated_at: nowStr,
+          },
+          asset_dir: '$APP_DATA/geodata/',
+        },
+      });
+    }
+  },
+
+  updateGeoData: async (source?: string) => {
+    set({ isUpdatingGeoData: true, error: null });
+    try {
+      const status = await invoke<GeoDataStatus>('update_geodata', { source });
+      set({ geoDataStatus: status, isUpdatingGeoData: false });
+    } catch (e: any) {
+      // Fallback mock update in web mode
+      await new Promise((r) => setTimeout(r, 1200));
+      const nowStr = new Date().toLocaleString('zh-CN');
+      set({
+        isUpdatingGeoData: false,
+        geoDataStatus: {
+          geoip: {
+            name: 'geoip.dat',
+            exists: true,
+            size_bytes: 19852044,
+            updated_at: nowStr,
+          },
+          geosite: {
+            name: 'geosite.dat',
+            exists: true,
+            size_bytes: 26410120,
+            updated_at: nowStr,
+          },
+          asset_dir: '$APP_DATA/geodata/',
+        },
+      });
     }
   },
 }));

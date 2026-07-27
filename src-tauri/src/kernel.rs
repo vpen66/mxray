@@ -237,3 +237,137 @@ pub async fn install_kernel(
     info.name = format!("Xray-core ({})", version);
     Ok(info)
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeoDataFileInfo {
+    pub name: String,
+    pub exists: bool,
+    pub size_bytes: u64,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeoDataStatus {
+    pub geoip: GeoDataFileInfo,
+    pub geosite: GeoDataFileInfo,
+    pub asset_dir: String,
+}
+
+fn inspect_file_info(name: &str, path: &Path) -> GeoDataFileInfo {
+    if path.exists() {
+        let metadata = fs::metadata(path).ok();
+        let size_bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+        let updated_at = metadata
+            .and_then(|m| m.modified().ok())
+            .map(|t| {
+                if let Ok(duration) = t.duration_since(std::time::UNIX_EPOCH) {
+                    let secs = duration.as_secs();
+                    format!("Epoch {}", secs)
+                } else {
+                    "已更新".to_string()
+                }
+            });
+
+        GeoDataFileInfo {
+            name: name.to_string(),
+            exists: true,
+            size_bytes,
+            updated_at,
+        }
+    } else {
+        GeoDataFileInfo {
+            name: name.to_string(),
+            exists: false,
+            size_bytes: 0,
+            updated_at: None,
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_geodata_info(app_handle: tauri::AppHandle) -> Result<GeoDataStatus, String> {
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
+
+    let geo_dir = app_dir.join("geodata");
+    let geoip_path = geo_dir.join("geoip.dat");
+    let geosite_path = geo_dir.join("geosite.dat");
+
+    Ok(GeoDataStatus {
+        geoip: inspect_file_info("geoip.dat", &geoip_path),
+        geosite: inspect_file_info("geosite.dat", &geosite_path),
+        asset_dir: geo_dir.to_str().unwrap_or_default().to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn update_geodata(
+    app_handle: tauri::AppHandle,
+    source: Option<String>,
+) -> Result<GeoDataStatus, String> {
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
+
+    let geo_dir = app_dir.join("geodata");
+    fs::create_dir_all(&geo_dir).map_err(|e| format!("创建 GeoData 目录失败: {}", e))?;
+
+    let base_url = match source.as_deref() {
+        Some("v2fly") => "https://github.com/v2fly/geoip/releases/latest/download",
+        _ => "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
+    };
+
+    let geoip_url = if source.as_deref() == Some("v2fly") {
+        "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat".to_string()
+    } else {
+        format!("{}/geoip.dat", base_url)
+    };
+
+    let geosite_url = if source.as_deref() == Some("v2fly") {
+        "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat".to_string()
+    } else {
+        format!("{}/geosite.dat", base_url)
+    };
+
+    let client = reqwest::Client::builder()
+        .user_agent("MXray-Desktop/1.0")
+        .build()
+        .map_err(|e| format!("HTTP 客户端初始化失败: {}", e))?;
+
+    // Download geoip.dat
+    if let Ok(resp) = client.get(&geoip_url).send().await {
+        if resp.status().is_success() {
+            if let Ok(bytes) = resp.bytes().await {
+                let _ = fs::write(geo_dir.join("geoip.dat"), &bytes);
+            }
+        }
+    }
+
+    // Download geosite.dat
+    if let Ok(resp) = client.get(&geosite_url).send().await {
+        if resp.status().is_success() {
+            if let Ok(bytes) = resp.bytes().await {
+                let _ = fs::write(geo_dir.join("geosite.dat"), &bytes);
+            }
+        }
+    }
+
+    // Sync to active core directories if available
+    let cores_dir = app_dir.join("cores");
+    if cores_dir.exists() && cores_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&cores_dir) {
+            for entry in entries.flatten() {
+                let sub_path = entry.path();
+                if sub_path.is_dir() {
+                    let _ = fs::copy(geo_dir.join("geoip.dat"), sub_path.join("geoip.dat"));
+                    let _ = fs::copy(geo_dir.join("geosite.dat"), sub_path.join("geosite.dat"));
+                }
+            }
+        }
+    }
+
+    get_geodata_info(app_handle)
+}

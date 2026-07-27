@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Shield, Network, Cpu, HardDrive, Download, FolderOpen, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Shield, Network, Cpu, HardDrive, Download, FolderOpen, CheckCircle, AlertCircle, RefreshCw, Globe, Database } from 'lucide-react';
 import { useConfigStore } from '../stores/useConfigStore';
 
 import { useKernelStore } from '../stores/useKernelStore';
@@ -20,16 +20,22 @@ export const SettingsPage: React.FC = () => {
     switchKernel,
     selectCustomPath,
     installRelease,
+    geoDataStatus,
+    isUpdatingGeoData,
+    fetchGeoDataInfo,
+    updateGeoData,
   } = useKernelStore();
 
   const [customPathInput, setCustomPathInput] = useState('');
   const [isDetecting, setIsDetecting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [geoSource, setGeoSource] = useState('Loyalsoldier');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadInstalledKernels();
     fetchRemoteReleases();
+    fetchGeoDataInfo();
   }, []);
 
   const handleBrowseFile = async () => {
@@ -274,6 +280,101 @@ export const SettingsPage: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        </div>
+      </div>
+
+      {/* Geo Database Management Card */}
+      <div className="glass-card p-6 rounded-2xl space-y-5 border border-white/10 bg-slate-900/40">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <Globe className="w-5 h-5 text-cyan-400" />
+            <h3 className="text-base font-bold text-white">Geo 数据库与规则库管理</h3>
+          </div>
+
+          <button
+            onClick={() => updateGeoData(geoSource)}
+            disabled={isUpdatingGeoData}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-cyan-600/20 transition-all cursor-pointer self-start sm:self-auto"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isUpdatingGeoData ? 'animate-spin' : ''}`} />
+            <span>{isUpdatingGeoData ? '正在在线下载规则库...' : '一键更新 Geo 规则库'}</span>
+          </button>
+        </div>
+
+        <div className="space-y-4 text-xs">
+          {/* Geo Source Switcher */}
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/60 p-3 rounded-xl border border-white/5">
+            <span className="text-slate-400 font-medium">规则数据库源 (GitHub Release)</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setGeoSource('Loyalsoldier')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  geoSource === 'Loyalsoldier' ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Loyalsoldier 增强库 (推荐)
+              </button>
+              <button
+                type="button"
+                onClick={() => setGeoSource('v2fly')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  geoSource === 'v2fly' ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                v2fly 官方社区库
+              </button>
+            </div>
+          </div>
+
+          {/* Geo Files Info Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* geoip.dat */}
+            <div className="p-4 rounded-xl border border-white/5 bg-slate-950/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-blue-400" />
+                  <span className="font-bold text-white">geoip.dat (IP 地址库)</span>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold">
+                  {geoDataStatus?.geoip.size_bytes
+                    ? `${(geoDataStatus.geoip.size_bytes / 1024 / 1024).toFixed(2)} MB`
+                    : '未下载'}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-400 space-y-1 font-mono">
+                <p>最后更新: {geoDataStatus?.geoip.updated_at || '暂无数据'}</p>
+                <p className="text-[10px] text-slate-500 truncate">包含全球 IP 划分、大陆 IP (`geoip:cn`) 与局域网段</p>
+              </div>
+            </div>
+
+            {/* geosite.dat */}
+            <div className="p-4 rounded-xl border border-white/5 bg-slate-950/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-emerald-400" />
+                  <span className="font-bold text-white">geosite.dat (域名分类库)</span>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                  {geoDataStatus?.geosite.size_bytes
+                    ? `${(geoDataStatus.geosite.size_bytes / 1024 / 1024).toFixed(2)} MB`
+                    : '未下载'}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-400 space-y-1 font-mono">
+                <p>最后更新: {geoDataStatus?.geosite.updated_at || '暂无数据'}</p>
+                <p className="text-[10px] text-slate-500 truncate">包含国内常用网站 (`geosite:cn`)、GFW 列表及各类服务规则</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Location info */}
+          <div className="text-[11px] text-slate-500 font-mono bg-slate-950/30 p-2.5 rounded-lg border border-white/5 flex items-center justify-between">
+            <span>存储与资产目录:</span>
+            <span className="text-slate-400 truncate max-w-[320px] sm:max-w-[450px]">
+              {geoDataStatus?.asset_dir || '$APP_DATA/geodata/'}
+            </span>
           </div>
         </div>
       </div>

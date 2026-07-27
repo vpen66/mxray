@@ -23,7 +23,7 @@ export const useAppStore = create<AppStore>((set) => ({
     mode: 'rule',
     systemProxy: false,
     tunMode: false,
-    activeNodeId: 'node-vless-reality-1',
+    activeNodeId: '',
   },
   trafficStats: {
     uploadSpeed: 1024 * 42,

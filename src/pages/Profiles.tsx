@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Link2, Trash2, Sparkles, Code2, X, Globe, FileText } from 'lucide-react';
 import { useProxyStore } from '../stores/useProxyStore';
 import type { Profile } from '../types';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 import { parseSubscriptionContent, fetchAndParseSubscriptionUrl } from '../utils/subParser';
 import type { ProxyNode } from '../types';
@@ -10,6 +11,7 @@ export const ProfilesPage: React.FC = () => {
   const { profiles, addProfile, removeProfile } = useProxyStore();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [deletingProfile, setDeletingProfile] = useState<Profile | null>(null);
   const [subName, setSubName] = useState('');
   const [subUrl, setSubUrl] = useState('');
   const [rawConfigText, setRawConfigText] = useState('');
@@ -117,36 +119,47 @@ export const ProfilesPage: React.FC = () => {
       </div>
 
       {/* Profile Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {profiles.map((profile) => (
-          <div key={profile.id} className="glass-card p-5 rounded-2xl space-y-4 border border-white/10 relative">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${profile.type === 'remote' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                    {profile.type === 'remote' ? <Globe className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
-                    {profile.type === 'remote' ? '远程订阅' : '本地文件'}
-                  </span>
-                  <h3 className="text-base font-bold text-white">{profile.name}</h3>
+      {profiles.length === 0 ? (
+        <div className="glass-card p-12 rounded-2xl border border-white/10 text-center space-y-3 bg-slate-900/40">
+          <Globe className="w-10 h-10 text-slate-500 mx-auto animate-pulse" />
+          <h3 className="text-base font-bold text-white">暂无订阅或配置文件</h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            点击右上角“添加/导入新订阅”按钮，支持通过 HTTP 订阅链接、节点分享码 (vless/vmess/hy2) 或 Clash YAML 导入节点。
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {profiles.map((profile) => (
+            <div key={profile.id} className="glass-card p-5 rounded-2xl space-y-4 border border-white/10 relative">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 shrink-0 ${profile.type === 'remote' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                      {profile.type === 'remote' ? <Globe className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
+                      {profile.type === 'remote' ? '远程订阅' : '本地文件'}
+                    </span>
+                    <h3 className="text-base font-bold text-white truncate">{profile.name}</h3>
+                  </div>
+                  {profile.url && <p className="text-xs text-slate-400 font-mono truncate">{profile.url}</p>}
                 </div>
-                {profile.url && <p className="text-xs text-slate-400 font-mono truncate max-w-sm">{profile.url}</p>}
+
+                <button
+                  onClick={() => setDeletingProfile(profile)}
+                  className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all shrink-0"
+                  title="删除订阅"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
 
-              <button
-                onClick={() => removeProfile(profile.id)}
-                className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-white/5">
+                <span>节点数量: <strong className="text-slate-200">{profile.nodes.length} 个</strong></span>
+                <span>更新时间: {new Date(profile.updatedAt).toLocaleString()}</span>
+              </div>
             </div>
-
-            <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-white/5">
-              <span>节点数量: <strong className="text-slate-200">{profile.nodes.length} 个</strong></span>
-              <span>更新时间: {new Date(profile.updatedAt).toLocaleString()}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Add Subscription Modal */}
       {showAddModal && (
@@ -264,6 +277,25 @@ export const ProfilesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Subscription Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deletingProfile}
+        title="删除订阅配置"
+        message={
+          <span>
+            确定要删除订阅 <strong className="text-rose-400 font-semibold">"{deletingProfile?.name}"</strong> 吗？删除后该订阅下的 {deletingProfile?.nodes.length || 0} 个节点将被一并移除。
+          </span>
+        }
+        confirmText="确认删除"
+        onConfirm={() => {
+          if (deletingProfile) {
+            removeProfile(deletingProfile.id);
+            setDeletingProfile(null);
+          }
+        }}
+        onCancel={() => setDeletingProfile(null)}
+      />
     </div>
   );
 };

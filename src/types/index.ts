@@ -2,6 +2,23 @@ export type ProtocolType = 'vless' | 'vmess' | 'trojan' | 'shadowsocks' | 'hyste
 
 export type OutboundMode = 'rule' | 'global' | 'direct';
 
+export type ProxyGroupType = 'select' | 'urltest' | 'fallback' | 'loadbalance' | 'direct' | 'block';
+
+export interface ProxyGroup {
+  id: string;
+  name: string;
+  type: ProxyGroupType;
+  icon?: string;
+  selectedNodeId: string;
+  useFilter?: boolean;
+  filter?: string;
+  nodeIds?: string[];
+  testUrl?: string;
+  interval?: number;
+  tolerance?: number;
+  isCustom?: boolean;
+}
+
 export interface ProxyNode {
   id: string;
   name: string;
@@ -108,7 +125,15 @@ export interface XrayCustomConfig {
   };
   dns?: Record<string, any>;
   policy?: Record<string, any>;
-  customJsonPatch?: string; // JSON Patch or JSON Merge string
+}
+
+export interface XrayConfigProfile {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  updatedAt: string;
+  isDefault?: boolean;
 }
 
 export type KernelSourceType = 'bundled' | 'custom' | 'installed';
@@ -128,5 +153,18 @@ export interface RemoteRelease {
   name: string;
   published_at: string;
   download_url: string;
+}
+
+export interface GeoDataFileInfo {
+  name: string;
+  exists: boolean;
+  size_bytes: number;
+  updated_at?: string;
+}
+
+export interface GeoDataStatus {
+  geoip: GeoDataFileInfo;
+  geosite: GeoDataFileInfo;
+  asset_dir: string;
 }
 

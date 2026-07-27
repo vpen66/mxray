@@ -50,7 +50,9 @@ pub fn run() {
             kernel::detect_kernel,
             kernel::list_installed_kernels,
             kernel::fetch_remote_releases,
-            kernel::install_kernel
+            kernel::install_kernel,
+            kernel::get_geodata_info,
+            kernel::update_geodata
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

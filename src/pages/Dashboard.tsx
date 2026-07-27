@@ -1,9 +1,8 @@
 import React, { useEffect } from 'react';
-import { ArrowDown, ArrowUp, Activity, ShieldCheck, Radio, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUp, Activity, ShieldCheck, Radio } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAppStore } from '../stores/useAppStore';
 import { useProxyStore } from '../stores/useProxyStore';
-import { useKernelStore } from '../stores/useKernelStore';
 
 const MOCK_SPEED_HISTORY = [
   { time: '10:45', up: 12, down: 120 },
@@ -18,7 +17,6 @@ const MOCK_SPEED_HISTORY = [
 export const DashboardPage: React.FC = () => {
   const { coreState, trafficStats, setMode, updateTraffic } = useAppStore();
   const { profiles, selectedNodeId } = useProxyStore();
-  const { activeKernel } = useKernelStore();
 
   const activeNode = profiles
     .flatMap((p) => p.nodes)
@@ -46,21 +44,6 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Banner / Core Info */}
-      <div className="glass-card p-6 rounded-2xl relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-blue-500/20">
-        <div className="absolute -top-12 -right-12 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> {activeKernel.name}
-            </span>
-            <span className="text-xs text-slate-400">{activeKernel.version}</span>
-          </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">网络传输控制台</h2>
-          <p className="text-sm text-slate-400">
-            高并发 gRPC API | 原生 Xray TUN 接管 | 动态转译适配器
-          </p>
-        </div>
-
         {/* Mode Selector */}
         <div className="flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-white/10">
           {(['rule', 'global', 'direct'] as const).map((m) => (
@@ -77,7 +60,7 @@ export const DashboardPage: React.FC = () => {
             </button>
           ))}
         </div>
-      </div>
+
 
       {/* Speed & Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
