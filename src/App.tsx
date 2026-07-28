@@ -4,6 +4,7 @@ import { useAppStore } from './stores/useAppStore';
 import { useLogStore } from './stores/useLogStore';
 import { DashboardPage } from './pages/Dashboard';
 import { ProxiesPage } from './pages/Proxies';
+import { ConnectionsPage } from './pages/Connections';
 import { ProfilesPage } from './pages/Profiles';
 import { RulesPage } from './pages/Rules';
 import { LogsPage } from './pages/Logs';
@@ -28,6 +29,8 @@ export function App() {
         return <DashboardPage />;
       case 'proxies':
         return <ProxiesPage />;
+      case 'connections':
+        return <ConnectionsPage />;
       case 'profiles':
         return <ProfilesPage />;
       case 'rules':

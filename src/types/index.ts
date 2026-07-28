@@ -173,3 +173,22 @@ export interface GeoDataStatus {
   asset_dir: string;
 }
 
+export interface ConnectionItem {
+  id: string;
+  host: string;
+  network: 'TCP' | 'UDP';
+  inboundTag: string;
+  rule: string;
+  chain: string[];
+  destinationIp?: string;
+  processName?: string;
+  download: number; // bytes
+  upload: number; // bytes
+  downloadSpeed: number; // bytes/s
+  uploadSpeed: number; // bytes/s
+  status: 'active' | 'closed';
+  startTime: number; // timestamp ms
+  closedTime?: number;
+}
+
+

@@ -12,6 +12,7 @@ import {
   Activity,
   Loader2,
   Power,
+  Network,
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
 import { useKernelStore } from '../stores/useKernelStore';
@@ -19,6 +20,7 @@ import { useKernelStore } from '../stores/useKernelStore';
 const NAV_ITEMS = [
   { id: 'dashboard', label: '控制台', icon: LayoutDashboard },
   { id: 'proxies', label: '节点代理', icon: Globe2 },
+  { id: 'connections', label: '连接追踪', icon: Network },
   { id: 'profiles', label: '订阅配置', icon: FolderGit2 },
   { id: 'rules', label: '路由规则', icon: Route },
   { id: 'logs', label: '实时日志', icon: Terminal },
