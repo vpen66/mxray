@@ -1,25 +1,20 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Activity, ShieldCheck, Radio } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAppStore } from '../stores/useAppStore';
 import { useProxyStore } from '../stores/useProxyStore';
 
-const MOCK_SPEED_HISTORY = [
-  { time: '10:45', up: 12, down: 120 },
-  { time: '10:46', up: 25, down: 280 },
-  { time: '10:47', up: 18, down: 410 },
-  { time: '10:48', up: 45, down: 350 },
-  { time: '10:49', up: 32, down: 520 },
-  { time: '10:50', up: 68, down: 890 },
-  { time: '10:51', up: 42, down: 380 },
-];
+interface SpeedPoint {
+  time: string;
+  up: number;
+  down: number;
+}
 
 export const DashboardPage: React.FC = () => {
   const {
     coreState,
     trafficStats,
     setMode,
-    updateTraffic,
     toggleSystemProxy,
     toggleTunMode,
     isTogglingSystemProxy,
@@ -28,18 +23,28 @@ export const DashboardPage: React.FC = () => {
   } = useAppStore();
   const { profiles, selectedNodeId } = useProxyStore();
 
+  const [speedHistory, setSpeedHistory] = useState<SpeedPoint[]>([]);
+
   const activeNode = profiles
     .flatMap((p) => p.nodes)
     .find((n) => n.id === selectedNodeId);
 
+  const currentDownloadSpeed = coreState.isRunning ? trafficStats.downloadSpeed : 0;
+  const currentUploadSpeed = coreState.isRunning ? trafficStats.uploadSpeed : 0;
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      const randomUp = Math.floor(Math.random() * 50 * 1024);
-      const randomDown = Math.floor(Math.random() * 600 * 1024);
-      updateTraffic(randomUp, randomDown);
+    const timer = setInterval(() => {
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+      const point: SpeedPoint = {
+        time: timeStr,
+        down: Math.round(currentDownloadSpeed / 1024),
+        up: Math.round(currentUploadSpeed / 1024),
+      };
+      setSpeedHistory((prev) => [...prev.slice(-11), point]);
     }, 2000);
-    return () => clearInterval(interval);
-  }, [updateTraffic]);
+    return () => clearInterval(timer);
+  }, [currentDownloadSpeed, currentUploadSpeed]);
 
   const formatSpeed = (bytes: number) => {
     if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB/s`;
@@ -80,7 +85,7 @@ export const DashboardPage: React.FC = () => {
             <ArrowDown className="w-4 h-4 text-cyan-400" />
           </div>
           <div className="text-2xl font-bold text-white tracking-tight">
-            {formatSpeed(trafficStats.downloadSpeed)}
+            {formatSpeed(currentDownloadSpeed)}
           </div>
           <div className="text-[11px] text-slate-500">累计下载: {formatTotal(trafficStats.totalDownload)}</div>
         </div>
@@ -91,7 +96,7 @@ export const DashboardPage: React.FC = () => {
             <ArrowUp className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-white tracking-tight">
-            {formatSpeed(trafficStats.uploadSpeed)}
+            {formatSpeed(currentUploadSpeed)}
           </div>
           <div className="text-[11px] text-slate-500">累计上传: {formatTotal(trafficStats.totalUpload)}</div>
         </div>
@@ -176,7 +181,7 @@ export const DashboardPage: React.FC = () => {
 
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={MOCK_SPEED_HISTORY}>
+            <AreaChart data={speedHistory}>
               <defs>
                 <linearGradient id="downGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.4} />
