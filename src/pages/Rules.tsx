@@ -88,9 +88,9 @@ export const RulesPage: React.FC = () => {
             description:
               r.description ||
               (r.domain?.includes('geosite:cn') || r.ip?.includes('geoip:cn')
-                ? '中国大陆域名/IP (直连)'
+                ? '中国大陆域名/IP'
                 : r.domain?.includes('geosite:category-ads-all')
-                ? '全网广告与追踪域名拦截 (拒绝)'
+                ? '全网广告与追踪域名拦截'
                 : '常用国外与代理域名'),
           };
         });
@@ -193,23 +193,6 @@ export const RulesPage: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const getOutboundBadgeStyle = (outbound: string) => {
-    if (outbound === 'direct' || outbound === '直连' || outbound === '国内流量') {
-      return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-    }
-    if (outbound === 'block' || outbound === 'reject' || outbound === '拒绝') {
-      return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
-    }
-    if (outbound === 'proxy' || outbound === '代理') {
-      return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-    }
-    // Check if it matches an individual node
-    const isNode = allNodes.some((n) => n.name === outbound || n.id === outbound);
-    if (isNode) {
-      return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-    }
-    return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-  };
 
   const filteredRules = rules.filter((r) => {
     const q = searchQuery.toLowerCase();

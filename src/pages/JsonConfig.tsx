@@ -175,19 +175,7 @@ export const JsonConfigPage: React.FC = () => {
   const { proxyGroups, profiles: proxyProfiles } = useProxyStore();
   const allProxyNodes = proxyProfiles.flatMap((p) => p.nodes);
 
-  // Outbound badge style helper (aligned with Rules.tsx)
-  const getOutboundBadgeStyle = (outbound: string) => {
-    if (outbound === 'direct' || outbound === '直连' || outbound === '国内流量') {
-      return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-    }
-    if (outbound === 'block' || outbound === 'reject' || outbound === '拒绝') {
-      return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
-    }
-    if (outbound === 'proxy' || outbound === '代理') {
-      return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-    }
-    return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-  };
+
 
   // Routing rule priority handlers
   const handleMoveRuleUp = (index: number) => {
@@ -1908,9 +1896,9 @@ export const JsonConfigPage: React.FC = () => {
                       const ruleEnabled = rule.enabled !== false;
                       const ruleDescription = rule.description || (
                         rule.domain?.includes('geosite:cn') || rule.ip?.includes('geoip:cn')
-                          ? '中国大陆域名/IP (直连)'
+                          ? '中国大陆域名/IP'
                           : rule.domain?.includes('geosite:category-ads-all')
-                          ? '全网广告与追踪域名拦截 (拒绝)'
+                          ? '全网广告与追踪域名拦截'
                           : rule.domain
                           ? '域名分流规则'
                           : rule.ip

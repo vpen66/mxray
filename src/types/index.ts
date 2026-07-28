@@ -144,9 +144,9 @@ export interface XrayConfigProfile {
 export type KernelSourceType = 'bundled' | 'custom' | 'installed';
 
 export interface KernelInfo {
-  name: String;
-  version: String;
-  path: String;
+  name: string;
+  version: string;
+  path: string;
   kernel_type: KernelSourceType;
   is_valid: boolean;
   error?: string;

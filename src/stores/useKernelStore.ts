@@ -210,7 +210,7 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
     try {
       const status = await invoke<GeoDataStatus>('update_geodata', { source });
       set({ geoDataStatus: status, isUpdatingGeoData: false });
-    } catch (e: any) {
+    } catch {
       // Fallback mock update in web mode
       await new Promise((r) => setTimeout(r, 1200));
       const nowStr = getShanghaiNowString();

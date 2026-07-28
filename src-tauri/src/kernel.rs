@@ -575,3 +575,48 @@ pub fn get_kernel_status() -> Result<bool, String> {
     }
 }
 
+#[tauri::command]
+pub fn get_runtime_config_path(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
+
+    let _ = fs::create_dir_all(&app_dir);
+    let config_file_path = app_dir.join("runtime_config.json");
+    Ok(config_file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn get_cli_command(
+    app_handle: tauri::AppHandle,
+    binary_path: Option<String>,
+) -> Result<String, String> {
+    let bin_path = find_xray_binary(binary_path.as_deref(), &app_handle)
+        .unwrap_or_else(|_| "xray".to_string());
+
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
+
+    let _ = fs::create_dir_all(&app_dir);
+    let config_file_path = app_dir.join("runtime_config.json");
+    let cfg_str = config_file_path.to_string_lossy().to_string();
+
+    let bin_formatted = if bin_path.contains(' ') {
+        format!("\"{}\"", bin_path)
+    } else {
+        bin_path
+    };
+
+    let cfg_formatted = if cfg_str.contains(' ') {
+        format!("\"{}\"", cfg_str)
+    } else {
+        cfg_str
+    };
+
+    Ok(format!("nohup {} run -config {} > /dev/null 2>&1 &", bin_formatted, cfg_formatted))
+}
+
+

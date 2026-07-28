@@ -4,6 +4,7 @@ import { useConfigStore } from '../stores/useConfigStore';
 
 import { useKernelStore } from '../stores/useKernelStore';
 import { open } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 import { formatShanghaiTime } from '../utils/date';
 
 export const SettingsPage: React.FC = () => {
@@ -34,6 +35,9 @@ export const SettingsPage: React.FC = () => {
   } = useKernelStore();
 
   const [copiedCli, setCopiedCli] = useState(false);
+  const [copiedConfigPath, setCopiedConfigPath] = useState(false);
+  const [cliCommand, setCliCommand] = useState<string>('');
+  const [runtimeConfigPath, setRuntimeConfigPath] = useState<string>('');
 
   const [customPathInput, setCustomPathInput] = useState('');
   const [isDetecting, setIsDetecting] = useState(false);
@@ -45,7 +49,24 @@ export const SettingsPage: React.FC = () => {
     loadInstalledKernels();
     fetchRemoteReleases();
     fetchGeoDataInfo();
-  }, []);
+  }, [loadInstalledKernels, fetchRemoteReleases, fetchGeoDataInfo]);
+
+  useEffect(() => {
+    const fetchCliInfo = async () => {
+      try {
+        const cmd = await invoke<string>('get_cli_command', { binaryPath: activeKernel.path });
+        const path = await invoke<string>('get_runtime_config_path');
+        setCliCommand(cmd);
+        setRuntimeConfigPath(path);
+      } catch {
+        const fallbackPath = '~/Library/Application Support/net.mxray.app/runtime_config.json';
+        const bin = activeKernel.path === 'bundled' ? 'xray' : (activeKernel.path || 'xray');
+        setCliCommand(`nohup "${bin}" run -config "${fallbackPath}" > /dev/null 2>&1 &`);
+        setRuntimeConfigPath(fallbackPath);
+      }
+    };
+    fetchCliInfo();
+  }, [activeKernel]);
 
   const handleBrowseFile = async () => {
     setValidationError(null);
@@ -354,7 +375,7 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           {/* Option 4: CLI Standalone Command Box */}
-          <div className="space-y-2 border-t border-white/5 pt-3">
+          <div className="space-y-3 border-t border-white/5 pt-3">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                 <Terminal className="w-3.5 h-3.5 text-purple-400" />
@@ -362,7 +383,7 @@ export const SettingsPage: React.FC = () => {
               </span>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`nohup ${activeKernel.path || 'xray'} run -config ~/.config/mxray/runtime_config.json > /dev/null 2>&1 &`);
+                  navigator.clipboard.writeText(cliCommand || `nohup xray run -config "${runtimeConfigPath}" > /dev/null 2>&1 &`);
                   setCopiedCli(true);
                   setTimeout(() => setCopiedCli(false), 2000);
                 }}
@@ -372,8 +393,27 @@ export const SettingsPage: React.FC = () => {
                 <span>{copiedCli ? '已复制指令' : '复制命令'}</span>
               </button>
             </div>
+            {runtimeConfigPath && (
+              <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-white/5">
+                <div className="truncate mr-2">
+                  <span className="text-slate-400">运行时配置实际路径：</span>
+                  <span className="font-mono text-purple-300 select-all">{runtimeConfigPath}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(runtimeConfigPath);
+                    setCopiedConfigPath(true);
+                    setTimeout(() => setCopiedConfigPath(false), 2000);
+                  }}
+                  className="shrink-0 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1 text-[10px] transition-colors"
+                >
+                  {copiedConfigPath ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                  <span>{copiedConfigPath ? '已复制' : '复制路径'}</span>
+                </button>
+              </div>
+            )}
             <div className="p-3 bg-slate-950 rounded-xl border border-white/10 font-mono text-[11px] text-purple-300 break-all select-all">
-              nohup {activeKernel.path || 'xray'} run -config ~/.config/mxray/runtime_config.json &gt; /dev/null 2&gt;&amp;1 &amp;
+              {cliCommand || `nohup xray run -config "${runtimeConfigPath || '~/Library/Application Support/net.mxray.app/runtime_config.json'}" > /dev/null 2>&1 &`}
             </div>
           </div>
         </div>

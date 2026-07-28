@@ -57,6 +57,8 @@ pub fn run() {
             kernel::start_kernel,
             kernel::stop_kernel,
             kernel::get_kernel_status,
+            kernel::get_runtime_config_path,
+            kernel::get_cli_command,
             sysproxy::set_system_proxy,
             sysproxy::get_system_proxy_status
         ])
