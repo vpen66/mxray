@@ -6,6 +6,7 @@ import { useUpdateStore } from '../stores/useUpdateStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { formatShanghaiTime } from '../utils/date';
+import { ToggleSwitch } from '../components/ToggleSwitch';
 
 export const SettingsPage: React.FC = () => {
   const { socksPort, httpPort, enableFakeDns, sniffingEnabled, updatePorts, toggleFakeDns, toggleSniffing } = useConfigStore();
@@ -459,43 +460,43 @@ export const SettingsPage: React.FC = () => {
           {/* Option 1: Standalone Daemon Toggle */}
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-bold text-white">启用 Xray 内核独立守护模式 (Standalone Kernel Mode)</h4>
-              <p className="text-slate-400">无需启动/保持 MXray 前端 GUI 界面，直接以系统后台守护进程方式独立运行 Xray 内核</p>
+              <h4 className="font-bold text-white">启用 Xray 内核独立守护模式</h4>
+              <p className="text-slate-400">无需启动或保持图形界面，直接以系统后台进程方式独立运行 Xray 内核</p>
             </div>
-            <button
-              onClick={toggleStandaloneKernel}
-              className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${standaloneKernel ? 'bg-purple-600' : 'bg-slate-800'}`}
-            >
-              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${standaloneKernel ? 'translate-x-6' : 'translate-x-0'}`} />
-            </button>
+            <ToggleSwitch
+              checked={standaloneKernel}
+              onChange={toggleStandaloneKernel}
+              activeColor="purple"
+              ariaLabel="启用 Xray 内核独立守护模式"
+            />
           </div>
 
           {/* Option 2: Keep Kernel Alive on Exit */}
           <div className="flex items-center justify-between border-t border-white/5 pt-3">
             <div>
               <h4 className="font-bold text-white">退出应用主界面时保持 Xray 内核后台运行</h4>
-              <p className="text-slate-400">关闭 MXray 前端 UI 窗口时不杀死 Xray 进程，允许后端网络代理继续静默托管</p>
+              <p className="text-slate-400">关闭窗口时不杀死 Xray 进程，允许后端网络代理继续静默托管</p>
             </div>
-            <button
-              onClick={toggleKeepKernelAliveOnExit}
-              className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${keepKernelAliveOnExit ? 'bg-purple-600' : 'bg-slate-800'}`}
-            >
-              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${keepKernelAliveOnExit ? 'translate-x-6' : 'translate-x-0'}`} />
-            </button>
+            <ToggleSwitch
+              checked={keepKernelAliveOnExit}
+              onChange={toggleKeepKernelAliveOnExit}
+              activeColor="purple"
+              ariaLabel="退出时保持内核后台运行"
+            />
           </div>
 
           {/* Option 3: Auto-start Kernel Daemon at Boot without GUI */}
           <div className="flex items-center justify-between border-t border-white/5 pt-3">
             <div>
-              <h4 className="font-bold text-white">开机静默启动 Xray 内核 (免 GUI 自动启动)</h4>
+              <h4 className="font-bold text-white">开机静默启动 Xray 内核</h4>
               <p className="text-slate-400">开机登录系统时仅自动拉起后台 Xray 内核，不弹窗或加载图形界面</p>
             </div>
-            <button
-              onClick={toggleAutoStartKernelDaemon}
-              className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${autoStartKernelDaemon ? 'bg-purple-600' : 'bg-slate-800'}`}
-            >
-              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${autoStartKernelDaemon ? 'translate-x-6' : 'translate-x-0'}`} />
-            </button>
+            <ToggleSwitch
+              checked={autoStartKernelDaemon}
+              onChange={toggleAutoStartKernelDaemon}
+              activeColor="purple"
+              ariaLabel="开机静默启动 Xray 内核"
+            />
           </div>
 
           {/* Option 4: CLI Standalone Command Box */}
@@ -681,25 +682,25 @@ export const SettingsPage: React.FC = () => {
               <h4 className="font-bold text-white">开启 FakeDNS 域名解析池</h4>
               <p className="text-slate-400">使用 198.18.0.0/15 地址池接管 TUN 与操作系统 DNS 流量</p>
             </div>
-            <button
-              onClick={toggleFakeDns}
-              className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${enableFakeDns ? 'bg-blue-600' : 'bg-slate-800'}`}
-            >
-              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${enableFakeDns ? 'translate-x-6' : 'translate-x-0'}`} />
-            </button>
+            <ToggleSwitch
+              checked={enableFakeDns}
+              onChange={toggleFakeDns}
+              activeColor="blue"
+              ariaLabel="开启 FakeDNS 域名解析池"
+            />
           </div>
 
           <div className="flex items-center justify-between border-t border-white/5 pt-3">
             <div>
-              <h4 className="font-bold text-white">开启入站流量嗅探 (Sniffing)</h4>
+              <h4 className="font-bold text-white">开启入站流量嗅探</h4>
               <p className="text-slate-400">基于 HTTP/TLS/QUIC 嗅探真实的域名目标，防御 DNS 污染</p>
             </div>
-            <button
-              onClick={toggleSniffing}
-              className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${sniffingEnabled ? 'bg-blue-600' : 'bg-slate-800'}`}
-            >
-              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${sniffingEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-            </button>
+            <ToggleSwitch
+              checked={sniffingEnabled}
+              onChange={toggleSniffing}
+              activeColor="blue"
+              ariaLabel="开启入站流量嗅探"
+            />
           </div>
         </div>
       </div>

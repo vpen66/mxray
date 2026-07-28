@@ -77,47 +77,55 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ isTogglingSystemProxy: true });
     const nextState = !get().coreState.systemProxy;
     const { httpPort, socksPort } = useConfigStore.getState();
-    try {
-      if (nextState) {
-        // 开启系统代理 -> 同时启动 Xray 内核
-        try {
-          await useConfigStore.getState().startActiveKernel();
-        } catch (e) {
-          console.warn('Start kernel warning:', e);
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 450));
+
+    const performToggle = async () => {
+      try {
+        if (nextState) {
+          // 开启系统代理 -> 同时启动 Xray 内核
+          try {
+            await useConfigStore.getState().startActiveKernel();
+          } catch (e) {
+            console.warn('Start kernel warning:', e);
+          }
+          await invoke('set_system_proxy', {
+            enable: true,
+            httpPort,
+            socksPort,
+          });
+          set((state) => ({
+            coreState: { ...state.coreState, systemProxy: true, isRunning: true },
+          }));
+        } else {
+          // 关闭系统代理 -> 同时停止 Xray 内核（清理干净后台进程）
+          await invoke('set_system_proxy', {
+            enable: false,
+            httpPort,
+            socksPort,
+          });
+          try {
+            await invoke('stop_kernel');
+          } catch (e) {
+            console.warn('Stop kernel warning:', e);
+          }
+          set((state) => ({
+            coreState: { ...state.coreState, systemProxy: false, isRunning: false },
+          }));
         }
-        await invoke('set_system_proxy', {
-          enable: true,
-          httpPort,
-          socksPort,
-        });
+      } catch {
+        // Fallback for web environment or error handling
         set((state) => ({
-          coreState: { ...state.coreState, systemProxy: true, isRunning: true },
-        }));
-      } else {
-        // 关闭系统代理 -> 同时停止 Xray 内核（清理干净后台进程）
-        await invoke('set_system_proxy', {
-          enable: false,
-          httpPort,
-          socksPort,
-        });
-        try {
-          await invoke('stop_kernel');
-        } catch (e) {
-          console.warn('Stop kernel warning:', e);
-        }
-        set((state) => ({
-          coreState: { ...state.coreState, systemProxy: false, isRunning: false },
+          coreState: {
+            ...state.coreState,
+            systemProxy: nextState,
+            isRunning: nextState,
+          },
         }));
       }
-    } catch {
-      // Fallback for web environment or error handling
-      set((state) => ({
-        coreState: {
-          ...state.coreState,
-          systemProxy: nextState,
-          isRunning: nextState,
-        },
-      }));
+    };
+
+    try {
+      await Promise.all([performToggle(), minDelay]);
     } finally {
       set({ isTogglingSystemProxy: false });
     }
@@ -143,8 +151,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   toggleTunMode: async () => {
     if (get().isTogglingTunMode) return;
     set({ isTogglingTunMode: true });
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 450));
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await minDelay;
       set((state) => ({
         coreState: { ...state.coreState, tunMode: !state.coreState.tunMode },
       }));

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Activity, ShieldCheck, Radio } from 'lucide-react';
+import { ArrowDown, ArrowUp, Activity, ShieldCheck, Radio, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAppStore } from '../stores/useAppStore';
 import { useProxyStore } from '../stores/useProxyStore';
+import { ToggleSwitch } from '../components/ToggleSwitch';
 
 interface SpeedPoint {
   time: string;
@@ -78,7 +79,7 @@ export const DashboardPage: React.FC = () => {
 
 
       {/* Speed & Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="glass-card p-5 rounded-2xl space-y-2">
           <div className="flex items-center justify-between text-slate-400 text-xs">
             <span>实时下载速率</span>
@@ -117,46 +118,78 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="glass-card p-5 rounded-2xl space-y-2">
+        <div className="glass-card p-4 rounded-2xl space-y-2.5 flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 text-xs">
             <span>系统与接管状态</span>
             <ShieldCheck className="w-4 h-4 text-indigo-400" />
           </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-200">
-            <button
-              onClick={toggleSystemProxy}
-              disabled={isTogglingSystemProxy}
-              className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-all ${
-                isTogglingSystemProxy ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+
+          <div className="space-y-1.5">
+            <div
+              onClick={() => !isTogglingSystemProxy && toggleSystemProxy()}
+              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl border transition-all duration-300 select-none ${
+                isTogglingSystemProxy ? 'bg-emerald-500/10 border-emerald-500/30 cursor-wait' : 'cursor-pointer hover:border-emerald-500/40'
               } ${
                 coreState.systemProxy
-                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                  : 'bg-slate-800 text-slate-400 border-slate-700'
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 shadow-sm shadow-emerald-500/10'
+                  : 'bg-slate-800/60 border-slate-700/60 text-slate-300'
               }`}
             >
-              系统代理: {isTogglingSystemProxy ? '切换中...' : coreState.systemProxy ? '开启' : '关闭'}
-            </button>
-            <button
-              onClick={toggleTunMode}
-              disabled={isTogglingTunMode}
-              className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-all ${
-                isTogglingTunMode ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+              <span className="text-xs font-semibold whitespace-nowrap">系统代理</span>
+              <ToggleSwitch
+                checked={coreState.systemProxy}
+                onChange={toggleSystemProxy}
+                loading={isTogglingSystemProxy}
+                activeColor="emerald"
+                size="sm"
+                ariaLabel="系统代理"
+              />
+            </div>
+
+            <div
+              onClick={() => !isTogglingTunMode && toggleTunMode()}
+              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl border transition-all duration-300 select-none ${
+                isTogglingTunMode ? 'bg-indigo-500/10 border-indigo-500/30 cursor-wait' : 'cursor-pointer hover:border-indigo-500/40'
               } ${
                 coreState.tunMode
-                  ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
-                  : 'bg-slate-800 text-slate-400 border-slate-700'
+                  ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300 shadow-sm shadow-indigo-500/10'
+                  : 'bg-slate-800/60 border-slate-700/60 text-slate-300'
               }`}
             >
-              TUN 模式: {isTogglingTunMode ? '切换中...' : coreState.tunMode ? '开启' : '关闭'}
-            </button>
+              <span className="text-xs font-semibold whitespace-nowrap">TUN 模式</span>
+              <ToggleSwitch
+                checked={coreState.tunMode}
+                onChange={toggleTunMode}
+                loading={isTogglingTunMode}
+                activeColor="indigo"
+                size="sm"
+                ariaLabel="TUN 模式"
+              />
+            </div>
           </div>
-          <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1">
-            <span>内核后台进程: {coreState.isRunning ? '运行中 (PID可直接杀除)' : '已停止'}</span>
+
+          <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1 border-t border-white/5">
+            <span className="flex items-center gap-1.5 whitespace-nowrap min-w-0 truncate">
+              {isTogglingSystemProxy ? (
+                <>
+                  <Loader2 className="w-3 h-3 text-amber-400 animate-spin flex-shrink-0" />
+                  <span className="text-amber-400 truncate">内核状态切换中...</span>
+                </>
+              ) : (
+                <>
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${coreState.isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                  <span className="truncate">内核进程: {coreState.isRunning ? '运行中' : '已停止'}</span>
+                </>
+              )}
+            </span>
             <button
               onClick={toggleKernel}
-              className="text-[10px] text-blue-400 hover:text-blue-300 underline underline-offset-2"
+              disabled={isTogglingSystemProxy}
+              className={`text-[10px] whitespace-nowrap flex-shrink-0 ml-2 transition-colors ${
+                isTogglingSystemProxy ? 'text-slate-500 cursor-not-allowed' : 'text-blue-400 hover:text-blue-300 underline underline-offset-2'
+              }`}
             >
-              {coreState.isRunning ? '停止内核' : '启动内核'}
+              {isTogglingSystemProxy ? '请稍候...' : coreState.isRunning ? '停止内核' : '启动内核'}
             </button>
           </div>
         </div>

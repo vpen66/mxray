@@ -87,7 +87,7 @@ export function parseNodeUrl(rawUrl: string): ProxyNode | null {
         path: params.get('path') || undefined,
         serviceName: params.get('serviceName') || params.get('service_name') || undefined,
         rawUrl: urlStr,
-        delay: Math.floor(20 + Math.random() * 80),
+        delay: 0,
       };
     }
 
@@ -108,7 +108,7 @@ export function parseNodeUrl(rawUrl: string): ProxyNode | null {
         network: obj.net || 'tcp',
         path: obj.path || undefined,
         rawUrl: urlStr,
-        delay: Math.floor(20 + Math.random() * 80),
+        delay: 0,
       };
     }
 
@@ -152,7 +152,7 @@ export function parseNodeUrl(rawUrl: string): ProxyNode | null {
         network: (params.get('type') || 'tcp') as 'tcp' | 'ws' | 'grpc' | 'h2',
         path: params.get('path') || undefined,
         rawUrl: urlStr,
-        delay: Math.floor(20 + Math.random() * 80),
+        delay: 0,
       };
     }
 
@@ -194,7 +194,7 @@ export function parseNodeUrl(rawUrl: string): ProxyNode | null {
         password,
         sni: params.get('sni') || undefined,
         rawUrl: urlStr,
-        delay: Math.floor(20 + Math.random() * 80),
+        delay: 0,
       };
     }
   } catch (err) {

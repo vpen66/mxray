@@ -60,6 +60,7 @@ pub fn run() {
             kernel::get_kernel_status,
             kernel::get_runtime_config_path,
             kernel::get_cli_command,
+            kernel::test_node_latency,
             sysproxy::set_system_proxy,
             sysproxy::get_system_proxy_status
         ])

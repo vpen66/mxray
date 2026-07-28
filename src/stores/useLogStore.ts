@@ -15,47 +15,8 @@ interface LogStore {
   initLogListener: () => () => void;
 }
 
-const MOCK_INITIAL_LOGS: LogEntry[] = [
-  {
-    id: '1',
-    timestamp: new Date(Date.now() - 60000 * 5).toLocaleTimeString(),
-    level: 'info',
-    message: '[MXray Core] Starting Xray-core v26.3.27 (Xray, Penetrates Everything.)',
-  },
-  {
-    id: '2',
-    timestamp: new Date(Date.now() - 60000 * 4.9).toLocaleTimeString(),
-    level: 'info',
-    message: '[Inbound] socks-in listening on 127.0.0.1:7890 (UDP enabled)',
-  },
-  {
-    id: '3',
-    timestamp: new Date(Date.now() - 60000 * 4.8).toLocaleTimeString(),
-    level: 'info',
-    message: '[Inbound] http-in listening on 127.0.0.1:7891',
-  },
-  {
-    id: '4',
-    timestamp: new Date(Date.now() - 60000 * 4.7).toLocaleTimeString(),
-    level: 'info',
-    message: '[TUN] FakeDNS initialized with pool 198.18.0.0/15',
-  },
-  {
-    id: '5',
-    timestamp: new Date(Date.now() - 60000 * 3).toLocaleTimeString(),
-    level: 'info',
-    message: '[Routing] [node-vless-reality-2] matched rule: domain [geosite:google] -> proxy',
-  },
-  {
-    id: '6',
-    timestamp: new Date(Date.now() - 60000 * 1.5).toLocaleTimeString(),
-    level: 'warning',
-    message: '[Outbound] TCP handshake to api.github.com took 148ms via REALITY-Vision',
-  },
-];
-
 export const useLogStore = create<LogStore>((set) => ({
-  logs: MOCK_INITIAL_LOGS,
+  logs: [],
   logLevel: 'all',
   searchQuery: '',
   autoScroll: true,

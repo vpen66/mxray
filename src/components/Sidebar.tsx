@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
 import { useKernelStore } from '../stores/useKernelStore';
+import { ToggleSwitch } from './ToggleSwitch';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: '控制台', icon: LayoutDashboard },
@@ -58,17 +59,32 @@ export const Sidebar: React.FC = () => {
         <div className="px-3 mb-4">
           <button
             onClick={toggleKernel}
+            disabled={isTogglingSystemProxy}
             title={coreState.isRunning ? '点击可停止 Xray 内核进程' : '点击可启动 Xray 内核进程'}
-            className="w-full flex items-center justify-between p-2.5 rounded-lg bg-slate-900/60 hover:bg-slate-800/80 border border-white/5 text-xs transition-all cursor-pointer group"
+            className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all duration-300 cursor-pointer group ${
+              isTogglingSystemProxy
+                ? 'bg-amber-500/10 border-amber-500/30'
+                : coreState.isRunning
+                ? 'bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/20'
+                : 'bg-slate-900/60 hover:bg-slate-800/80 border-white/5'
+            }`}
           >
             <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${coreState.isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+              {isTogglingSystemProxy ? (
+                <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+              ) : (
+                <span
+                  className={`w-2 h-2 rounded-full transition-colors duration-300 ${
+                    coreState.isRunning ? 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400' : 'bg-rose-500'
+                  }`}
+                />
+              )}
               <span className="text-slate-300 font-medium group-hover:text-white transition-colors">
-                {coreState.isRunning ? '内核运行中' : '内核已停止'}
+                {isTogglingSystemProxy ? '内核切换中...' : coreState.isRunning ? '内核运行中' : '内核已停止'}
               </span>
             </div>
             <div className="flex items-center gap-1 text-[10px] text-slate-500 group-hover:text-slate-300">
-              <Power className={`w-3 h-3 ${coreState.isRunning ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <Power className={`w-3 h-3 transition-colors ${coreState.isRunning ? 'text-emerald-400' : 'text-slate-500'}`} />
               <span>{activeKernel.version}</span>
             </div>
           </button>
@@ -99,53 +115,63 @@ export const Sidebar: React.FC = () => {
 
       {/* Toggles Footer */}
       <div className="space-y-2 pt-4 border-t border-white/10">
-        <button
-          onClick={toggleSystemProxy}
-          disabled={isTogglingSystemProxy}
-          className={`w-full flex items-center justify-between p-2.5 rounded-lg text-xs font-medium border transition-all ${
-            isTogglingSystemProxy ? 'opacity-60 cursor-not-allowed pointer-events-none' : 'cursor-pointer'
+        <div
+          onClick={() => !isTogglingSystemProxy && toggleSystemProxy()}
+          className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-medium border transition-all duration-300 select-none ${
+            isTogglingSystemProxy ? 'bg-emerald-500/10 border-emerald-500/30 cursor-wait' : 'cursor-pointer'
           } ${
             coreState.systemProxy
-              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-lg shadow-emerald-500/10'
               : 'bg-slate-900/40 border-white/5 text-slate-400 hover:bg-white/5'
           }`}
         >
           <div className="flex items-center gap-2">
-            {isTogglingSystemProxy ? (
-              <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
-            ) : (
-              <Shield className="w-4 h-4" />
-            )}
-            <span>系统代理</span>
+            <Shield className={`w-4 h-4 transition-colors ${coreState.systemProxy ? 'text-emerald-400' : 'text-slate-400'}`} />
+            <div className="flex flex-col">
+              <span>系统代理</span>
+              <span className="text-[10px] text-slate-500 font-normal">
+                {isTogglingSystemProxy ? '切换中...' : coreState.systemProxy ? '开启' : '关闭'}
+              </span>
+            </div>
           </div>
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${coreState.systemProxy ? 'bg-emerald-500/30 text-emerald-300' : 'bg-slate-800 text-slate-500'}`}>
-            {isTogglingSystemProxy ? '切换中...' : coreState.systemProxy ? 'ON' : 'OFF'}
-          </span>
-        </button>
+          <ToggleSwitch
+            checked={coreState.systemProxy}
+            onChange={toggleSystemProxy}
+            loading={isTogglingSystemProxy}
+            activeColor="emerald"
+            size="sm"
+            ariaLabel="系统代理开关"
+          />
+        </div>
 
-        <button
-          onClick={toggleTunMode}
-          disabled={isTogglingTunMode}
-          className={`w-full flex items-center justify-between p-2.5 rounded-lg text-xs font-medium border transition-all ${
-            isTogglingTunMode ? 'opacity-60 cursor-not-allowed pointer-events-none' : 'cursor-pointer'
+        <div
+          onClick={() => !isTogglingTunMode && toggleTunMode()}
+          className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-medium border transition-all duration-300 select-none ${
+            isTogglingTunMode ? 'bg-indigo-500/10 border-indigo-500/30 cursor-wait' : 'cursor-pointer'
           } ${
             coreState.tunMode
-              ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300'
+              ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300 shadow-lg shadow-indigo-500/10'
               : 'bg-slate-900/40 border-white/5 text-slate-400 hover:bg-white/5'
           }`}
         >
           <div className="flex items-center gap-2">
-            {isTogglingTunMode ? (
-              <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
-            ) : (
-              <Activity className="w-4 h-4" />
-            )}
-            <span>原生 TUN 模式</span>
+            <Activity className={`w-4 h-4 transition-colors ${coreState.tunMode ? 'text-indigo-400' : 'text-slate-400'}`} />
+            <div className="flex flex-col">
+              <span>原生 TUN 模式</span>
+              <span className="text-[10px] text-slate-500 font-normal">
+                {isTogglingTunMode ? '切换中...' : coreState.tunMode ? '开启' : '关闭'}
+              </span>
+            </div>
           </div>
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${coreState.tunMode ? 'bg-indigo-500/30 text-indigo-300' : 'bg-slate-800 text-slate-500'}`}>
-            {isTogglingTunMode ? '切换中...' : coreState.tunMode ? 'ON' : 'OFF'}
-          </span>
-        </button>
+          <ToggleSwitch
+            checked={coreState.tunMode}
+            onChange={toggleTunMode}
+            loading={isTogglingTunMode}
+            activeColor="indigo"
+            size="sm"
+            ariaLabel="原生 TUN 模式开关"
+          />
+        </div>
       </div>
     </aside>
   );

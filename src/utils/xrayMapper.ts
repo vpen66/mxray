@@ -307,7 +307,7 @@ export function xrayOutboundToNode(outbound: XrayOutbound, profileId: string = '
     host,
     serviceName,
     profileId,
-    delay: Math.floor(20 + Math.random() * 80),
+    delay: 0,
   };
 }
 

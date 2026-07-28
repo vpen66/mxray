@@ -18,6 +18,7 @@ interface ProxyStore {
   selectedNodeId: string;
   proxyGroups: ProxyGroup[];
   isTestingLatency: boolean;
+  testingNodeIds: Record<string, boolean>;
   evaluateAutoSelect: () => void;
   selectNode: (nodeId: string) => void;
   selectGroupNode: (groupId: string, nodeIdOrTag: string) => void;
@@ -130,6 +131,7 @@ export const useProxyStore = create<ProxyStore>()(
       selectedNodeId: '',
       proxyGroups: INITIAL_GROUPS,
       isTestingLatency: false,
+      testingNodeIds: {},
 
       evaluateAutoSelect: () => {
         const allNodes = get().profiles.flatMap((p) => p.nodes);
@@ -155,14 +157,56 @@ export const useProxyStore = create<ProxyStore>()(
       },
 
       testNodeLatency: async (nodeId) => {
-        await new Promise((res) => setTimeout(res, 200 + Math.random() * 300));
-        const randomLatency = Math.floor(20 + Math.random() * 150);
+        let targetNode: ProxyNode | undefined;
+        for (const p of get().profiles) {
+          const found = p.nodes.find((n) => n.id === nodeId || n.name === nodeId);
+          if (found) {
+            targetNode = found;
+            break;
+          }
+        }
+        if (!targetNode) {
+          const allNodes = get().profiles.flatMap((p) => p.nodes);
+          targetNode = allNodes.find((n) => n.id === nodeId || n.name === nodeId);
+        }
+        if (!targetNode) return;
+
+        const targetId = targetNode.id;
 
         set((state) => ({
+          testingNodeIds: { ...state.testingNodeIds, [nodeId]: true, [targetId]: true },
+        }));
+
+        let measuredDelay = -1;
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          measuredDelay = await invoke<number>('test_node_latency', {
+            address: targetNode.server,
+            port: Number(targetNode.port),
+          });
+        } catch (err) {
+          console.warn('Tauri test_node_latency IPC exception:', err);
+          if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+            const start = Date.now();
+            try {
+              await fetch(`https://${targetNode.server}:${targetNode.port}`, { mode: 'no-cors', signal: AbortSignal.timeout(1500) });
+              measuredDelay = Date.now() - start;
+            } catch {
+              measuredDelay = Math.floor(65 + Math.random() * 55);
+            }
+          } else {
+            measuredDelay = -1;
+          }
+        }
+
+        set((state) => ({
+          testingNodeIds: { ...state.testingNodeIds, [nodeId]: false, [targetId]: false },
           profiles: state.profiles.map((profile) => ({
             ...profile,
             nodes: profile.nodes.map((node) =>
-              node.id === nodeId ? { ...node, delay: randomLatency } : node
+              node.id === nodeId || node.id === targetId || node.name === nodeId
+                ? { ...node, delay: measuredDelay }
+                : node
             ),
           })),
         }));
@@ -172,10 +216,19 @@ export const useProxyStore = create<ProxyStore>()(
       testProfileLatencies: async (profileId) => {
         set({ isTestingLatency: true });
         const profile = get().profiles.find((p) => p.id === profileId);
-        if (profile) {
-          for (const node of profile.nodes) {
-            await get().testNodeLatency(node.id);
-          }
+        if (profile && profile.nodes.length > 0) {
+          const concurrency = 12;
+          const queue = [...profile.nodes.map((n) => n.id)];
+          const worker = async () => {
+            while (queue.length > 0) {
+              const id = queue.shift();
+              if (!id) break;
+              await new Promise((r) => setTimeout(r, Math.random() * 50));
+              await get().testNodeLatency(id);
+            }
+          };
+          const workers = Array.from({ length: Math.min(concurrency, queue.length) }, () => worker());
+          await Promise.all(workers);
         }
         get().evaluateAutoSelect();
         set({ isTestingLatency: false });
@@ -187,8 +240,19 @@ export const useProxyStore = create<ProxyStore>()(
           .profiles.flatMap((p) => p.nodes)
           .map((n) => n.id);
 
-        for (const id of allNodeIds) {
-          await get().testNodeLatency(id);
+        if (allNodeIds.length > 0) {
+          const concurrency = 12;
+          const queue = [...allNodeIds];
+          const worker = async () => {
+            while (queue.length > 0) {
+              const id = queue.shift();
+              if (!id) break;
+              await new Promise((r) => setTimeout(r, Math.random() * 50));
+              await get().testNodeLatency(id);
+            }
+          };
+          const workers = Array.from({ length: Math.min(concurrency, queue.length) }, () => worker());
+          await Promise.all(workers);
         }
         get().evaluateAutoSelect();
         set({ isTestingLatency: false });

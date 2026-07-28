@@ -74,6 +74,7 @@ export const ProxiesPage: React.FC = () => {
     proxyGroups,
     selectGroupNode,
     isTestingLatency,
+    testingNodeIds,
     testAllLatencies,
     testNodeLatency,
     evaluateAutoSelect,
@@ -168,10 +169,18 @@ export const ProxiesPage: React.FC = () => {
   };
 
   const getDelayColor = (delay?: number) => {
-    if (!delay || delay < 0) return 'text-slate-500';
-    if (delay < 60) return 'text-emerald-400 font-bold';
-    if (delay < 150) return 'text-amber-400 font-semibold';
-    return 'text-rose-400';
+    if (delay === undefined || delay === 0) return 'text-slate-500';
+    if (delay < 0) return 'text-rose-400 font-semibold';
+    if (delay < 250) return 'text-emerald-400 font-bold';
+    if (delay < 400) return 'text-amber-400 font-semibold';
+    return 'text-rose-400 font-semibold';
+  };
+
+  const getDelayText = (delay?: number) => {
+    if (delay === undefined || delay === 0) return '未测速';
+    if (delay === -2) return '测速中...';
+    if (delay < 0 || delay >= 10000) return '超时';
+    return `${delay} ms`;
   };
 
   const getTypeBadge = (type: ProxyGroupType) => {
@@ -203,7 +212,7 @@ export const ProxiesPage: React.FC = () => {
     const node = allNodes.find((n) => n.id === selectedId || n.name === selectedId);
     if (node) {
       if (group.type === 'urltest' || group.type === 'fallback') {
-        const delayStr = node.delay && node.delay > 0 ? `${node.delay} ms` : '未测速';
+        const delayStr = getDelayText(node.delay);
         return `⚡ 自动选优: ${node.name} (${delayStr})`;
       }
       return node.name;
@@ -573,16 +582,26 @@ export const ProxiesPage: React.FC = () => {
                                     {node.sni || 'N/A'}
                                   </span>
                                   <button
+                                    disabled={!!testingNodeIds?.[node.id]}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       testNodeLatency(node.id);
                                     }}
-                                    className="flex items-center gap-1 hover:text-white transition-colors"
+                                    className="flex items-center gap-1 hover:text-white transition-colors disabled:opacity-60 cursor-pointer"
                                   >
-                                    <span className={`font-mono ${getDelayColor(node.delay)}`}>
-                                      {node.delay ? `${node.delay} ms` : '未测速'}
-                                    </span>
-                                    <RefreshCw className="w-3 h-3 text-slate-500 hover:rotate-180 transition-transform" />
+                                    {testingNodeIds?.[node.id] ? (
+                                      <>
+                                        <span className="font-mono text-cyan-400">测速中...</span>
+                                        <RefreshCw className="w-3 h-3 text-cyan-400 animate-spin" />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className={`font-mono ${getDelayColor(node.delay)}`}>
+                                          {getDelayText(node.delay)}
+                                        </span>
+                                        <RefreshCw className="w-3 h-3 text-slate-500 hover:rotate-180 transition-transform" />
+                                      </>
+                                    )}
                                   </button>
                                 </div>
                               </div>

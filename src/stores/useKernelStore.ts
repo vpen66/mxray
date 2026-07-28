@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { GeoDataStatus, KernelInfo, RemoteRelease } from '../types';
 import { invoke } from '@tauri-apps/api/core';
-import { getShanghaiNowString } from '../utils/date';
 
 interface KernelStore {
   activeKernel: KernelInfo;
@@ -70,40 +69,8 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
     try {
       const releases = await invoke<RemoteRelease[]>('fetch_remote_releases');
       set({ remoteReleases: releases, isLoadingReleases: false });
-    } catch {
-      // Fallback mock releases for web/demo mode
-      const ua = (navigator.userAgent || '').toLowerCase();
-      let zipName = 'Xray-macos-64.zip';
-      if (ua.includes('win')) {
-        zipName = 'Xray-windows-64.zip';
-      } else if (ua.includes('linux')) {
-        zipName = 'Xray-linux-64.zip';
-      }
-
-      const mockReleases: RemoteRelease[] = [
-        {
-          version: 'v26.3.27',
-          tag_name: 'v26.3.27',
-          name: 'Xray-core v26.3.27',
-          published_at: '2026-03-27',
-          download_url: `https://github.com/XTLS/Xray-core/releases/download/v26.3.27/${zipName}`,
-        },
-        {
-          version: 'v26.3.0',
-          tag_name: 'v26.3.0',
-          name: 'Xray-core v26.3.0',
-          published_at: '2026-03-01',
-          download_url: `https://github.com/XTLS/Xray-core/releases/download/v26.3.0/${zipName}`,
-        },
-        {
-          version: 'v25.1.0',
-          tag_name: 'v25.1.0',
-          name: 'Xray-core v25.1.0',
-          published_at: '2025-01-15',
-          download_url: `https://github.com/XTLS/Xray-core/releases/download/v25.1.0/${zipName}`,
-        },
-      ];
-      set({ remoteReleases: mockReleases, isLoadingReleases: false });
+    } catch (err: any) {
+      set({ remoteReleases: [], isLoadingReleases: false, error: err?.toString() || '获取远程发行版本失败' });
     }
   },
 
@@ -132,22 +99,9 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
         set({ error: info.error || '无法验证所选路径处的 Xray-core 可执行程序' });
         return false;
       }
-    } catch {
-      // Mock validation in web mode
-      const mockCustom: KernelInfo = {
-        name: `Xray-core (${path.split('/').pop() || 'custom'})`,
-        version: 'v26.3.27 (自定义)',
-        path,
-        kernel_type: 'custom',
-        is_valid: true,
-      };
-      const installed = get().installedKernels.filter((k) => k.path !== path);
-      set({
-        installedKernels: [...installed, mockCustom],
-        activeKernel: mockCustom,
-        error: null,
-      });
-      return true;
+    } catch (err: any) {
+      set({ error: err?.toString() || '路径校验失败' });
+      return false;
     }
   },
 
@@ -165,24 +119,8 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
         isInstalling: false,
         installingVersion: null,
       });
-    } catch {
-      // Mock install in web mode
-      setTimeout(() => {
-        const mockInstalled: KernelInfo = {
-          name: `Xray-core (${release.version})`,
-          version: release.version,
-          path: `$APP_DATA/cores/xray-${release.version}/xray`,
-          kernel_type: 'installed',
-          is_valid: true,
-        };
-        const installed = get().installedKernels.filter((k) => k.version !== release.version);
-        set({
-          installedKernels: [...installed, mockInstalled],
-          activeKernel: mockInstalled,
-          isInstalling: false,
-          installingVersion: null,
-        });
-      }, 1000);
+    } catch (err: any) {
+      set({ isInstalling: false, installingVersion: null, error: err?.toString() || '安装内核失败' });
     }
   },
 
@@ -190,26 +128,8 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
     try {
       const status = await invoke<GeoDataStatus>('get_geodata_info');
       set({ geoDataStatus: status });
-    } catch {
-      // Mock status for web/demo mode
-      const nowStr = getShanghaiNowString();
-      set({
-        geoDataStatus: {
-          geoip: {
-            name: 'geoip.dat',
-            exists: true,
-            size_bytes: 18452104,
-            updated_at: nowStr,
-          },
-          geosite: {
-            name: 'geosite.dat',
-            exists: true,
-            size_bytes: 25140880,
-            updated_at: nowStr,
-          },
-          asset_dir: '$APP_DATA/geodata/',
-        },
-      });
+    } catch (err: any) {
+      set({ geoDataStatus: null, error: err?.toString() || '无法获取 GeoData 信息' });
     }
   },
 
@@ -218,28 +138,8 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
     try {
       const status = await invoke<GeoDataStatus>('update_geodata', { source });
       set({ geoDataStatus: status, isUpdatingGeoData: false });
-    } catch {
-      // Fallback mock update in web mode
-      await new Promise((r) => setTimeout(r, 1200));
-      const nowStr = getShanghaiNowString();
-      set({
-        isUpdatingGeoData: false,
-        geoDataStatus: {
-          geoip: {
-            name: 'geoip.dat',
-            exists: true,
-            size_bytes: 19852044,
-            updated_at: nowStr,
-          },
-          geosite: {
-            name: 'geosite.dat',
-            exists: true,
-            size_bytes: 26410120,
-            updated_at: nowStr,
-          },
-          asset_dir: '$APP_DATA/geodata/',
-        },
-      });
+    } catch (err: any) {
+      set({ isUpdatingGeoData: false, error: err?.toString() || '更新 GeoData 失败' });
     }
   },
 
