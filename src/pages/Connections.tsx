@@ -554,7 +554,7 @@ export const ConnectionsPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/10 bg-slate-950/80 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                {renderSortHeader('host', '主机 (Host)')}
+                {renderSortHeader('host', '主机')}
                 {renderSortHeader('download', '下载量', true)}
                 {renderSortHeader('upload', '上传量', true)}
                 {renderSortHeader('downloadSpeed', '下载速度', true)}
@@ -807,7 +807,7 @@ export const ConnectionsPage: React.FC = () => {
               {/* Data Breakdown Table */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 rounded-xl bg-slate-950 border border-white/5 space-y-1">
-                  <div className="text-[11px] text-slate-500">主机地址 (Host)</div>
+                  <div className="text-[11px] text-slate-500">主机地址</div>
                   <div className="text-xs font-mono text-slate-200 font-semibold truncate select-all">
                     {selectedConnection.host}
                   </div>
@@ -917,7 +917,7 @@ export const ConnectionsPage: React.FC = () => {
             <div className="p-5 space-y-4 text-xs overflow-y-auto overscroll-contain custom-scrollbar flex-1 pb-44">
               {/* Host Banner */}
               <div className="p-3 rounded-xl bg-slate-950 border border-white/10 space-y-1">
-                <div className="text-[11px] text-slate-400">当前目标主机 (Host)</div>
+                <div className="text-[11px] text-slate-400">当前目标主机</div>
                 <div className="font-mono text-cyan-300 font-bold text-sm truncate">
                   {ruleEditingConnection.host}
                 </div>
@@ -925,7 +925,7 @@ export const ConnectionsPage: React.FC = () => {
 
               {/* Match Strategy Choice */}
               <div className="space-y-2">
-                <label className="text-slate-300 font-semibold block">匹配规则模式 (Domain Pattern)</label>
+                <label className="text-slate-300 font-semibold block">匹配规则模式</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"

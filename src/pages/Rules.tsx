@@ -611,7 +611,7 @@ const AdvancedRuleModal: React.FC<AdvancedRuleModalProps> = ({
           <div className="flex items-center gap-2">
             <Sliders className="w-5 h-5 text-blue-400" />
             <h3 className="text-base font-bold text-white">
-              {editingRule ? `编辑分流规则 (${editingRule.description})` : '新建高级分流路由规则'}
+              {editingRule ? `编辑分流规则 - ${editingRule.description}` : '新建高级分流路由规则'}
             </h3>
           </div>
           <button

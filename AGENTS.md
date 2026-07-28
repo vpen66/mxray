@@ -179,7 +179,11 @@ AI Agent 在修改或新增本项目的代码时，必须严格遵守以下指�
 - **统一使用自定义下拉组件**：必须统一使用 `CustomSelect`（`src/components/CustomSelect.tsx`）或 `OutboundSelect`（`src/components/OutboundSelect.tsx`）。
 - **统一设计风格**：下拉菜单需采用深色半透明玻璃材质（`bg-slate-900/98 backdrop-blur-2xl`）、细微边框高亮、选中项 Check 标识、圆角与平滑过渡动画，保持与分流规则中的下拉框（`OutboundSelect`）完全统一的视觉与交互规范。
 
-### 6. 任务完成前验证命令
+### 6. 界面文本与标题规范（UI Title & Label Standard）
+- **严禁在界面标题与 Label 中使用“括号+英文”后缀**：例如 `编辑出站配置 (Outbound)`、`VLESS 反向代理 (Reverse Proxy)`、`伪装域名 SNI (serverName)`、`显示调试日志 (show)`、`直连 (direct)`、`拒绝 (block)` 等。
+- **保持纯正中文与简约专业视觉**：所有页面标题、模态框 Header、分组名称、表单控件 Label、下拉框选项名称必须保持纯粹、地道的中文表述（例如 `编辑出站配置`、`VLESS 反向代理`、`伪装域名 SNI`、`直连`、`拒绝`），禁止拼接类似 `(Outbound)`、`(Reverse Proxy)` 或对应 JSON 属性字段名的圆括号英文后缀。
+
+### 7. 任务完成前验证命令
 在向用户汇报任务完成前，必须执行以下命令确保代码编译无误：
 - 前端构建检查：`pnpm build`
 - 前端代码检查：`pnpm lint`（运行 oxlint）

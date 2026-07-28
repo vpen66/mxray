@@ -76,7 +76,7 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
       return (
         <span className="flex items-center gap-1.5 text-emerald-400 font-semibold truncate">
           <Zap className="w-3.5 h-3.5 shrink-0" />
-          <span>直连 (direct)</span>
+          <span>直连</span>
         </span>
       );
     }
@@ -100,7 +100,7 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
       return (
         <span className="flex items-center gap-1.5 text-emerald-400 font-semibold truncate">
           <Zap className="w-3.5 h-3.5 shrink-0" />
-          <span>直连 (direct)</span>
+          <span>直连</span>
         </span>
       );
     }
@@ -108,7 +108,7 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
       return (
         <span className="flex items-center gap-1.5 text-rose-400 font-semibold truncate">
           <Ban className="w-3.5 h-3.5 shrink-0" />
-          <span>拒绝 (block)</span>
+          <span>拒绝</span>
         </span>
       );
     }
@@ -148,8 +148,8 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
   };
 
   const actionOptions = [
-    { value: 'direct', label: '直连 (direct)', color: 'text-emerald-400', icon: Zap },
-    { value: 'block', label: '拒绝 (block)', color: 'text-rose-400', icon: Ban },
+    { value: 'direct', label: '直连', color: 'text-emerald-400', icon: Zap },
+    { value: 'block', label: '拒绝', color: 'text-rose-400', icon: Ban },
   ];
 
   const filteredActions = actionOptions.filter((a) =>
@@ -234,7 +234,7 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
               <div>
                 <div className="px-2 py-1 text-[10px] font-bold text-slate-400 tracking-wider uppercase flex items-center gap-1.5">
                   <Zap className="w-3 h-3 text-emerald-400" />
-                  基础动作 (Actions)
+                  基础动作
                 </div>
                 <div className="space-y-0.5 mt-0.5">
                   {filteredActions.map((act) => {
@@ -268,7 +268,7 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
               <div>
                 <div className="px-2 py-1 text-[10px] font-bold text-slate-400 tracking-wider uppercase flex items-center gap-1.5">
                   <Layers className="w-3 h-3 text-blue-400" />
-                  代理策略组 (Proxy Groups)
+                  代理策略组
                 </div>
                 <div className="space-y-0.5 mt-0.5">
                   {filteredGroups.map((g) => {
@@ -304,7 +304,7 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
               <div>
                 <div className="px-2 py-1 text-[10px] font-bold text-slate-400 tracking-wider uppercase flex items-center gap-1.5">
                   <Server className="w-3 h-3 text-purple-400" />
-                  指定单个节点 (Nodes)
+                  指定单个节点
                 </div>
                 <div className="space-y-0.5 mt-0.5">
                   {filteredNodes.map((n) => {

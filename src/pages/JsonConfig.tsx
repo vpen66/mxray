@@ -136,6 +136,14 @@ const TLS_FINGERPRINT_OPTIONS = [
   { value: 'randomised', label: 'randomised' },
 ];
 
+const VMESS_SECURITY_OPTIONS = [
+  { value: 'auto', label: 'auto (自动识别)' },
+  { value: 'aes-128-gcm', label: 'aes-128-gcm' },
+  { value: 'chacha20-poly1305', label: 'chacha20-poly1305' },
+  { value: 'none', label: 'none (不加密)' },
+  { value: 'zero', label: 'zero' },
+];
+
 const FREEDOM_DOMAIN_STRATEGY_OPTIONS = [
   { value: 'AsIs', label: 'AsIs (不查询域名，直接发送目标)' },
   { value: 'UseIP', label: 'UseIP (优先解析并使用真实 IP 连接)' },
@@ -383,6 +391,8 @@ export const JsonConfigPage: React.FC = () => {
     network: string;
     security: string;
     uuidPassword: string;
+    vlessEncryption: string;
+    vmessSecurity: string;
     flow: string;
     enableReverse: boolean;
     reverseTag: string;
@@ -452,6 +462,8 @@ export const JsonConfigPage: React.FC = () => {
     network: 'tcp',
     security: 'reality',
     uuidPassword: '',
+    vlessEncryption: 'none',
+    vmessSecurity: 'auto',
     flow: 'xtls-rprx-vision',
     enableReverse: false,
     reverseTag: '',
@@ -1180,7 +1192,7 @@ export const JsonConfigPage: React.FC = () => {
         ],
       };
       newOb.streamSettings = buildStreamSettingsFromVisual(ob);
-    } else if (ob.protocol === 'vless' || ob.protocol === 'vmess') {
+    } else if (ob.protocol === 'vless') {
       newOb.settings = {
         vnext: [
           {
@@ -1189,9 +1201,26 @@ export const JsonConfigPage: React.FC = () => {
             users: [
               {
                 id: ob.uuidPassword,
-                encryption: 'none',
-                ...(ob.protocol === 'vless' && ob.flow ? { flow: ob.flow } : {}),
-                ...(ob.protocol === 'vless' && ob.enableReverse && ob.reverseTag ? { reverse: { tag: ob.reverseTag } } : {}),
+                encryption: ob.vlessEncryption || 'none',
+                ...(ob.flow ? { flow: ob.flow } : {}),
+                ...(ob.enableReverse && ob.reverseTag ? { reverse: { tag: ob.reverseTag } } : {}),
+              },
+            ],
+          },
+        ],
+      };
+      newOb.streamSettings = buildStreamSettingsFromVisual(ob);
+    } else if (ob.protocol === 'vmess') {
+      newOb.settings = {
+        vnext: [
+          {
+            address: ob.server,
+            port: Number(ob.port) || 443,
+            users: [
+              {
+                id: ob.uuidPassword,
+                alterId: 0,
+                security: ob.vmessSecurity || 'auto',
               },
             ],
           },
@@ -1222,12 +1251,19 @@ export const JsonConfigPage: React.FC = () => {
     let username = '';
     let userPassword = '';
     let ssMethod = '2022-blake3-aes-128-gcm';
+    let vlessEncryption = 'none';
+    let vmessSecurity = 'auto';
 
     if (ob.settings?.vnext?.[0]) {
       server = ob.settings.vnext[0].address || '';
       port = ob.settings.vnext[0].port || 443;
-      uuidPassword = ob.settings.vnext[0].users?.[0]?.id || '';
-      flow = ob.settings.vnext[0].users?.[0]?.flow || 'xtls-rprx-vision';
+      const firstUser = ob.settings.vnext[0].users?.[0];
+      if (firstUser) {
+        uuidPassword = firstUser.id || '';
+        flow = firstUser.flow || 'xtls-rprx-vision';
+        vlessEncryption = firstUser.encryption || 'none';
+        vmessSecurity = firstUser.security || 'auto';
+      }
     } else if (ob.settings?.servers?.[0]) {
       server = ob.settings.servers[0].address || '';
       port = ob.settings.servers[0].port || 443;
@@ -1257,6 +1293,8 @@ export const JsonConfigPage: React.FC = () => {
       security,
       network,
       uuidPassword,
+      vlessEncryption,
+      vmessSecurity,
       flow,
       enableReverse: Boolean(vlessUser?.reverse?.tag),
       reverseTag: vlessUser?.reverse?.tag || '',
@@ -1587,6 +1625,8 @@ export const JsonConfigPage: React.FC = () => {
         network: 'tcp',
         security: 'reality',
         uuidPassword: '',
+        vlessEncryption: 'none',
+        vmessSecurity: 'auto',
         flow: 'xtls-rprx-vision',
         enableReverse: false,
         reverseTag: '',
@@ -3039,7 +3079,7 @@ export const JsonConfigPage: React.FC = () => {
                     <div className="p-3 bg-cyan-950/20 border border-cyan-500/20 rounded-xl space-y-3">
                       <div className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
                         <SlidersHorizontal className="w-3.5 h-3.5" />
-                        Dokodemo-door (Tunnel 任意门/端口映射) 设置
+                        Dokodemo-door 任意门设置
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -3078,7 +3118,7 @@ export const JsonConfigPage: React.FC = () => {
 
                       <div className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-lg border border-white/5">
                         <div>
-                          <div className="text-xs font-semibold text-slate-200">透明代理重定向 (followRedirect)</div>
+                          <div className="text-xs font-semibold text-slate-200">透明代理重定向</div>
                           <div className="text-[10px] text-slate-400">自动识别 iptables/nftables 捕获的真实目的地 IP 和端口</div>
                         </div>
                         <input
@@ -3241,7 +3281,7 @@ export const JsonConfigPage: React.FC = () => {
 
                           <div className="pt-2 border-t border-white/5 space-y-2">
                             <div className="flex items-center justify-between">
-                              <label className="text-xs font-semibold text-slate-300">VLESS 反向代理 (Reverse Proxy)</label>
+                              <label className="text-xs font-semibold text-slate-300">VLESS 反向代理</label>
                               <input
                                 type="checkbox"
                                 checked={inboundModal.enableReverse || false}
@@ -3251,7 +3291,7 @@ export const JsonConfigPage: React.FC = () => {
                             </div>
                             {inboundModal.enableReverse && (
                               <div>
-                                <label className="block text-xs text-slate-400 mb-1 font-semibold">反向代理关联出站 Tag (Reverse Tag)</label>
+                                <label className="block text-xs text-slate-400 mb-1 font-semibold">反向代理关联出站 Tag</label>
                                 <input
                                   type="text"
                                   placeholder="例如: r-outbound (Portal 端映射出的出站 Tag)"
@@ -3344,7 +3384,7 @@ export const JsonConfigPage: React.FC = () => {
 
                       <div className="grid grid-cols-2 gap-3 pt-1">
                         <div className="flex items-center justify-between p-2 bg-slate-950/60 rounded-lg border border-white/5">
-                          <span className="text-xs text-slate-200">自动设置系统路由 (autoRoute)</span>
+                          <span className="text-xs text-slate-200">自动设置系统路由</span>
                           <input
                             type="checkbox"
                             checked={inboundModal.autoRoute}
@@ -3353,7 +3393,7 @@ export const JsonConfigPage: React.FC = () => {
                           />
                         </div>
                         <div className="flex items-center justify-between p-2 bg-slate-950/60 rounded-lg border border-white/5">
-                          <span className="text-xs text-slate-200">严格路由模式 (strictRoute)</span>
+                          <span className="text-xs text-slate-200">严格路由模式</span>
                           <input
                             type="checkbox"
                             checked={inboundModal.strictRoute}
@@ -3379,7 +3419,7 @@ export const JsonConfigPage: React.FC = () => {
 
                   <div className="flex items-center justify-between p-3 bg-slate-950/60 rounded-xl border border-white/5">
                     <div>
-                      <div className="text-xs font-semibold text-slate-200">开启流量嗅探 (Sniffing)</div>
+                      <div className="text-xs font-semibold text-slate-200">开启流量嗅探</div>
                       <div className="text-[10px] text-slate-400">自动重定向 HTTP/TLS/QUIC 域名至真实 Host</div>
                     </div>
                     <input
@@ -3460,7 +3500,7 @@ export const JsonConfigPage: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-white/10 gap-2 shrink-0">
               <h3 className="text-base font-bold text-white flex items-center gap-2 truncate min-w-0">
                 <Server className="w-5 h-5 text-blue-400 shrink-0" />
-                <span className="truncate">{outboundModal.index !== null ? '编辑出站配置 (Outbound)' : '新增出站配置 (Outbound)'}</span>
+                <span className="truncate">{outboundModal.index !== null ? '编辑出站配置' : '新增出站配置'}</span>
               </h3>
               <div className="flex items-center gap-1.5 shrink-0">
                 {/* Mode Switcher */}
@@ -3801,7 +3841,7 @@ export const JsonConfigPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        {outboundModal.protocol === 'vless' || outboundModal.protocol === 'vmess' ? 'UUID' : '密码 Password'}
+                        {outboundModal.protocol === 'vless' || outboundModal.protocol === 'vmess' ? 'UUID' : '密码'}
                       </label>
                       <input
                         type="text"
@@ -3815,7 +3855,7 @@ export const JsonConfigPage: React.FC = () => {
                     {outboundModal.protocol === 'vless' && (
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1">流控算法 Flow (Vision)</label>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">流控算法</label>
                           <input
                             type="text"
                             placeholder="如: xtls-rprx-vision"
@@ -3827,7 +3867,7 @@ export const JsonConfigPage: React.FC = () => {
 
                         <div className="pt-2 border-t border-white/5 space-y-2">
                           <div className="flex items-center justify-between">
-                            <label className="text-xs font-semibold text-slate-300">VLESS 反向代理 (Reverse Proxy)</label>
+                            <label className="text-xs font-semibold text-slate-300">VLESS 反向代理</label>
                             <input
                               type="checkbox"
                               checked={outboundModal.enableReverse || false}
@@ -3850,13 +3890,25 @@ export const JsonConfigPage: React.FC = () => {
                       </div>
                     )}
 
+                    {outboundModal.protocol === 'vmess' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">加密算法</label>
+                        <CustomSelect
+                          value={outboundModal.vmessSecurity}
+                          onChange={(val) => setOutboundModal((prev) => ({ ...prev, vmessSecurity: val }))}
+                          options={VMESS_SECURITY_OPTIONS}
+                          accentColor="blue"
+                        />
+                      </div>
+                    )}
+
                     {/* --- Security Settings Cards (REALITY & TLS) --- */}
                     {outboundModal.security === 'reality' && (
                       <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
-                        <div className="text-xs font-bold text-blue-400">REALITY 安全配置 (realitySettings)</div>
+                        <div className="text-xs font-bold text-blue-400">REALITY 安全配置</div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1">伪装域名 SNI (serverName)</label>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">伪装域名 SNI</label>
                             <input
                               type="text"
                               placeholder="如: www.amd.com"
@@ -3866,7 +3918,7 @@ export const JsonConfigPage: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1">公钥 Public Key (publicKey)</label>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">伪装公钥 Public Key</label>
                             <input
                               type="text"
                               placeholder="REALITY 椭圆曲线公钥 Base64"
@@ -3878,7 +3930,7 @@ export const JsonConfigPage: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-3 gap-3">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1">Short ID (shortId)</label>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">Short ID</label>
                             <input
                               type="text"
                               placeholder="如: de"
@@ -3908,7 +3960,7 @@ export const JsonConfigPage: React.FC = () => {
                           </div>
                         </div>
                         <div className="flex items-center justify-between pt-1">
-                          <label className="text-xs font-semibold text-slate-300">显示调试日志 (show)</label>
+                          <label className="text-xs font-semibold text-slate-300">显示调试日志</label>
                           <input
                             type="checkbox"
                             checked={outboundModal.realityShow}
@@ -3921,10 +3973,10 @@ export const JsonConfigPage: React.FC = () => {
 
                     {outboundModal.security === 'tls' && (
                       <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
-                        <div className="text-xs font-bold text-blue-400">TLS 安全配置 (tlsSettings)</div>
+                        <div className="text-xs font-bold text-blue-400">TLS 安全配置</div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1">伪装域名 SNI (serverName)</label>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">伪装域名 SNI</label>
                             <input
                               type="text"
                               placeholder="如: example.com"
@@ -3955,7 +4007,7 @@ export const JsonConfigPage: React.FC = () => {
                             />
                           </div>
                           <div className="flex items-center justify-between pt-5">
-                            <label className="text-xs font-semibold text-slate-300">允许不安全证书 (allowInsecure)</label>
+                            <label className="text-xs font-semibold text-slate-300">允许不安全证书</label>
                             <input
                               type="checkbox"
                               checked={outboundModal.tlsAllowInsecure}
@@ -3970,7 +4022,7 @@ export const JsonConfigPage: React.FC = () => {
                     {/* --- Transport Network Settings Cards (WS, gRPC, HTTP/2) --- */}
                     {outboundModal.network === 'ws' && (
                       <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
-                        <div className="text-xs font-bold text-blue-400">WebSocket 传输配置 (wsSettings)</div>
+                        <div className="text-xs font-bold text-blue-400">WebSocket 传输配置</div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-xs font-semibold text-slate-300 mb-1">路径 Path</label>
@@ -3983,7 +4035,7 @@ export const JsonConfigPage: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1">Host 标头 (headers.Host)</label>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">Host 标头</label>
                             <input
                               type="text"
                               placeholder="如: example.com"
@@ -3998,7 +4050,7 @@ export const JsonConfigPage: React.FC = () => {
 
                     {outboundModal.network === 'grpc' && (
                       <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
-                        <div className="text-xs font-bold text-blue-400">gRPC 传输配置 (grpcSettings)</div>
+                        <div className="text-xs font-bold text-blue-400">gRPC 传输配置</div>
                         <div className="grid grid-cols-2 gap-3 items-center">
                           <div>
                             <label className="block text-xs font-semibold text-slate-300 mb-1">服务名称 Service Name</label>
@@ -4011,7 +4063,7 @@ export const JsonConfigPage: React.FC = () => {
                             />
                           </div>
                           <div className="flex items-center justify-between pt-5">
-                            <label className="text-xs font-semibold text-slate-300">多路复用 (multiMode)</label>
+                            <label className="text-xs font-semibold text-slate-300">多路复用</label>
                             <input
                               type="checkbox"
                               checked={outboundModal.grpcMultiMode}
@@ -4025,7 +4077,7 @@ export const JsonConfigPage: React.FC = () => {
 
                     {(outboundModal.network === 'h2' || outboundModal.network === 'http') && (
                       <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
-                        <div className="text-xs font-bold text-blue-400">HTTP/2 传输配置 (httpSettings)</div>
+                        <div className="text-xs font-bold text-blue-400">HTTP/2 传输配置</div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-xs font-semibold text-slate-300 mb-1">Host 标头 (逗号分隔)</label>
@@ -4122,7 +4174,7 @@ export const JsonConfigPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Sliders className="w-5 h-5 text-emerald-400" />
                 <h3 className="text-base font-bold text-white">
-                  {ruleModal.index !== null ? `编辑分流规则 (${ruleModal.description || '策略规则'})` : '新建高级分流路由规则'}
+                  {ruleModal.index !== null ? `编辑分流规则 - ${ruleModal.description || '策略规则'}` : '新建高级分流路由规则'}
                 </h3>
               </div>
               <div className="flex items-center gap-1.5">
@@ -4207,7 +4259,7 @@ export const JsonConfigPage: React.FC = () => {
                           ruleModal.activeTab === 'domain' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        域名 (Domain/GeoSite)
+                        域名 / GeoSite
                       </button>
                       <button
                         type="button"
@@ -4225,7 +4277,7 @@ export const JsonConfigPage: React.FC = () => {
                           ruleModal.activeTab === 'port' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30' : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        端口 (Port)
+                        端口
                       </button>
                       <button
                         type="button"
@@ -4234,7 +4286,7 @@ export const JsonConfigPage: React.FC = () => {
                           ruleModal.activeTab === 'protocol' ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30' : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        协议 (Protocol)
+                        协议
                       </button>
                     </div>
                   </div>
@@ -4321,7 +4373,7 @@ export const JsonConfigPage: React.FC = () => {
                   {/* TAB 4: PROTOCOL */}
                   {ruleModal.activeTab === 'protocol' && (
                     <div className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-white/10">
-                      <span className="text-slate-300 font-semibold block">网络协议 (Protocol)</span>
+                      <span className="text-slate-300 font-semibold block">网络协议</span>
                       <input
                         type="text"
                         value={ruleModal.protocol}
