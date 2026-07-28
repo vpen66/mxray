@@ -2235,131 +2235,72 @@ export const JsonConfigPage: React.FC = () => {
           <div className="flex-1 rounded-xl overflow-hidden border border-white/5 bg-slate-950/80 p-2 custom-scrollbar overflow-y-auto">
             {viewMode === 'visual' ? (
               <div className="space-y-4 text-xs">
-                {/* 1. Outbounds Node Mapping Section */}
+                {/* 1. Inbounds Section (Step 1: Traffic Entrance) */}
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-white flex items-center gap-2">
-                      <Server className="w-4 h-4 text-blue-400" />
-                      节点出站映射
-                    </h4>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] text-blue-300 font-mono">
-                        共 {parsedConfig?.outbounds?.length || 0} 项出站 (包含 {mappedNodesInJson.length} 个代理节点)
+                      <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
+                      <span>入站配置</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                        步骤一 · 流量入口
                       </span>
-                      <button
-                        onClick={() => handleOpenOutboundModal()}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-[11px] font-semibold transition-all"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>添加出站</span>
-                      </button>
-                    </div>
+                    </h4>
+                    <button
+                      onClick={() => handleOpenInboundModal()}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-cyan-300 text-[11px] font-semibold transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>添加入站</span>
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {(parsedConfig?.outbounds || []).map((ob, idx) => {
-                      const isNode = ob.protocol !== 'freedom' && ob.protocol !== 'blackhole';
-                      const security = ob.streamSettings?.security;
-                      const network = ob.streamSettings?.network;
-                      const user = ob.settings?.vnext?.[0]?.users?.[0];
-                      const flow = user?.flow;
+                  <div className="space-y-1.5">
+                    {(parsedConfig?.inbounds || []).map((ib, idx) => (
+                      <div key={idx} className="p-2 rounded-lg bg-slate-950/80 border border-white/5 flex items-center justify-between">
+                        <div className="min-w-0 flex-1 pr-2">
+                          <span className="font-bold text-slate-200 truncate block">{ib.tag}</span>
+                          <span className="text-[10px] text-slate-400 font-mono block">
+                            {ib.listen || '127.0.0.1'}:{ib.port || '动态'} ({ib.protocol})
+                          </span>
+                        </div>
 
-                      return (
-                        <div
-                          key={ob.tag || idx}
-                          className={`p-2.5 rounded-lg border flex items-center justify-between ${
-                            isNode
-                              ? 'bg-slate-950/80 border-blue-500/30'
-                              : 'bg-slate-950/40 border-white/5 text-slate-400'
-                          }`}
-                        >
-                          <div className="space-y-1 min-w-0 flex-1">
-                            {/* 1. Outbound Tag Name in First Position */}
-                            <div className="font-bold text-slate-100 text-xs truncate">
-                              {ob.tag}
-                            </div>
-
-                            {/* 2. Badges Underneath Name */}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-bold border shrink-0 ${getProtocolBadgeClass(
-                                  ob.protocol
-                                )}`}
-                              >
-                                {ob.protocol}
-                              </span>
-
-                              {security === 'reality' && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 shrink-0">
-                                  <Cpu className="w-2.5 h-2.5" /> REALITY
-                                </span>
-                              )}
-
-                              {security === 'tls' && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 shrink-0">
-                                  <Shield className="w-2.5 h-2.5" /> TLS
-                                </span>
-                              )}
-
-                              {network && network !== 'tcp' && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/30 shrink-0">
-                                  {network}
-                                </span>
-                              )}
-
-                              {flow && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 shrink-0">
-                                  Vision
-                                </span>
-                              )}
-                            </div>
-
-                            {/* 3. Address Info */}
-                            <div className="text-[10px] text-slate-400 font-mono truncate">
-                              {ob.settings?.vnext?.[0]?.address
-                                ? `${ob.settings.vnext[0].address}:${ob.settings.vnext[0].port}`
-                                : ob.settings?.servers?.[0]?.address
-                                ? `${ob.settings.servers[0].address}:${ob.settings.servers[0].port}`
-                                : '系统内置自由出站'}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0 ml-2">
-                            {!isNode && (
-                              <div className="text-[10px] font-mono text-slate-400">
-                                {ob.protocol === 'freedom' ? '直连' : ob.protocol === 'blackhole' ? '阻断' : '系统出站'}
-                              </div>
-                            )}
-
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => handleOpenOutboundModal(ob, idx)}
-                                title="编辑此出站"
-                                className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteOutbound(idx)}
-                                title="删除此出站"
-                                className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {ib.sniffing?.enabled && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-bold border border-cyan-500/20">
+                              嗅探开启
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenInboundModal(ib, idx)}
+                              title="编辑入站"
+                              className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteInbound(idx)}
+                              title="删除入站"
+                              className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                {/* 2. Routing Rules Section */}
+                {/* 2. Routing Rules Section (Step 2: Flow Matching) */}
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-white flex items-center gap-2">
                       <Layers className="w-4 h-4 text-emerald-400" />
-                      策略分流规则映射
+                      <span>策略分流规则映射</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                        步骤二 · 路由匹配
+                      </span>
                     </h4>
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] text-emerald-300 font-mono">
@@ -2494,51 +2435,116 @@ export const JsonConfigPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 3. Inbounds & DNS Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Inbounds */}
-                  <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-white flex items-center gap-2">
-                        <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
-                        入站配置
-                      </h4>
+                {/* 3. Outbounds Node Mapping Section (Step 3: Target Outbound) */}
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-white flex items-center gap-2">
+                      <Server className="w-4 h-4 text-blue-400" />
+                      <span>节点出站映射</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                        步骤三 · 节点出站
+                      </span>
+                    </h4>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] text-blue-300 font-mono">
+                        共 {parsedConfig?.outbounds?.length || 0} 项出站 (包含 {mappedNodesInJson.length} 个代理节点)
+                      </span>
                       <button
-                        onClick={() => handleOpenInboundModal()}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-cyan-300 text-[11px] font-semibold transition-all"
+                        onClick={() => handleOpenOutboundModal()}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-[11px] font-semibold transition-all"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>添加入站</span>
+                        <span>添加出站</span>
                       </button>
                     </div>
+                  </div>
 
-                    <div className="space-y-1.5">
-                      {(parsedConfig?.inbounds || []).map((ib, idx) => (
-                        <div key={idx} className="p-2 rounded-lg bg-slate-950/80 border border-white/5 flex items-center justify-between">
-                          <div className="min-w-0 flex-1 pr-2">
-                            <span className="font-bold text-slate-200 truncate block">{ib.tag}</span>
-                            <span className="text-[10px] text-slate-400 font-mono block">
-                              {ib.listen || '127.0.0.1'}:{ib.port || '动态'} ({ib.protocol})
-                            </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {(parsedConfig?.outbounds || []).map((ob, idx) => {
+                      const isNode = ob.protocol !== 'freedom' && ob.protocol !== 'blackhole';
+                      const security = ob.streamSettings?.security;
+                      const network = ob.streamSettings?.network;
+                      const user = ob.settings?.vnext?.[0]?.users?.[0];
+                      const flow = user?.flow;
+
+                      return (
+                        <div
+                          key={ob.tag || idx}
+                          className={`p-2.5 rounded-lg border flex items-center justify-between ${
+                            isNode
+                              ? 'bg-slate-950/80 border-blue-500/30'
+                              : 'bg-slate-950/40 border-white/5 text-slate-400'
+                          }`}
+                        >
+                          <div className="space-y-1 min-w-0 flex-1">
+                            {/* 1. Outbound Tag Name in First Position */}
+                            <div className="font-bold text-slate-100 text-xs truncate">
+                              {ob.tag}
+                            </div>
+
+                            {/* 2. Badges Underneath Name */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-bold border shrink-0 ${getProtocolBadgeClass(
+                                  ob.protocol
+                                )}`}
+                              >
+                                {ob.protocol}
+                              </span>
+
+                              {security === 'reality' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 shrink-0">
+                                  <Cpu className="w-2.5 h-2.5" /> REALITY
+                                </span>
+                              )}
+
+                              {security === 'tls' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 shrink-0">
+                                  <Shield className="w-2.5 h-2.5" /> TLS
+                                </span>
+                              )}
+
+                              {network && network !== 'tcp' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/30 shrink-0">
+                                  {network}
+                                </span>
+                              )}
+
+                              {flow && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 shrink-0">
+                                  Vision
+                                </span>
+                              )}
+                            </div>
+
+                            {/* 3. Address Info */}
+                            <div className="text-[10px] text-slate-400 font-mono truncate">
+                              {ob.settings?.vnext?.[0]?.address
+                                ? `${ob.settings.vnext[0].address}:${ob.settings.vnext[0].port}`
+                                : ob.settings?.servers?.[0]?.address
+                                ? `${ob.settings.servers[0].address}:${ob.settings.servers[0].port}`
+                                : '系统内置自由出站'}
+                            </div>
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
-                            {ib.sniffing?.enabled && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-bold border border-cyan-500/20">
-                                嗅探开启
-                              </span>
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            {!isNode && (
+                              <div className="text-[10px] font-mono text-slate-400">
+                                {ob.protocol === 'freedom' ? '直连' : ob.protocol === 'blackhole' ? '阻断' : '系统出站'}
+                              </div>
                             )}
+
                             <div className="flex items-center gap-1">
                               <button
-                                onClick={() => handleOpenInboundModal(ib, idx)}
-                                title="编辑入站"
+                                onClick={() => handleOpenOutboundModal(ob, idx)}
+                                title="编辑此出站"
                                 className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button
-                                onClick={() => handleDeleteInbound(idx)}
-                                title="删除入站"
+                                onClick={() => handleDeleteOutbound(idx)}
+                                title="删除此出站"
                                 className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded transition-colors"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2546,10 +2552,23 @@ export const JsonConfigPage: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
+                </div>
 
+                {/* Visual Divider: Advanced & System Settings */}
+                <div className="pt-3 pb-1 flex items-center gap-3">
+                  <div className="h-[1px] flex-1 bg-gradient-to-r from-white/10 via-white/5 to-transparent" />
+                  <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5 tracking-wider">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
+                    <span>高级解析与系统配置</span>
+                  </span>
+                  <div className="h-[1px] flex-1 bg-gradient-to-l from-white/10 via-white/5 to-transparent" />
+                </div>
+
+                {/* 4 & 5. DNS & Observatory Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* DNS */}
                   <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-2">
                     <div className="flex items-center justify-between">
@@ -2596,99 +2615,92 @@ export const JsonConfigPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-                </div>
 
-                {/* Observatory Object Section */}
-                <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-2">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Activity className="w-4 h-4 text-emerald-400 mr-0.5" />
-                      <h4 className="font-bold text-white text-sm mr-1">连接观测</h4>
+                  {/* Observatory */}
+                  <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-2 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Activity className="w-4 h-4 text-emerald-400 mr-0.5" />
+                          <h4 className="font-bold text-white text-xs sm:text-sm mr-1">连接观测</h4>
+                          {parsedConfig?.burstObservatory ? (
+                            <>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold">
+                                突发打散
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 border border-white/10 font-semibold">
+                                {parsedConfig.burstObservatory.pingConfig?.interval || '1m'}
+                              </span>
+                            </>
+                          ) : parsedConfig?.observatory ? (
+                            <>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
+                                固定周期
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 border border-white/10 font-semibold">
+                                {parsedConfig.observatory.probeInterval || '10s'}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/5">
+                              未开启
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={handleOpenObservatoryModal}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold transition-all cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>{parsedConfig?.observatory || parsedConfig?.burstObservatory ? '配置观测' : '开启观测'}</span>
+                        </button>
+                      </div>
+
                       {parsedConfig?.burstObservatory ? (
-                        <>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold">
-                            突发打散
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-white/10 font-semibold">
-                            {parsedConfig.burstObservatory.pingConfig?.interval || '1m'}
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-white/10 font-semibold">
-                            {parsedConfig.burstObservatory.pingConfig?.sampling ?? 10}次采样
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-white/10 font-semibold">
-                            {parsedConfig.burstObservatory.pingConfig?.timeout || '5s'}超时
-                          </span>
-                        </>
+                        <div className="p-2 bg-slate-950/80 rounded-lg border border-white/5 text-xs space-y-1.5">
+                          <div className="flex items-center gap-2 text-slate-300 min-w-0">
+                            <span className="text-slate-400 text-[11px] shrink-0">探测目标:</span>
+                            <span className="font-mono text-amber-300 truncate flex-1 min-w-0 font-semibold select-all text-[11px]">
+                              {parsedConfig.burstObservatory.pingConfig?.destination || '未设置'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-wrap pt-1 border-t border-white/5">
+                            <span className="text-slate-500 text-[10px]">匹配 Tag:</span>
+                            {(parsedConfig.burstObservatory.subjectSelector || []).map((tag: string, i: number) => (
+                              <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[10px] border border-white/5">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       ) : parsedConfig?.observatory ? (
-                        <>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
-                            固定周期
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300 border border-white/10 font-semibold">
-                            {parsedConfig.observatory.probeInterval || '10s'}
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300 border border-white/10 font-semibold">
-                            {parsedConfig.observatory.enableConcurrency !== false ? '并发探测' : '单线程探测'}
-                          </span>
-                        </>
+                        <div className="p-2 bg-slate-950/80 rounded-lg border border-white/5 text-xs space-y-1.5">
+                          <div className="flex items-center gap-2 text-slate-300 min-w-0">
+                            <span className="text-slate-400 text-[11px] shrink-0">探测目标:</span>
+                            <span className="font-mono text-emerald-300 truncate flex-1 min-w-0 font-semibold select-all text-[11px]">
+                              {parsedConfig.observatory.probeUrl || '未设置'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-wrap pt-1 border-t border-white/5">
+                            <span className="text-slate-500 text-[10px]">匹配 Tag:</span>
+                            {(parsedConfig.observatory.subjectSelector || []).map((tag: string, i: number) => (
+                              <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[10px] border border-white/5">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       ) : (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/5">
-                          未开启
-                        </span>
+                        <div className="p-2 bg-slate-950/40 rounded-lg border border-dashed border-white/10 text-xs text-slate-400">
+                          未启用出站连通性状态观测。点击上方按钮配置。
+                        </div>
                       )}
                     </div>
-
-                    <button
-                      onClick={handleOpenObservatoryModal}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold transition-all cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>{parsedConfig?.observatory || parsedConfig?.burstObservatory ? '配置连通性观测' : '开启连通性观测'}</span>
-                    </button>
                   </div>
-
-                  {parsedConfig?.burstObservatory ? (
-                    <div className="p-2 bg-slate-950/80 rounded-lg border border-white/5 text-xs space-y-2">
-                      <div className="flex items-center gap-2 text-slate-300 min-w-0">
-                        <span className="text-slate-400 text-[11px] shrink-0">探测目标:</span>
-                        <span className="font-mono text-amber-300 truncate flex-1 min-w-0 font-semibold select-all">
-                          {parsedConfig.burstObservatory.pingConfig?.destination || '未设置'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-white/5">
-                        <span className="text-slate-500 text-[10px]">匹配出站 Tag 前缀:</span>
-                        {(parsedConfig.burstObservatory.subjectSelector || []).map((tag: string, i: number) => (
-                          <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[10px] border border-white/5">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : parsedConfig?.observatory ? (
-                    <div className="p-2 bg-slate-950/80 rounded-lg border border-white/5 text-xs space-y-2">
-                      <div className="flex items-center gap-2 text-slate-300 min-w-0">
-                        <span className="text-slate-400 text-[11px] shrink-0">探测目标:</span>
-                        <span className="font-mono text-emerald-300 truncate flex-1 min-w-0 font-semibold select-all">
-                          {parsedConfig.observatory.probeUrl || '未设置'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-white/5">
-                        <span className="text-slate-500 text-[10px]">匹配出站 Tag 前缀:</span>
-                        {(parsedConfig.observatory.subjectSelector || []).map((tag: string, i: number) => (
-                          <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[10px] border border-white/5">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-2.5 bg-slate-950/40 rounded-lg border border-dashed border-white/10 text-xs text-slate-400 flex items-center justify-between">
-                      <span>未启用出站连通性状态观测。点击右侧按钮进行图形化配置。</span>
-                    </div>
-                  )}
                 </div>
 
-                {/* 4. Log Object Full Specification Visual Editor Section */}
+                {/* 6. Log Object Full Specification Visual Editor Section */}
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <h4 className="font-bold text-white flex items-center gap-2 text-sm">
