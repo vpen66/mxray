@@ -28,5 +28,13 @@
   },
   "bundle": {
     "active": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/vpen/mxray/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

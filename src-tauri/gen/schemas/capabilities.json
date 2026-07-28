@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capability for MXray desktop app","local":true,"windows":["main"],"permissions":["core:default","dialog:default","dialog:allow-open","dialog:allow-save","fs:default","shell:default","process:default"]}}
+{"default":{"identifier":"default","description":"Default capability for MXray desktop app","local":true,"windows":["main"],"permissions":["core:default","dialog:default","dialog:allow-open","dialog:allow-save","fs:default","shell:default","process:default","updater:default"]}}

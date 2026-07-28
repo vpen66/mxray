@@ -167,8 +167,28 @@ struct GithubRelease {
     assets: Vec<GithubAsset>,
 }
 
+fn get_platform_asset_name() -> String {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    match (os, arch) {
+        ("windows", "x86_64") => "Xray-windows-64.zip".to_string(),
+        ("windows", "aarch64") => "Xray-windows-arm64.zip".to_string(),
+        ("windows", _) => "Xray-windows-64.zip".to_string(),
+        ("linux", "x86_64") => "Xray-linux-64.zip".to_string(),
+        ("linux", "aarch64") => "Xray-linux-arm64-v8a.zip".to_string(),
+        ("linux", _) => "Xray-linux-64.zip".to_string(),
+        ("macos", "aarch64") => "Xray-macos-arm64-v8a.zip".to_string(),
+        ("macos", _) => "Xray-macos-64.zip".to_string(),
+        _ => format!("Xray-{}-64.zip", os),
+    }
+}
+
 #[tauri::command]
 pub async fn fetch_remote_releases() -> Result<Vec<RemoteRelease>, String> {
+    let asset_name_hint = get_platform_asset_name();
+    let os_keyword = std::env::consts::OS;
+
     let client = reqwest::Client::builder()
         .user_agent("MXray-Desktop")
         .build();
@@ -179,9 +199,10 @@ pub async fn fetch_remote_releases() -> Result<Vec<RemoteRelease>, String> {
                 let mut list = Vec::new();
                 for gh in gh_releases {
                     let download_url = gh.assets.iter()
-                        .find(|a| a.name.contains("macos") || a.name.contains("windows") || a.name.contains("linux"))
+                        .find(|a| a.name.to_lowercase() == asset_name_hint.to_lowercase())
+                        .or_else(|| gh.assets.iter().find(|a| a.name.to_lowercase().contains(os_keyword)))
                         .map(|a| a.browser_download_url.clone())
-                        .unwrap_or_else(|| format!("https://github.com/XTLS/Xray-core/releases/download/{}/Xray-macos-64.zip", gh.tag_name));
+                        .unwrap_or_else(|| format!("https://github.com/XTLS/Xray-core/releases/download/{}/{}", gh.tag_name, asset_name_hint));
 
                     list.push(RemoteRelease {
                         version: gh.tag_name.clone(),
@@ -205,21 +226,21 @@ pub async fn fetch_remote_releases() -> Result<Vec<RemoteRelease>, String> {
             tag_name: "v26.3.27".to_string(),
             name: "Xray-core v26.3.27".to_string(),
             published_at: "2026-03-27".to_string(),
-            download_url: "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-64.zip".to_string(),
+            download_url: format!("https://github.com/XTLS/Xray-core/releases/download/v26.3.27/{}", asset_name_hint),
         },
         RemoteRelease {
             version: "v26.3.0".to_string(),
             tag_name: "v26.3.0".to_string(),
             name: "Xray-core v26.3.0".to_string(),
             published_at: "2026-03-01".to_string(),
-            download_url: "https://github.com/XTLS/Xray-core/releases/download/v26.3.0/Xray-macos-64.zip".to_string(),
+            download_url: format!("https://github.com/XTLS/Xray-core/releases/download/v26.3.0/{}", asset_name_hint),
         },
         RemoteRelease {
             version: "v25.1.0".to_string(),
             tag_name: "v25.1.0".to_string(),
             name: "Xray-core v25.1.0".to_string(),
             published_at: "2025-01-15".to_string(),
-            download_url: "https://github.com/XTLS/Xray-core/releases/download/v25.1.0/Xray-macos-64.zip".to_string(),
+            download_url: format!("https://github.com/XTLS/Xray-core/releases/download/v25.1.0/{}", asset_name_hint),
         },
     ])
 }
@@ -247,12 +268,20 @@ pub async fn install_kernel(
     let bin_path = cores_dir.join(bin_name);
 
     if !bin_path.exists() {
-        let script = format!("#!/bin/sh\necho \"Xray {} (MXray Managed Core)\"\n", version);
-        let _ = fs::write(&bin_path, script);
-        #[cfg(unix)]
+        #[cfg(not(target_os = "windows"))]
         {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755));
+            let script = format!("#!/bin/sh\necho \"Xray {} (MXray Managed Core)\"\n", version);
+            let _ = fs::write(&bin_path, script);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755));
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let script = format!("@echo off\r\necho Xray {} (MXray Managed Core)\r\n", version);
+            let _ = fs::write(&bin_path, script);
         }
     }
 
@@ -403,12 +432,17 @@ pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle
         }
     }
 
+    #[cfg(target_os = "windows")]
+    let bin_name = "xray.exe";
+    #[cfg(not(target_os = "windows"))]
+    let bin_name = "xray";
+
     if let Ok(app_dir) = app_handle.path().app_data_dir() {
         let cores_dir = app_dir.join("cores");
         if cores_dir.exists() {
             if let Ok(entries) = fs::read_dir(&cores_dir) {
                 for entry in entries.flatten() {
-                    let sub_bin = entry.path().join("xray");
+                    let sub_bin = entry.path().join(bin_name);
                     if sub_bin.exists() {
                         return Ok(sub_bin.to_str().unwrap_or_default().to_string());
                     }
@@ -417,20 +451,41 @@ pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle
         }
     }
 
+    #[cfg(target_os = "windows")]
+    let common_paths = [
+        r"C:\Program Files\Xray\xray.exe",
+        r"C:\xray\xray.exe",
+    ];
+    #[cfg(target_os = "macos")]
     let common_paths = [
         "/opt/homebrew/bin/xray",
         "/usr/local/bin/xray",
         "/usr/bin/xray",
     ];
+    #[cfg(target_os = "linux")]
+    let common_paths = [
+        "/usr/bin/xray",
+        "/usr/local/bin/xray",
+        "/snap/bin/xray",
+    ];
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    let common_paths = ["/usr/bin/xray"];
+
     for p in common_paths {
         if Path::new(p).exists() {
             return Ok(p.to_string());
         }
     }
 
-    if let Ok(out) = Command::new("which").arg("xray").output() {
+    #[cfg(target_os = "windows")]
+    let which_cmd = "where";
+    #[cfg(not(target_os = "windows"))]
+    let which_cmd = "which";
+
+    if let Ok(out) = Command::new(which_cmd).arg(bin_name).output() {
         if out.status.success() {
-            let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let path_str = stdout.lines().next().unwrap_or("").trim().to_string();
             if !path_str.is_empty() && Path::new(&path_str).exists() {
                 return Ok(path_str);
             }
@@ -593,7 +648,9 @@ pub fn get_cli_command(
     binary_path: Option<String>,
 ) -> Result<String, String> {
     let bin_path = find_xray_binary(binary_path.as_deref(), &app_handle)
-        .unwrap_or_else(|_| "xray".to_string());
+        .unwrap_or_else(|_| {
+            if cfg!(target_os = "windows") { "xray.exe".to_string() } else { "xray".to_string() }
+        });
 
     let app_dir = app_handle
         .path()
@@ -616,7 +673,11 @@ pub fn get_cli_command(
         cfg_str
     };
 
-    Ok(format!("nohup {} run -config {} > /dev/null 2>&1 &", bin_formatted, cfg_formatted))
+    if cfg!(target_os = "windows") {
+        Ok(format!("cmd /c start /b \"\" {} run -config {}", bin_formatted, cfg_formatted))
+    } else {
+        Ok(format!("nohup {} run -config {} > /dev/null 2>&1 &", bin_formatted, cfg_formatted))
+    }
 }
 
 

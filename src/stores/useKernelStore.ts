@@ -72,27 +72,35 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
       set({ remoteReleases: releases, isLoadingReleases: false });
     } catch {
       // Fallback mock releases for web/demo mode
+      const ua = (navigator.userAgent || '').toLowerCase();
+      let zipName = 'Xray-macos-64.zip';
+      if (ua.includes('win')) {
+        zipName = 'Xray-windows-64.zip';
+      } else if (ua.includes('linux')) {
+        zipName = 'Xray-linux-64.zip';
+      }
+
       const mockReleases: RemoteRelease[] = [
         {
           version: 'v26.3.27',
           tag_name: 'v26.3.27',
           name: 'Xray-core v26.3.27',
           published_at: '2026-03-27',
-          download_url: 'https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-64.zip',
+          download_url: `https://github.com/XTLS/Xray-core/releases/download/v26.3.27/${zipName}`,
         },
         {
           version: 'v26.3.0',
           tag_name: 'v26.3.0',
           name: 'Xray-core v26.3.0',
           published_at: '2026-03-01',
-          download_url: 'https://github.com/XTLS/Xray-core/releases/download/v26.3.0/Xray-macos-64.zip',
+          download_url: `https://github.com/XTLS/Xray-core/releases/download/v26.3.0/${zipName}`,
         },
         {
           version: 'v25.1.0',
           tag_name: 'v25.1.0',
           name: 'Xray-core v25.1.0',
           published_at: '2025-01-15',
-          download_url: 'https://github.com/XTLS/Xray-core/releases/download/v25.1.0/Xray-macos-64.zip',
+          download_url: `https://github.com/XTLS/Xray-core/releases/download/v25.1.0/${zipName}`,
         },
       ];
       set({ remoteReleases: mockReleases, isLoadingReleases: false });
