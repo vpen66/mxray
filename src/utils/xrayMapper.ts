@@ -116,6 +116,7 @@ export function nodeToXrayOutbound(node: ProxyNode): XrayOutbound {
                 id: node.uuid || '',
                 encryption: 'none',
                 flow: node.flow || undefined,
+                ...(node.reverseTag ? { reverse: { tag: node.reverseTag } } : {}),
               },
             ],
           },
@@ -222,6 +223,7 @@ export function xrayOutboundToNode(outbound: XrayOutbound, profileId: string = '
   let password: string | undefined;
   let cipher: string | undefined;
   let flow: string | undefined;
+  let reverseTag: string | undefined;
 
   if (protocol === 'vless' || protocol === 'vmess') {
     const vnext = settings.vnext?.[0];
@@ -233,6 +235,9 @@ export function xrayOutboundToNode(outbound: XrayOutbound, profileId: string = '
         uuid = user.id;
         flow = user.flow;
         cipher = user.security;
+        if (user.reverse && typeof user.reverse.tag === 'string') {
+          reverseTag = user.reverse.tag;
+        }
       }
     }
   } else if (protocol === 'trojan' || protocol === 'shadowsocks' || protocol === 'hysteria2') {
@@ -287,6 +292,7 @@ export function xrayOutboundToNode(outbound: XrayOutbound, profileId: string = '
     password,
     cipher,
     flow,
+    reverseTag,
     security,
     sni,
     fingerprint,

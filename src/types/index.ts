@@ -29,6 +29,7 @@ export interface ProxyNode {
   password?: string;
   cipher?: string;
   flow?: string;
+  reverseTag?: string;
   security?: 'none' | 'tls' | 'reality';
   sni?: string;
   fingerprint?: string;

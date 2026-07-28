@@ -117,6 +117,25 @@ const OUTBOUND_SECURITY_OPTIONS = [
   { value: 'reality', label: 'reality' },
 ];
 
+const OUTBOUND_NETWORK_OPTIONS = [
+  { value: 'tcp', label: 'tcp (RAW TCP)' },
+  { value: 'ws', label: 'ws (WebSocket)' },
+  { value: 'grpc', label: 'grpc (gRPC)' },
+  { value: 'h2', label: 'h2 (HTTP/2)' },
+  { value: 'quic', label: 'quic (QUIC)' },
+];
+
+const TLS_FINGERPRINT_OPTIONS = [
+  { value: 'chrome', label: 'chrome (推荐)' },
+  { value: 'firefox', label: 'firefox' },
+  { value: 'safari', label: 'safari' },
+  { value: 'edge', label: 'edge' },
+  { value: 'qq', label: 'qq' },
+  { value: 'ios', label: 'ios' },
+  { value: 'android', label: 'android' },
+  { value: 'randomised', label: 'randomised' },
+];
+
 const FREEDOM_DOMAIN_STRATEGY_OPTIONS = [
   { value: 'AsIs', label: 'AsIs (不查询域名，直接发送目标)' },
   { value: 'UseIP', label: 'UseIP (优先解析并使用真实 IP 连接)' },
@@ -300,6 +319,8 @@ export const JsonConfigPage: React.FC = () => {
     // vless / vmess / trojan / hysteria2 / shadowsocks settings
     uuidPassword: string;
     flow: string;
+    enableReverse: boolean;
+    reverseTag: string;
     ssMethod: string;
     // wireguard inbound
     wgSecretKey: string;
@@ -334,6 +355,8 @@ export const JsonConfigPage: React.FC = () => {
     udp: true,
     uuidPassword: '',
     flow: 'xtls-rprx-vision',
+    enableReverse: false,
+    reverseTag: '',
     ssMethod: '2022-blake3-aes-128-gcm',
     wgSecretKey: '',
     wgPublicKey: '',
@@ -357,9 +380,33 @@ export const JsonConfigPage: React.FC = () => {
     protocol: string;
     server: string;
     port: number | string;
+    network: string;
     security: string;
     uuidPassword: string;
     flow: string;
+    enableReverse: boolean;
+    reverseTag: string;
+    // reality settings
+    realityServerName: string;
+    realityPublicKey: string;
+    realityShortId: string;
+    realityFingerprint: string;
+    realitySpiderX: string;
+    realityShow: boolean;
+    // tls settings
+    tlsServerName: string;
+    tlsAllowInsecure: boolean;
+    tlsFingerprint: string;
+    tlsAlpn: string;
+    // ws settings
+    wsPath: string;
+    wsHost: string;
+    // grpc settings
+    grpcServiceName: string;
+    grpcMultiMode: boolean;
+    // http/h2 settings
+    httpHost: string;
+    httpPath: string;
     // freedom
     domainStrategy: string;
     enableFragment: boolean;
@@ -402,9 +449,28 @@ export const JsonConfigPage: React.FC = () => {
     protocol: 'vless',
     server: '',
     port: 443,
+    network: 'tcp',
     security: 'reality',
     uuidPassword: '',
     flow: 'xtls-rprx-vision',
+    enableReverse: false,
+    reverseTag: '',
+    realityServerName: '',
+    realityPublicKey: '',
+    realityShortId: '',
+    realityFingerprint: 'chrome',
+    realitySpiderX: '/',
+    realityShow: false,
+    tlsServerName: '',
+    tlsAllowInsecure: false,
+    tlsFingerprint: 'chrome',
+    tlsAlpn: '',
+    wsPath: '/',
+    wsHost: '',
+    grpcServiceName: '',
+    grpcMultiMode: false,
+    httpHost: '',
+    httpPath: '/',
     domainStrategy: 'AsIs',
     enableFragment: false,
     fragPackets: 'tlshello',
@@ -852,6 +918,7 @@ export const JsonConfigPage: React.FC = () => {
           {
             id: ib.uuidPassword,
             ...(ib.flow ? { flow: ib.flow } : {}),
+            ...(ib.enableReverse && ib.reverseTag ? { reverse: { tag: ib.reverseTag } } : {}),
           },
         ],
         decryption: 'none',
@@ -941,6 +1008,8 @@ export const JsonConfigPage: React.FC = () => {
       udp: ib.settings?.udp ?? true,
       uuidPassword,
       flow: ib.settings?.clients?.[0]?.flow || 'xtls-rprx-vision',
+      enableReverse: Boolean(ib.settings?.clients?.[0]?.reverse?.tag),
+      reverseTag: ib.settings?.clients?.[0]?.reverse?.tag || '',
       ssMethod: ib.settings?.method || '2022-blake3-aes-128-gcm',
       wgSecretKey: ib.settings?.secretKey || '',
       wgPublicKey: ib.settings?.peers?.[0]?.publicKey || '',
@@ -983,6 +1052,50 @@ export const JsonConfigPage: React.FC = () => {
         }));
       }
     }
+  };
+
+  const buildStreamSettingsFromVisual = (ob: typeof outboundModal) => {
+    const streamSettings: any = {
+      network: ob.network || 'tcp',
+      security: ob.security || 'none',
+    };
+
+    if (ob.security === 'tls') {
+      streamSettings.tlsSettings = {
+        ...(ob.tlsServerName ? { serverName: ob.tlsServerName } : {}),
+        ...(ob.tlsAllowInsecure ? { allowInsecure: true } : {}),
+        ...(ob.tlsFingerprint ? { fingerprint: ob.tlsFingerprint } : {}),
+        ...(ob.tlsAlpn ? { alpn: ob.tlsAlpn.split(',').map((s: string) => s.trim()).filter(Boolean) } : {}),
+      };
+    } else if (ob.security === 'reality') {
+      streamSettings.realitySettings = {
+        show: Boolean(ob.realityShow),
+        fingerprint: ob.realityFingerprint || 'chrome',
+        serverName: ob.realityServerName || '',
+        publicKey: ob.realityPublicKey || '',
+        shortId: ob.realityShortId || '',
+        spiderX: ob.realitySpiderX || '/',
+      };
+    }
+
+    if (ob.network === 'ws') {
+      streamSettings.wsSettings = {
+        path: ob.wsPath || '/',
+        ...(ob.wsHost ? { headers: { Host: ob.wsHost } } : {}),
+      };
+    } else if (ob.network === 'grpc') {
+      streamSettings.grpcSettings = {
+        serviceName: ob.grpcServiceName || '',
+        multiMode: Boolean(ob.grpcMultiMode),
+      };
+    } else if (ob.network === 'h2' || ob.network === 'http') {
+      streamSettings.httpSettings = {
+        host: ob.httpHost ? ob.httpHost.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+        path: ob.httpPath || '/',
+      };
+    }
+
+    return streamSettings;
   };
 
   const buildOutboundObjectFromVisual = (ob: typeof outboundModal) => {
@@ -1053,10 +1166,7 @@ export const JsonConfigPage: React.FC = () => {
           },
         ],
       };
-      newOb.streamSettings = {
-        network: 'tcp',
-        security: ob.security,
-      };
+      newOb.streamSettings = buildStreamSettingsFromVisual(ob);
     } else if (ob.protocol === 'shadowsocks') {
       newOb.settings = {
         servers: [
@@ -1069,10 +1179,7 @@ export const JsonConfigPage: React.FC = () => {
           },
         ],
       };
-      newOb.streamSettings = {
-        network: 'tcp',
-        security: ob.security,
-      };
+      newOb.streamSettings = buildStreamSettingsFromVisual(ob);
     } else if (ob.protocol === 'vless' || ob.protocol === 'vmess') {
       newOb.settings = {
         vnext: [
@@ -1084,15 +1191,13 @@ export const JsonConfigPage: React.FC = () => {
                 id: ob.uuidPassword,
                 encryption: 'none',
                 ...(ob.protocol === 'vless' && ob.flow ? { flow: ob.flow } : {}),
+                ...(ob.protocol === 'vless' && ob.enableReverse && ob.reverseTag ? { reverse: { tag: ob.reverseTag } } : {}),
               },
             ],
           },
         ],
       };
-      newOb.streamSettings = {
-        network: 'tcp',
-        security: ob.security,
-      };
+      newOb.streamSettings = buildStreamSettingsFromVisual(ob);
     } else {
       // trojan, hysteria2, etc.
       newOb.settings = {
@@ -1104,10 +1209,7 @@ export const JsonConfigPage: React.FC = () => {
           },
         ],
       };
-      newOb.streamSettings = {
-        network: 'tcp',
-        security: ob.security,
-      };
+      newOb.streamSettings = buildStreamSettingsFromVisual(ob);
     }
     return newOb;
   };
@@ -1137,14 +1239,43 @@ export const JsonConfigPage: React.FC = () => {
       }
     }
 
+    const vlessUser = ob.settings?.vnext?.[0]?.users?.[0];
+    const streamSettings = ob.streamSettings || {};
+    const security = streamSettings.security || 'none';
+    const network = streamSettings.network || 'tcp';
+    const realitySettings = streamSettings.realitySettings || {};
+    const tlsSettings = streamSettings.tlsSettings || {};
+    const wsSettings = streamSettings.wsSettings || {};
+    const grpcSettings = streamSettings.grpcSettings || {};
+    const httpSettings = streamSettings.httpSettings || {};
+
     return {
       tag: ob.tag || '',
       protocol: ob.protocol || 'vless',
       server,
       port,
-      security: ob.streamSettings?.security || 'none',
+      security,
+      network,
       uuidPassword,
       flow,
+      enableReverse: Boolean(vlessUser?.reverse?.tag),
+      reverseTag: vlessUser?.reverse?.tag || '',
+      realityServerName: realitySettings.serverName || '',
+      realityPublicKey: realitySettings.publicKey || '',
+      realityShortId: realitySettings.shortId || '',
+      realityFingerprint: realitySettings.fingerprint || 'chrome',
+      realitySpiderX: realitySettings.spiderX || '/',
+      realityShow: Boolean(realitySettings.show),
+      tlsServerName: tlsSettings.serverName || '',
+      tlsAllowInsecure: Boolean(tlsSettings.allowInsecure),
+      tlsFingerprint: tlsSettings.fingerprint || 'chrome',
+      tlsAlpn: Array.isArray(tlsSettings.alpn) ? tlsSettings.alpn.join(', ') : (tlsSettings.alpn || ''),
+      wsPath: wsSettings.path || '/',
+      wsHost: wsSettings.headers?.Host || wsSettings.headers?.host || '',
+      grpcServiceName: grpcSettings.serviceName || '',
+      grpcMultiMode: Boolean(grpcSettings.multiMode),
+      httpHost: Array.isArray(httpSettings.host) ? httpSettings.host.join(', ') : (httpSettings.host || ''),
+      httpPath: httpSettings.path || '/',
       domainStrategy: ob.settings?.domainStrategy || 'AsIs',
       enableFragment: Boolean(ob.settings?.fragment),
       fragPackets: ob.settings?.fragment?.packets || 'tlshello',
@@ -1374,6 +1505,8 @@ export const JsonConfigPage: React.FC = () => {
         udp: true,
         uuidPassword: '',
         flow: 'xtls-rprx-vision',
+        enableReverse: false,
+        reverseTag: '',
         ssMethod: '2022-blake3-aes-128-gcm',
         wgSecretKey: '',
         wgPublicKey: '',
@@ -1451,9 +1584,28 @@ export const JsonConfigPage: React.FC = () => {
         protocol: 'vless',
         server: 'example.com',
         port: 443,
+        network: 'tcp',
         security: 'reality',
         uuidPassword: '',
         flow: 'xtls-rprx-vision',
+        enableReverse: false,
+        reverseTag: '',
+        realityServerName: '',
+        realityPublicKey: '',
+        realityShortId: '',
+        realityFingerprint: 'chrome',
+        realitySpiderX: '/',
+        realityShow: false,
+        tlsServerName: '',
+        tlsAllowInsecure: false,
+        tlsFingerprint: 'chrome',
+        tlsAlpn: '',
+        wsPath: '/',
+        wsHost: '',
+        grpcServiceName: '',
+        grpcMultiMode: false,
+        httpHost: '',
+        httpPath: '/',
         domainStrategy: 'AsIs',
         enableFragment: false,
         fragPackets: 'tlshello',
@@ -3075,15 +3227,41 @@ export const JsonConfigPage: React.FC = () => {
                       </div>
 
                       {effectiveProtocol === 'vless' && (
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1">流控算法 Flow (可选)</label>
-                          <input
-                            type="text"
-                            placeholder="例如: xtls-rprx-vision"
-                            value={inboundModal.flow || ''}
-                            onChange={(e) => setInboundModal((prev) => ({ ...prev, flow: e.target.value }))}
-                            className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
-                          />
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">流控算法 Flow (可选)</label>
+                            <input
+                              type="text"
+                              placeholder="例如: xtls-rprx-vision"
+                              value={inboundModal.flow || ''}
+                              onChange={(e) => setInboundModal((prev) => ({ ...prev, flow: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+
+                          <div className="pt-2 border-t border-white/5 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-semibold text-slate-300">VLESS 反向代理 (Reverse Proxy)</label>
+                              <input
+                                type="checkbox"
+                                checked={inboundModal.enableReverse || false}
+                                onChange={(e) => setInboundModal((prev) => ({ ...prev, enableReverse: e.target.checked }))}
+                                className="w-4 h-4 rounded border-white/10 bg-slate-950 text-cyan-500 focus:ring-0 cursor-pointer"
+                              />
+                            </div>
+                            {inboundModal.enableReverse && (
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1 font-semibold">反向代理关联出站 Tag (Reverse Tag)</label>
+                                <input
+                                  type="text"
+                                  placeholder="例如: r-outbound (Portal 端映射出的出站 Tag)"
+                                  value={inboundModal.reverseTag || ''}
+                                  onChange={(e) => setInboundModal((prev) => ({ ...prev, reverseTag: e.target.value }))}
+                                  className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3277,7 +3455,7 @@ export const JsonConfigPage: React.FC = () => {
       {outboundModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
           <div className={`w-full glass-card bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl transition-all duration-300 flex flex-col ${
-            outboundModal.isMaximized ? 'max-w-5xl h-[85vh]' : 'max-w-lg max-h-[90vh]'
+            outboundModal.isMaximized ? 'max-w-5xl h-[85vh]' : 'max-w-xl max-h-[90vh]'
           }`}>
             <div className="flex items-center justify-between pb-3 border-b border-white/10 gap-2 shrink-0">
               <h3 className="text-base font-bold text-white flex items-center gap-2 truncate min-w-0">
@@ -3344,13 +3522,24 @@ export const JsonConfigPage: React.FC = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">出站协议 Protocol</label>
                     <CustomSelect
                       value={outboundModal.protocol}
                       onChange={(val) => setOutboundModal((prev) => ({ ...prev, protocol: val }))}
                       options={OUTBOUND_PROTOCOL_OPTIONS}
+                      accentColor="blue"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">传输网络 Network</label>
+                    <CustomSelect
+                      value={outboundModal.network}
+                      onChange={(val) => setOutboundModal((prev) => ({ ...prev, network: val }))}
+                      options={OUTBOUND_NETWORK_OPTIONS}
+                      disabled={['freedom', 'blackhole', 'dns', 'loopback', 'wireguard'].includes(outboundModal.protocol)}
                       accentColor="blue"
                     />
                   </div>
@@ -3624,15 +3813,241 @@ export const JsonConfigPage: React.FC = () => {
                     </div>
 
                     {outboundModal.protocol === 'vless' && (
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1">流控算法 Flow (Vision)</label>
-                        <input
-                          type="text"
-                          placeholder="如: xtls-rprx-vision"
-                          value={outboundModal.flow}
-                          onChange={(e) => setOutboundModal((prev) => ({ ...prev, flow: e.target.value }))}
-                          className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                        />
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">流控算法 Flow (Vision)</label>
+                          <input
+                            type="text"
+                            placeholder="如: xtls-rprx-vision"
+                            value={outboundModal.flow}
+                            onChange={(e) => setOutboundModal((prev) => ({ ...prev, flow: e.target.value }))}
+                            className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div className="pt-2 border-t border-white/5 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-slate-300">VLESS 反向代理 (Reverse Proxy)</label>
+                            <input
+                              type="checkbox"
+                              checked={outboundModal.enableReverse || false}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, enableReverse: e.target.checked }))}
+                              className="w-4 h-4 rounded border-white/10 bg-slate-950 text-blue-500 focus:ring-0 cursor-pointer"
+                            />
+                          </div>
+                          {outboundModal.enableReverse && (
+                            <div>
+                              <input
+                                type="text"
+                                placeholder="例如: r-inbound (Bridge 端接收流量的入站 Tag)"
+                                value={outboundModal.reverseTag || ''}
+                                onChange={(e) => setOutboundModal((prev) => ({ ...prev, reverseTag: e.target.value }))}
+                                className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* --- Security Settings Cards (REALITY & TLS) --- */}
+                    {outboundModal.security === 'reality' && (
+                      <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
+                        <div className="text-xs font-bold text-blue-400">REALITY 安全配置 (realitySettings)</div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">伪装域名 SNI (serverName)</label>
+                            <input
+                              type="text"
+                              placeholder="如: www.amd.com"
+                              value={outboundModal.realityServerName}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, realityServerName: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">公钥 Public Key (publicKey)</label>
+                            <input
+                              type="text"
+                              placeholder="REALITY 椭圆曲线公钥 Base64"
+                              value={outboundModal.realityPublicKey}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, realityPublicKey: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">Short ID (shortId)</label>
+                            <input
+                              type="text"
+                              placeholder="如: de"
+                              value={outboundModal.realityShortId}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, realityShortId: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">TLS 指纹 Fingerprint</label>
+                            <CustomSelect
+                              value={outboundModal.realityFingerprint}
+                              onChange={(val) => setOutboundModal((prev) => ({ ...prev, realityFingerprint: val }))}
+                              options={TLS_FINGERPRINT_OPTIONS}
+                              accentColor="blue"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">爬虫路径 SpiderX</label>
+                            <input
+                              type="text"
+                              placeholder="/"
+                              value={outboundModal.realitySpiderX}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, realitySpiderX: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <label className="text-xs font-semibold text-slate-300">显示调试日志 (show)</label>
+                          <input
+                            type="checkbox"
+                            checked={outboundModal.realityShow}
+                            onChange={(e) => setOutboundModal((prev) => ({ ...prev, realityShow: e.target.checked }))}
+                            className="w-4 h-4 rounded border-white/10 bg-slate-950 text-blue-500 focus:ring-0 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {outboundModal.security === 'tls' && (
+                      <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
+                        <div className="text-xs font-bold text-blue-400">TLS 安全配置 (tlsSettings)</div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">伪装域名 SNI (serverName)</label>
+                            <input
+                              type="text"
+                              placeholder="如: example.com"
+                              value={outboundModal.tlsServerName}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, tlsServerName: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">TLS 指纹 Fingerprint</label>
+                            <CustomSelect
+                              value={outboundModal.tlsFingerprint}
+                              onChange={(val) => setOutboundModal((prev) => ({ ...prev, tlsFingerprint: val }))}
+                              options={TLS_FINGERPRINT_OPTIONS}
+                              accentColor="blue"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">ALPN (逗号分隔)</label>
+                            <input
+                              type="text"
+                              placeholder="如: h2,http/1.1"
+                              value={outboundModal.tlsAlpn}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, tlsAlpn: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between pt-5">
+                            <label className="text-xs font-semibold text-slate-300">允许不安全证书 (allowInsecure)</label>
+                            <input
+                              type="checkbox"
+                              checked={outboundModal.tlsAllowInsecure}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, tlsAllowInsecure: e.target.checked }))}
+                              className="w-4 h-4 rounded border-white/10 bg-slate-950 text-blue-500 focus:ring-0 cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* --- Transport Network Settings Cards (WS, gRPC, HTTP/2) --- */}
+                    {outboundModal.network === 'ws' && (
+                      <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
+                        <div className="text-xs font-bold text-blue-400">WebSocket 传输配置 (wsSettings)</div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">路径 Path</label>
+                            <input
+                              type="text"
+                              placeholder="如: /ws"
+                              value={outboundModal.wsPath}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, wsPath: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">Host 标头 (headers.Host)</label>
+                            <input
+                              type="text"
+                              placeholder="如: example.com"
+                              value={outboundModal.wsHost}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, wsHost: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {outboundModal.network === 'grpc' && (
+                      <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
+                        <div className="text-xs font-bold text-blue-400">gRPC 传输配置 (grpcSettings)</div>
+                        <div className="grid grid-cols-2 gap-3 items-center">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">服务名称 Service Name</label>
+                            <input
+                              type="text"
+                              placeholder="如: TunGunService"
+                              value={outboundModal.grpcServiceName}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, grpcServiceName: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between pt-5">
+                            <label className="text-xs font-semibold text-slate-300">多路复用 (multiMode)</label>
+                            <input
+                              type="checkbox"
+                              checked={outboundModal.grpcMultiMode}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, grpcMultiMode: e.target.checked }))}
+                              className="w-4 h-4 rounded border-white/10 bg-slate-950 text-blue-500 focus:ring-0 cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {(outboundModal.network === 'h2' || outboundModal.network === 'http') && (
+                      <div className="p-3 bg-slate-950/60 border border-white/10 rounded-xl space-y-3">
+                        <div className="text-xs font-bold text-blue-400">HTTP/2 传输配置 (httpSettings)</div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">Host 标头 (逗号分隔)</label>
+                            <input
+                              type="text"
+                              placeholder="如: example.com"
+                              value={outboundModal.httpHost}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, httpHost: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1">路径 Path</label>
+                            <input
+                              type="text"
+                              placeholder="如: /"
+                              value={outboundModal.httpPath}
+                              onChange={(e) => setOutboundModal((prev) => ({ ...prev, httpPath: e.target.value }))}
+                              className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
                   </>
