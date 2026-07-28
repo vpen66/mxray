@@ -57,6 +57,9 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
+      - name: Build frontend static assets
+        run: pnpm build
+
       - name: Build Tauri app and publish GitHub Release
         uses: tauri-apps/tauri-action@v0
         env:
