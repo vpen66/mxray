@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowRightLeft,
   Plus,
@@ -47,10 +47,10 @@ const DEFAULT_RULES: RoutingRule[] = [
   {
     id: 'rule-global',
     type: 'field',
-    outboundTag: 'proxy',
+    outboundTag: 'direct',
     domain: ['geosite:google', 'geosite:github', 'geosite:gfw', 'geosite:openai', 'geosite:telegram'],
     enabled: true,
-    description: '常用国外与代理域名 (代理)',
+    description: '常用国外与代理域名',
   },
 ];
 
@@ -59,16 +59,54 @@ export const RulesPage: React.FC = () => {
   const { profiles: configProfiles, selectedProfileId, activeProfileId, updateProfile } = useConfigStore();
   const targetConfigProfile = configProfiles.find((p) => p.id === (selectedProfileId || activeProfileId)) || configProfiles[0];
 
-  const [rules, setRules] = useState<RoutingRule[]>(DEFAULT_RULES);
+  const allNodes = profiles.flatMap((p) => p.nodes);
+  const activeNodeName = allNodes[0] ? (allNodes[0].name ? `${allNodes[0].name} [${allNodes[0].id.slice(-4)}]` : allNodes[0].name) : 'direct';
+
+  const [rules, setRules] = useState<RoutingRule[]>(() =>
+    DEFAULT_RULES.map((r) => (r.outboundTag === 'proxy' ? { ...r, outboundTag: activeNodeName } : r))
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [activeOpenRuleId, setActiveOpenRuleId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!targetConfigProfile?.content) return;
+    try {
+      const parsed = JSON.parse(targetConfigProfile.content);
+      if (parsed?.routing?.rules && Array.isArray(parsed.routing.rules)) {
+        const loaded: RoutingRule[] = parsed.routing.rules.map((r: any, idx: number) => {
+          let tag = r.outboundTag || 'direct';
+          if (tag === 'proxy') {
+            tag = activeNodeName;
+          }
+          return {
+            id: r.id || `rule-${idx}`,
+            type: r.type || 'field',
+            outboundTag: tag,
+            domain: r.domain,
+            ip: r.ip,
+            port: r.port,
+            protocol: r.protocol,
+            enabled: r.enabled !== false,
+            description:
+              r.description ||
+              (r.domain?.includes('geosite:cn') || r.ip?.includes('geoip:cn')
+                ? '中国大陆域名/IP (直连)'
+                : r.domain?.includes('geosite:category-ads-all')
+                ? '全网广告与追踪域名拦截 (拒绝)'
+                : '常用国外与代理域名'),
+          };
+        });
+        setRules(loaded);
+      }
+    } catch {
+      // fallback
+    }
+  }, [targetConfigProfile?.content, activeNodeName]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<RoutingRule | null>(null);
   const [deletingRule, setDeletingRule] = useState<RoutingRule | null>(null);
-
-  const allNodes = profiles.flatMap((p) => p.nodes);
 
   const updateRulesAndSync = (newRules: RoutingRule[]) => {
     setRules(newRules);
@@ -79,15 +117,16 @@ export const RulesPage: React.FC = () => {
       if (!config.routing) {
         config.routing = { domainStrategy: 'IPIfNonMatch', rules: [] };
       }
-      const xrayRules = newRules
-        .filter((r) => r.enabled !== false)
-        .map((r) => ({
-          type: r.type || 'field',
-          outboundTag: r.outboundTag,
-          domain: r.domain && r.domain.length > 0 ? r.domain : undefined,
-          port: r.port || undefined,
-          protocol: r.protocol && r.protocol.length > 0 ? r.protocol : undefined,
-        }));
+      const xrayRules = newRules.map((r) => ({
+        type: r.type || 'field',
+        outboundTag: r.outboundTag,
+        description: r.description || undefined,
+        domain: r.domain && r.domain.length > 0 ? r.domain : undefined,
+        ip: r.ip && r.ip.length > 0 ? r.ip : undefined,
+        port: r.port || undefined,
+        protocol: r.protocol && r.protocol.length > 0 ? r.protocol : undefined,
+        enabled: r.enabled !== false,
+      }));
       config.routing.rules = xrayRules;
       updateProfile(targetConfigProfile.id, { content: JSON.stringify(config, null, 2) });
     } catch {
@@ -313,7 +352,8 @@ export const RulesPage: React.FC = () => {
                   <OutboundSelect
                     value={rule.outboundTag}
                     onChange={(val) => {
-                      setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, outboundTag: val } : r)));
+                      const newRules = rules.map((r) => (r.id === rule.id ? { ...r, outboundTag: val } : r));
+                      updateRulesAndSync(newRules);
                     }}
                     onOpenChange={(open) => setActiveOpenRuleId(open ? rule.id : null)}
                     proxyGroups={proxyGroups}

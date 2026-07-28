@@ -1,15 +1,22 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Trash2, Search, Play, Pause } from 'lucide-react';
 import { useLogStore } from '../stores/useLogStore';
 
 export const LogsPage: React.FC = () => {
   const { logs, logLevel, searchQuery, autoScroll, clearLogs, setLogLevel, setSearchQuery, setAutoScroll } = useLogStore();
+  const logContainerRef = useRef<HTMLDivElement>(null);
 
   const filteredLogs = logs.filter((log) => {
     const matchesLevel = logLevel === 'all' || log.level === logLevel;
     const matchesSearch = log.message.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesLevel && matchesSearch;
   });
+
+  useEffect(() => {
+    if (autoScroll && logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [filteredLogs, autoScroll]);
 
   const getLevelBadge = (level: string) => {
     switch (level) {
@@ -84,7 +91,10 @@ export const LogsPage: React.FC = () => {
       </div>
 
       {/* Log Console Container */}
-      <div className="glass-card flex-1 min-h-[420px] rounded-2xl p-4 font-mono text-xs overflow-y-auto space-y-1.5 border border-white/10 bg-slate-950/90 shadow-inner">
+      <div
+        ref={logContainerRef}
+        className="glass-card flex-1 min-h-[420px] rounded-2xl p-4 font-mono text-xs overflow-y-auto space-y-1.5 border border-white/10 bg-slate-950/90 shadow-inner"
+      >
         {filteredLogs.length === 0 ? (
           <div className="h-full flex items-center justify-center text-slate-600">暂无符合条件的日志</div>
         ) : (

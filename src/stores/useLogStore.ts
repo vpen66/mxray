@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { listen } from '@tauri-apps/api/event';
 import type { LogEntry } from '../types';
 
 interface LogStore {
@@ -11,6 +12,7 @@ interface LogStore {
   setLogLevel: (level: string) => void;
   setSearchQuery: (query: string) => void;
   setAutoScroll: (autoScroll: boolean) => void;
+  initLogListener: () => () => void;
 }
 
 const MOCK_INITIAL_LOGS: LogEntry[] = [
@@ -75,4 +77,26 @@ export const useLogStore = create<LogStore>((set) => ({
   setLogLevel: (level) => set({ logLevel: level }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setAutoScroll: (autoScroll) => set({ autoScroll }),
+
+  initLogListener: () => {
+    let unlisten: (() => void) | undefined;
+    listen<{ level: string; message: string }>('xray-log', (event) => {
+      const validLevels: Array<LogEntry['level']> = ['debug', 'info', 'warning', 'error'];
+      const rawLevel = event.payload.level?.toLowerCase() || 'info';
+      const level: LogEntry['level'] = validLevels.includes(rawLevel as any)
+        ? (rawLevel as LogEntry['level'])
+        : 'info';
+      useLogStore.getState().addLog(level, event.payload.message);
+    })
+      .then((unsub) => {
+        unlisten = unsub;
+      })
+      .catch(() => {
+        // Fallback for non-tauri or web dev mode
+      });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  },
 }));

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { XrayConfigProfile } from '../types';
 import { syncNodesAndGroupsToConfigJson } from '../utils/xrayMapper';
+import { invoke } from '@tauri-apps/api/core';
 
 interface ConfigStore {
   profiles: XrayConfigProfile[];
@@ -25,6 +26,7 @@ interface ConfigStore {
   toggleFakeDns: () => void;
   toggleSniffing: () => void;
   syncNodesAndGroups: (nodes: any[], groups: any[], selectedNodeId?: string) => void;
+  startActiveKernel: () => Promise<void>;
 }
 
 export const TEMPLATE_STANDARD = `{
@@ -77,37 +79,6 @@ export const TEMPLATE_STANDARD = `{
     }
   ],
   "outbounds": [
-    {
-      "tag": "proxy",
-      "protocol": "vless",
-      "settings": {
-        "vnext": [
-          {
-            "address": "example.com",
-            "port": 443,
-            "users": [
-              {
-                "id": "00000000-0000-0000-0000-000000000000",
-                "encryption": "none",
-                "flow": "xtls-rprx-vision"
-              }
-            ]
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "fingerprint": "chrome",
-          "serverName": "www.apple.com",
-          "publicKey": "11223344556677889900aabbccddeeff11223344556",
-          "shortId": "12345678",
-          "spiderX": "/"
-        }
-      }
-    },
     {
       "tag": "direct",
       "protocol": "freedom",
@@ -221,10 +192,6 @@ export const TEMPLATE_TUN = `{
   ],
   "outbounds": [
     {
-      "tag": "proxy",
-      "protocol": "freedom"
-    },
-    {
       "tag": "direct",
       "protocol": "freedom"
     },
@@ -284,10 +251,6 @@ export const TEMPLATE_MINIMAL = `{
     }
   ],
   "outbounds": [
-    {
-      "tag": "proxy",
-      "protocol": "freedom"
-    },
     {
       "tag": "direct",
       "protocol": "freedom"
@@ -415,7 +378,14 @@ export const useConfigStore = create<ConfigStore>()(
         return newId;
       },
 
-      setActiveProfileId: (id) => set({ activeProfileId: id }),
+      setActiveProfileId: (id) => {
+        set({ activeProfileId: id });
+        import('./useAppStore').then(({ useAppStore }) => {
+          if (useAppStore.getState().coreState.isRunning) {
+            get().startActiveKernel();
+          }
+        });
+      },
       setSelectedProfileId: (id) => set({ selectedProfileId: id }),
 
       updatePorts: (socks, http) => set({ socksPort: socks, httpPort: http }),
@@ -424,18 +394,28 @@ export const useConfigStore = create<ConfigStore>()(
       toggleSniffing: () => set((state) => ({ sniffingEnabled: !state.sniffingEnabled })),
       
       syncNodesAndGroups: (nodes, groups, selectedNodeId) => {
-        const state = get();
-        const activeId = state.selectedProfileId || state.activeProfileId;
-        const currentProfile = state.profiles.find((p) => p.id === activeId) || state.profiles[0];
-        if (!currentProfile) return;
+        set((prevState) => ({
+          profiles: prevState.profiles.map((p) => ({
+            ...p,
+            content: syncNodesAndGroupsToConfigJson(p.content, nodes, groups, selectedNodeId),
+          })),
+        }));
+      },
 
-        const updatedContent = syncNodesAndGroupsToConfigJson(
-          currentProfile.content,
-          nodes,
-          groups,
-          selectedNodeId
-        );
-        state.updateProfile(currentProfile.id, { content: updatedContent });
+      startActiveKernel: async () => {
+        const state = get();
+        const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0];
+        if (activeProfile && activeProfile.content) {
+          try {
+            const config = JSON.parse(activeProfile.content);
+            if (config.routing?.rules && Array.isArray(config.routing.rules)) {
+              config.routing.rules = config.routing.rules.filter((r: any) => r.enabled !== false);
+            }
+            await invoke('start_kernel', { configJson: JSON.stringify(config, null, 2) });
+          } catch {
+            // Web / mock environment fallback
+          }
+        }
       },
     }),
     {

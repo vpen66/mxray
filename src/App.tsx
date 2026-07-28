@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { useAppStore } from './stores/useAppStore';
+import { useLogStore } from './stores/useLogStore';
 import { DashboardPage } from './pages/Dashboard';
 import { ProxiesPage } from './pages/Proxies';
 import { ProfilesPage } from './pages/Profiles';
@@ -9,7 +11,16 @@ import { JsonConfigPage } from './pages/JsonConfig';
 import { SettingsPage } from './pages/Settings';
 
 export function App() {
-  const { activeTab } = useAppStore();
+  const { activeTab, checkSystemProxyStatus } = useAppStore();
+  const { initLogListener } = useLogStore();
+
+  useEffect(() => {
+    checkSystemProxyStatus();
+    const cleanup = initLogListener();
+    return () => {
+      cleanup();
+    };
+  }, [checkSystemProxyStatus, initLogListener]);
 
   const renderActivePage = () => {
     switch (activeTab) {

@@ -116,7 +116,11 @@ export interface XrayOutbound {
 
 export interface XrayCustomConfig {
   log?: {
+    access?: string;
+    error?: string;
     loglevel?: string;
+    dnsLog?: boolean;
+    maskAddress?: string;
   };
   inbounds?: XrayInbound[];
   outbounds?: XrayOutbound[];

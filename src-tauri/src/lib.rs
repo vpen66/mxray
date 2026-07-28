@@ -1,5 +1,6 @@
 pub mod config;
 pub mod kernel;
+pub mod sysproxy;
 
 #[tauri::command]
 fn get_core_version() -> String {
@@ -38,7 +39,7 @@ async fn fetch_subscription(url: String) -> Result<String, String> {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
@@ -52,9 +53,22 @@ pub fn run() {
             kernel::fetch_remote_releases,
             kernel::install_kernel,
             kernel::get_geodata_info,
-            kernel::update_geodata
+            kernel::update_geodata,
+            kernel::start_kernel,
+            kernel::stop_kernel,
+            kernel::get_kernel_status,
+            sysproxy::set_system_proxy,
+            sysproxy::get_system_proxy_status
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+            let _ = kernel::stop_kernel();
+            let _ = sysproxy::set_system_proxy(false, Some(10809), Some(10808));
+        }
+        _ => {}
+    });
 }
 

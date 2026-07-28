@@ -15,7 +15,17 @@ const MOCK_SPEED_HISTORY = [
 ];
 
 export const DashboardPage: React.FC = () => {
-  const { coreState, trafficStats, setMode, updateTraffic } = useAppStore();
+  const {
+    coreState,
+    trafficStats,
+    setMode,
+    updateTraffic,
+    toggleSystemProxy,
+    toggleTunMode,
+    isTogglingSystemProxy,
+    isTogglingTunMode,
+    toggleKernel,
+  } = useAppStore();
   const { profiles, selectedNodeId } = useProxyStore();
 
   const activeNode = profiles
@@ -108,14 +118,42 @@ export const DashboardPage: React.FC = () => {
             <ShieldCheck className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="flex items-center gap-2 text-xs font-medium text-slate-200">
-            <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${coreState.systemProxy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
-              系统代理: {coreState.systemProxy ? '开启' : '关闭'}
-            </span>
-            <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${coreState.tunMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
-              TUN 模式: {coreState.tunMode ? '开启' : '关闭'}
-            </span>
+            <button
+              onClick={toggleSystemProxy}
+              disabled={isTogglingSystemProxy}
+              className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-all ${
+                isTogglingSystemProxy ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+              } ${
+                coreState.systemProxy
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+            >
+              系统代理: {isTogglingSystemProxy ? '切换中...' : coreState.systemProxy ? '开启' : '关闭'}
+            </button>
+            <button
+              onClick={toggleTunMode}
+              disabled={isTogglingTunMode}
+              className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-all ${
+                isTogglingTunMode ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+              } ${
+                coreState.tunMode
+                  ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+            >
+              TUN 模式: {isTogglingTunMode ? '切换中...' : coreState.tunMode ? '开启' : '关闭'}
+            </button>
           </div>
-          <div className="text-[11px] text-slate-500">FakeDNS: 开启 (198.18.0.0/15)</div>
+          <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1">
+            <span>内核后台进程: {coreState.isRunning ? '运行中 (PID可直接杀除)' : '已停止'}</span>
+            <button
+              onClick={toggleKernel}
+              className="text-[10px] text-blue-400 hover:text-blue-300 underline underline-offset-2"
+            >
+              {coreState.isRunning ? '停止内核' : '启动内核'}
+            </button>
+          </div>
         </div>
       </div>
 

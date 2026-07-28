@@ -18,6 +18,8 @@ export interface XrayRoutingRule {
   protocol?: string[];
   inboundTag?: string[];
   network?: string;
+  enabled?: boolean;
+  description?: string;
 }
 
 export interface XrayConfigObject {
@@ -203,8 +205,8 @@ export function xrayOutboundToNode(outbound: XrayOutbound, profileId: string = '
 
   const protocol = outbound.protocol.toLowerCase();
 
-  if (protocol === 'freedom' || protocol === 'blackhole') {
-    return null; // System outbounds
+  if (protocol === 'freedom' || protocol === 'blackhole' || outbound.tag === 'proxy') {
+    return null; // System outbounds / default primary proxy tag
   }
 
   const id = `node-from-json-${outbound.tag.replace(/[^a-zA-Z0-9-]/g, '_')}`;
@@ -318,9 +320,9 @@ export function syncNodesAndGroupsToConfigJson(
     config.outbounds = [];
   }
 
-  // Preserve existing system outbounds (like direct, block, or custom non-node tags)
+  // Preserve existing system outbounds (like direct, block, or custom non-node tags), completely ignoring any 'proxy' tag
   const systemOutbounds = config.outbounds.filter(
-    (ob) => ob.protocol === 'freedom' || ob.protocol === 'blackhole' || ob.tag === 'direct' || ob.tag === 'block'
+    (ob) => (ob.protocol === 'freedom' || ob.protocol === 'blackhole' || ob.tag === 'direct' || ob.tag === 'block') && ob.tag !== 'proxy'
   );
 
   // If system outbounds direct and block are missing, add standard ones
@@ -342,31 +344,19 @@ export function syncNodesAndGroupsToConfigJson(
   // Generate node outbounds
   const nodeOutbounds: XrayOutbound[] = nodes.map((node) => nodeToXrayOutbound(node));
 
-  // Default "proxy" outbound tag pointing to selected node or first node if available
-  let primaryProxyOutbound: XrayOutbound | null = null;
+  // Determine active node tag for routing rules
+  let activeNodeTag = 'direct';
   if (selectedNodeId) {
     const selectedNode = nodes.find((n) => n.id === selectedNodeId);
     if (selectedNode) {
-      primaryProxyOutbound = {
-        ...nodeToXrayOutbound(selectedNode),
-        tag: 'proxy',
-      };
+      activeNodeTag = selectedNode.name ? `${selectedNode.name} [${selectedNode.id.slice(-4)}]` : selectedNode.id;
     }
   }
-
-  if (!primaryProxyOutbound && nodeOutbounds.length > 0) {
-    primaryProxyOutbound = {
-      ...nodeOutbounds[0],
-      tag: 'proxy', // Standard primary proxy outbound tag for default rules
-    };
+  if (activeNodeTag === 'direct' && nodeOutbounds.length > 0) {
+    activeNodeTag = nodeOutbounds[0].tag;
   }
 
-  const combinedOutbounds: XrayOutbound[] = [];
-  if (primaryProxyOutbound) {
-    combinedOutbounds.push(primaryProxyOutbound);
-  }
-  combinedOutbounds.push(...nodeOutbounds);
-  combinedOutbounds.push(...systemOutbounds);
+  const combinedOutbounds: XrayOutbound[] = [...nodeOutbounds, ...systemOutbounds];
 
   // Remove duplicate tags while preserving order
   const seenTags = new Set<string>();
@@ -391,10 +381,19 @@ export function syncNodesAndGroupsToConfigJson(
   }
 
   const existingRules = config.routing.rules || [];
+
+  // Replace any existing rule pointing to 'proxy' with the active node's tag (if nodes exist)
+  const updatedExistingRules = existingRules.map((rule) => {
+    if (rule.outboundTag === 'proxy' && activeNodeTag !== 'proxy') {
+      return { ...rule, outboundTag: activeNodeTag };
+    }
+    return rule;
+  });
+
   const groupRoutingRules: XrayRoutingRule[] = [];
 
   for (const group of groups) {
-    let targetOutboundTag = 'proxy';
+    let targetOutboundTag = activeNodeTag;
     if (group.selectedNodeId === 'DIRECT') {
       targetOutboundTag = 'direct';
     } else if (group.selectedNodeId === 'BLOCK' || group.selectedNodeId === 'REJECT') {
@@ -430,7 +429,7 @@ export function syncNodesAndGroupsToConfigJson(
   }
 
   // Combine existing non-group rules with strategy group rules
-  const finalRules: XrayRoutingRule[] = [...groupRoutingRules, ...existingRules];
+  const finalRules: XrayRoutingRule[] = [...groupRoutingRules, ...updatedExistingRules];
   const uniqueRules: XrayRoutingRule[] = [];
   const ruleKeys = new Set<string>();
 
@@ -457,7 +456,7 @@ export function extractNodesFromConfigJson(rawConfigJson: string): ProxyNode[] {
 
     const nodes: ProxyNode[] = [];
     for (const ob of config.outbounds) {
-      if (ob.tag === 'direct' || ob.tag === 'block') continue;
+      if (ob.tag === 'direct' || ob.tag === 'block' || ob.tag === 'proxy') continue;
       const node = xrayOutboundToNode(ob);
       if (node) {
         nodes.push(node);

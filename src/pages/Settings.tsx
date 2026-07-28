@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Shield, Network, Cpu, HardDrive, Download, FolderOpen, CheckCircle, AlertCircle, RefreshCw, Globe, Database } from 'lucide-react';
+import { Shield, Network, Cpu, HardDrive, Download, FolderOpen, CheckCircle, AlertCircle, RefreshCw, Globe, Database, Terminal, Copy, Check, Server, Zap } from 'lucide-react';
 import { useConfigStore } from '../stores/useConfigStore';
 
 import { useKernelStore } from '../stores/useKernelStore';
@@ -24,7 +24,15 @@ export const SettingsPage: React.FC = () => {
     isUpdatingGeoData,
     fetchGeoDataInfo,
     updateGeoData,
+    standaloneKernel,
+    keepKernelAliveOnExit,
+    autoStartKernelDaemon,
+    toggleStandaloneKernel,
+    toggleKeepKernelAliveOnExit,
+    toggleAutoStartKernelDaemon,
   } = useKernelStore();
+
+  const [copiedCli, setCopiedCli] = useState(false);
 
   const [customPathInput, setCustomPathInput] = useState('');
   const [isDetecting, setIsDetecting] = useState(false);
@@ -280,6 +288,92 @@ export const SettingsPage: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        </div>
+      </div>
+
+      {/* Standalone No-GUI Kernel Mode Card */}
+      <div className="glass-card p-6 rounded-2xl space-y-5 border border-white/10 bg-slate-900/40">
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <Server className="w-5 h-5 text-purple-400" />
+            <h3 className="text-base font-bold text-white">Xray 内核独立后台运行 (免 GUI 客户端模式)</h3>
+          </div>
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+              standaloneKernel ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-slate-800 text-slate-400'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            {standaloneKernel ? '独立内核运行中' : '界面托管模式'}
+          </span>
+        </div>
+
+        <div className="space-y-4 text-xs">
+          {/* Option 1: Standalone Daemon Toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-bold text-white">启用 Xray 内核独立守护模式 (Standalone Kernel Mode)</h4>
+              <p className="text-slate-400">无需启动/保持 MXray 前端 GUI 界面，直接以系统后台守护进程方式独立运行 Xray 内核</p>
+            </div>
+            <button
+              onClick={toggleStandaloneKernel}
+              className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${standaloneKernel ? 'bg-purple-600' : 'bg-slate-800'}`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${standaloneKernel ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {/* Option 2: Keep Kernel Alive on Exit */}
+          <div className="flex items-center justify-between border-t border-white/5 pt-3">
+            <div>
+              <h4 className="font-bold text-white">退出应用主界面时保持 Xray 内核后台运行</h4>
+              <p className="text-slate-400">关闭 MXray 前端 UI 窗口时不杀死 Xray 进程，允许后端网络代理继续静默托管</p>
+            </div>
+            <button
+              onClick={toggleKeepKernelAliveOnExit}
+              className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${keepKernelAliveOnExit ? 'bg-purple-600' : 'bg-slate-800'}`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${keepKernelAliveOnExit ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {/* Option 3: Auto-start Kernel Daemon at Boot without GUI */}
+          <div className="flex items-center justify-between border-t border-white/5 pt-3">
+            <div>
+              <h4 className="font-bold text-white">开机静默启动 Xray 内核 (免 GUI 自动启动)</h4>
+              <p className="text-slate-400">开机登录系统时仅自动拉起后台 Xray 内核，不弹窗或加载图形界面</p>
+            </div>
+            <button
+              onClick={toggleAutoStartKernelDaemon}
+              className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${autoStartKernelDaemon ? 'bg-purple-600' : 'bg-slate-800'}`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${autoStartKernelDaemon ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {/* Option 4: CLI Standalone Command Box */}
+          <div className="space-y-2 border-t border-white/5 pt-3">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5 text-purple-400" />
+                后台独立运行命令行指令 (CLI Command)
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`nohup ${activeKernel.path || 'xray'} run -config ~/.config/mxray/runtime_config.json > /dev/null 2>&1 &`);
+                  setCopiedCli(true);
+                  setTimeout(() => setCopiedCli(false), 2000);
+                }}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1 text-[11px] transition-colors"
+              >
+                {copiedCli ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedCli ? '已复制指令' : '复制命令'}</span>
+              </button>
+            </div>
+            <div className="p-3 bg-slate-950 rounded-xl border border-white/10 font-mono text-[11px] text-purple-300 break-all select-all">
+              nohup {activeKernel.path || 'xray'} run -config ~/.config/mxray/runtime_config.json &gt; /dev/null 2&gt;&amp;1 &amp;
+            </div>
           </div>
         </div>
       </div>

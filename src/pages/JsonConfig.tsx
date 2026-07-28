@@ -18,19 +18,25 @@ import {
   Eye,
   Server,
   Layers,
-  ArrowRight,
   Globe,
   SlidersHorizontal,
   Maximize2,
   Minimize2,
   Cpu,
   Shield,
+  Terminal,
+  ChevronUp,
+  ChevronDown,
+  Filter,
+  Sliders,
 } from 'lucide-react';
 import { useConfigStore, TEMPLATE_STANDARD, TEMPLATE_TUN, TEMPLATE_MINIMAL } from '../stores/useConfigStore';
 import { useAppStore } from '../stores/useAppStore';
 import { extractNodesFromConfigJson, type XrayConfigObject } from '../utils/xrayMapper';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CustomSelect } from '../components/CustomSelect';
+import { useProxyStore } from '../stores/useProxyStore';
+import { OutboundSelect } from '../components/OutboundSelect';
 
 const getProtocolBadgeClass = (protocol?: string) => {
   switch (protocol?.toLowerCase()) {
@@ -133,11 +139,21 @@ const DNS_NON_IP_QUERY_OPTIONS = [
   { value: 'skip', label: 'skip (跳过 DNS 查询)' },
 ];
 
-const RULE_NETWORK_OPTIONS = [
-  { value: '', label: '全部网络 (All)' },
-  { value: 'tcp,udp', label: 'tcp,udp' },
-  { value: 'tcp', label: 'tcp' },
-  { value: 'udp', label: 'udp' },
+
+
+const LOG_LEVEL_OPTIONS = [
+  { value: 'debug', label: 'debug' },
+  { value: 'info', label: 'info' },
+  { value: 'warning', label: 'warning' },
+  { value: 'error', label: 'error' },
+  { value: 'none', label: 'none' },
+];
+
+const MASK_ADDRESS_OPTIONS = [
+  { value: '', label: 'none' },
+  { value: 'quarter', label: 'quarter' },
+  { value: 'half', label: 'half' },
+  { value: 'full', label: 'full' },
 ];
 
 export const JsonConfigPage: React.FC = () => {
@@ -154,6 +170,75 @@ export const JsonConfigPage: React.FC = () => {
   } = useConfigStore();
 
   const { coreState, setCoreRunning } = useAppStore();
+
+  // Proxy store for OutboundSelect in routing rules
+  const { proxyGroups, profiles: proxyProfiles } = useProxyStore();
+  const allProxyNodes = proxyProfiles.flatMap((p) => p.nodes);
+
+  // Outbound badge style helper (aligned with Rules.tsx)
+  const getOutboundBadgeStyle = (outbound: string) => {
+    if (outbound === 'direct' || outbound === '直连' || outbound === '国内流量') {
+      return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+    }
+    if (outbound === 'block' || outbound === 'reject' || outbound === '拒绝') {
+      return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+    }
+    if (outbound === 'proxy' || outbound === '代理') {
+      return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+    }
+    return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+  };
+
+  // Routing rule priority handlers
+  const handleMoveRuleUp = (index: number) => {
+    if (index === 0) return;
+    updateParsedConfig((config) => {
+      if (config.routing?.rules && index > 0) {
+        const temp = config.routing.rules[index - 1];
+        config.routing.rules[index - 1] = config.routing.rules[index];
+        config.routing.rules[index] = temp;
+      }
+    });
+  };
+
+  const handleMoveRuleDown = (index: number) => {
+    updateParsedConfig((config) => {
+      if (config.routing?.rules && index < config.routing.rules.length - 1) {
+        const temp = config.routing.rules[index + 1];
+        config.routing.rules[index + 1] = config.routing.rules[index];
+        config.routing.rules[index] = temp;
+      }
+    });
+  };
+
+  const handleCloneRule = (index: number) => {
+    updateParsedConfig((config) => {
+      if (config.routing?.rules && index < config.routing.rules.length) {
+        const cloned = JSON.parse(JSON.stringify(config.routing.rules[index]));
+        if (cloned.description) {
+          cloned.description = `${cloned.description} (副本)`;
+        }
+        config.routing.rules.splice(index + 1, 0, cloned);
+      }
+    });
+  };
+
+  const handleToggleRuleEnabled = (index: number) => {
+    updateParsedConfig((config) => {
+      if (config.routing?.rules && index < config.routing.rules.length) {
+        const rule = config.routing.rules[index];
+        rule.enabled = rule.enabled === false ? true : false;
+      }
+    });
+  };
+
+  const handleChangeRuleOutbound = (index: number, newTag: string) => {
+    updateParsedConfig((config) => {
+      if (config.routing?.rules && index < config.routing.rules.length) {
+        config.routing.rules[index].outboundTag = newTag;
+      }
+    });
+  };
 
   const [viewMode, setViewMode] = useState<'visual' | 'code'>('visual');
   const [searchQuery, setSearchQuery] = useState('');
@@ -350,9 +435,13 @@ export const JsonConfigPage: React.FC = () => {
     jsonError: string | null;
     outboundTag: string;
     type: string;
+    description: string;
     domain: string;
     ip: string;
+    port: string;
+    protocol: string;
     network: string;
+    activeTab: 'domain' | 'ip' | 'port' | 'protocol';
   }>({
     isOpen: false,
     isMaximized: false,
@@ -362,10 +451,17 @@ export const JsonConfigPage: React.FC = () => {
     jsonError: null,
     outboundTag: 'proxy',
     type: 'field',
+    description: '',
     domain: '',
     ip: '',
+    port: '',
+    protocol: '',
     network: '',
+    activeTab: 'domain',
   });
+
+  // Track which rule's OutboundSelect dropdown is open (for z-index)
+  const [activeOpenRuleId, setActiveOpenRuleId] = useState<number | null>(null);
 
   // DNS Modal State
   const [dnsModal, setDnsModal] = useState<{
@@ -402,7 +498,7 @@ export const JsonConfigPage: React.FC = () => {
     } catch {
       return null;
     }
-  }, [selectedProfile?.content]);
+  }, [selectedProfile]);
 
   // Helper to mutate current selected config JSON
   const updateParsedConfig = (updater: (config: XrayConfigObject) => void) => {
@@ -418,6 +514,51 @@ export const JsonConfigPage: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to update config JSON:', err);
     }
+  };
+
+  const handleLogLevelChange = (newLevel: string) => {
+    updateParsedConfig((config) => {
+      config.log = {
+        ...(config.log || {}),
+        loglevel: newLevel,
+      };
+    });
+  };
+
+  const handleLogAccessChange = (accessPath: string) => {
+    updateParsedConfig((config) => {
+      config.log = {
+        ...(config.log || {}),
+        access: accessPath,
+      };
+    });
+  };
+
+  const handleLogErrorChange = (errorPath: string) => {
+    updateParsedConfig((config) => {
+      config.log = {
+        ...(config.log || {}),
+        error: errorPath,
+      };
+    });
+  };
+
+  const handleLogDnsLogToggle = (dnsLog: boolean) => {
+    updateParsedConfig((config) => {
+      config.log = {
+        ...(config.log || {}),
+        dnsLog,
+      };
+    });
+  };
+
+  const handleLogMaskAddressChange = (maskAddress: string) => {
+    updateParsedConfig((config) => {
+      config.log = {
+        ...(config.log || {}),
+        maskAddress,
+      };
+    });
   };
 
   // --- Helper Conversion Functions for Modal Visual <-> JSON Sync ---
@@ -821,16 +962,28 @@ export const JsonConfigPage: React.FC = () => {
       type: rule.type || 'field',
       outboundTag: rule.outboundTag,
     };
+    if (rule.description.trim()) {
+      newRule.description = rule.description.trim();
+    }
     if (rule.domain.trim()) {
       newRule.domain = rule.domain
-        .split(',')
+        .split(/[\n,]/)
         .map((s) => s.trim())
         .filter(Boolean);
     }
     if (rule.ip.trim()) {
       newRule.ip = rule.ip
-        .split(',')
+        .split(/[\n,]/)
         .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    if (rule.port.trim()) {
+      newRule.port = rule.port.trim();
+    }
+    if (rule.protocol.trim()) {
+      newRule.protocol = rule.protocol
+        .split(',')
+        .map((p) => p.trim())
         .filter(Boolean);
     }
     if (rule.network.trim()) {
@@ -843,10 +996,21 @@ export const JsonConfigPage: React.FC = () => {
     return {
       outboundTag: rule.outboundTag || 'proxy',
       type: rule.type || 'field',
-      domain: Array.isArray(rule.domain) ? rule.domain.join(', ') : rule.domain || '',
-      ip: Array.isArray(rule.ip) ? rule.ip.join(', ') : rule.ip || '',
+      description: rule.description || '',
+      domain: Array.isArray(rule.domain) ? rule.domain.join('\n') : rule.domain || '',
+      ip: Array.isArray(rule.ip) ? rule.ip.join('\n') : rule.ip || '',
+      port: rule.port || '',
+      protocol: Array.isArray(rule.protocol) ? rule.protocol.join(', ') : rule.protocol || '',
       network: rule.network || '',
     };
+  };
+
+  const insertDomainPrefix = (prefix: string) => {
+    setRuleModal((prev) => {
+      const lines = prev.domain.split('\n').filter((l) => l.trim().length > 0);
+      lines.push(`${prefix}example.com`);
+      return { ...prev, domain: lines.join('\n') };
+    });
   };
 
   const handleSwitchRuleMode = (targetMode: 'visual' | 'json') => {
@@ -1122,23 +1286,30 @@ export const JsonConfigPage: React.FC = () => {
       setRuleModal({
         ...visualState,
         isOpen: true,
+        isMaximized: false,
         index,
         mode: 'visual',
         rawJsonText: JSON.stringify(rule, null, 2),
         jsonError: null,
+        activeTab: 'domain',
       });
     } else {
       const defaultState = {
         isOpen: true,
+        isMaximized: false,
         index: null,
         mode: 'visual' as const,
         rawJsonText: '',
         jsonError: null,
         outboundTag: defaultOutbound,
         type: 'field',
+        description: '',
         domain: '',
         ip: '',
+        port: '',
+        protocol: '',
         network: '',
+        activeTab: 'domain' as const,
       };
       defaultState.rawJsonText = JSON.stringify(buildRuleObjectFromVisual(defaultState), null, 2);
       setRuleModal(defaultState);
@@ -1259,7 +1430,7 @@ export const JsonConfigPage: React.FC = () => {
   const mappedNodesInJson = useMemo(() => {
     if (!selectedProfile) return [];
     return extractNodesFromConfigJson(selectedProfile.content);
-  }, [selectedProfile?.content]);
+  }, [selectedProfile]);
 
   const handleEditorChange = (value?: string) => {
     if (value === undefined || !selectedProfile) return;
@@ -1711,7 +1882,7 @@ export const JsonConfigPage: React.FC = () => {
                 </div>
 
                 {/* 2. Routing Rules Section */}
-                <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-2">
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-white flex items-center gap-2">
                       <Layers className="w-4 h-4 text-emerald-400" />
@@ -1731,53 +1902,162 @@ export const JsonConfigPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    {(parsedConfig?.routing?.rules || []).map((rule, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2 rounded-lg bg-slate-950/80 border border-white/5 flex items-center justify-between gap-3 text-[11px]"
-                      >
-                        <div className="flex items-center gap-2 font-mono flex-1 min-w-0">
-                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30 shrink-0">
-                            {rule.type || 'field'}
-                          </span>
-                          <span className="text-slate-300 truncate">
-                            {rule.domain
-                              ? `域名: [${rule.domain.slice(0, 3).join(', ')}${rule.domain.length > 3 ? '...' : ''}]`
-                              : rule.ip
-                              ? `IP: [${rule.ip.join(', ')}]`
-                              : rule.network
-                              ? `网络: ${rule.network}`
-                              : '全匹配'}
-                          </span>
-                        </div>
+                  <div className="space-y-2.5">
+                    {(parsedConfig?.routing?.rules || []).map((rule: any, idx: number) => {
+                      const isDropdownOpen = activeOpenRuleId === idx;
+                      const ruleEnabled = rule.enabled !== false;
+                      const ruleDescription = rule.description || (
+                        rule.domain?.includes('geosite:cn') || rule.ip?.includes('geoip:cn')
+                          ? '中国大陆域名/IP (直连)'
+                          : rule.domain?.includes('geosite:category-ads-all')
+                          ? '全网广告与追踪域名拦截 (拒绝)'
+                          : rule.domain
+                          ? '域名分流规则'
+                          : rule.ip
+                          ? 'IP 分流规则'
+                          : rule.network
+                          ? '网络协议规则'
+                          : '路由规则'
+                      );
+                      return (
+                        <div
+                          key={idx}
+                          style={{ zIndex: isDropdownOpen ? 50 : (parsedConfig?.routing?.rules?.length || 0) - idx }}
+                          className={`relative p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all ${
+                            ruleEnabled ? 'border-white/10 bg-slate-950/60' : 'border-white/5 opacity-50 bg-slate-950/40'
+                          }`}
+                        >
+                          <div className="flex items-start md:items-center gap-3">
+                            {/* Order index badge & Priority controls */}
+                            <div className="flex flex-col items-center gap-0.5 shrink-0">
+                              <span className="w-6 h-6 rounded-lg bg-slate-950 border border-white/10 text-slate-300 font-mono text-xs font-bold flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <div className="flex items-center gap-0.5 pt-0.5">
+                                <button
+                                  onClick={() => handleMoveRuleUp(idx)}
+                                  disabled={idx === 0}
+                                  className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+                                  title="向上调高优先级"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleMoveRuleDown(idx)}
+                                  disabled={idx === (parsedConfig?.routing?.rules?.length || 1) - 1}
+                                  className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+                                  title="向下调低优先级"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
 
-                        <div className="flex items-center gap-2 shrink-0 font-mono">
-                          <div className="flex items-center gap-1 text-slate-400">
-                            <ArrowRight className="w-3 h-3 text-slate-500" />
-                            <span className="px-2 py-0.5 rounded bg-blue-600/20 text-blue-300 font-bold border border-blue-500/30">
-                              {rule.outboundTag}
-                            </span>
+                            {/* Rule Info */}
+                            <div className="space-y-1.5 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded text-[10px] font-bold border uppercase ${getOutboundBadgeStyle(
+                                    rule.outboundTag
+                                  )}`}
+                                >
+                                  {rule.outboundTag}
+                                </span>
+                                <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide">{ruleDescription}</h4>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
+                                {rule.domain &&
+                                  (Array.isArray(rule.domain) ? rule.domain : [rule.domain]).map((d: string) => (
+                                    <span key={d} className="px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-white/10 flex items-center gap-1">
+                                      <Globe className="w-3 h-3 text-sky-400 shrink-0" />
+                                      {d}
+                                    </span>
+                                  ))}
+                                {rule.ip &&
+                                  (Array.isArray(rule.ip) ? rule.ip : [rule.ip]).map((ip: string) => (
+                                    <span key={ip} className="px-2 py-0.5 rounded bg-slate-950 text-cyan-300 border border-white/10 flex items-center gap-1">
+                                      <Filter className="w-3 h-3 text-cyan-400 shrink-0" />
+                                      {ip}
+                                    </span>
+                                  ))}
+                                {rule.port && (
+                                  <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-300 border border-white/10">
+                                    Port: {rule.port}
+                                  </span>
+                                )}
+                                {rule.protocol &&
+                                  (Array.isArray(rule.protocol) ? rule.protocol : [rule.protocol]).map((p: string) => (
+                                    <span key={p} className="px-2 py-0.5 rounded bg-slate-950 text-purple-300 border border-white/10">
+                                      Proto: {p}
+                                    </span>
+                                  ))}
+                                {rule.network && (
+                                  <span className="px-2 py-0.5 rounded bg-slate-950 text-blue-300 border border-white/10">
+                                    Net: {rule.network}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
+
+                          {/* Outbound Quick Target & Actions */}
+                          <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                            {/* Outbound Target Select */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-slate-400 text-xs font-semibold shrink-0">指向出站:</span>
+                              <OutboundSelect
+                                value={rule.outboundTag}
+                                onChange={(val) => handleChangeRuleOutbound(idx, val)}
+                                onOpenChange={(open) => setActiveOpenRuleId(open ? idx : null)}
+                                proxyGroups={proxyGroups}
+                                allNodes={allProxyNodes}
+                                size="sm"
+                              />
+                            </div>
+
+                            {/* Enable/Disable Toggle */}
+                            <button
+                              onClick={() => handleToggleRuleEnabled(idx)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                                ruleEnabled
+                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                  : 'bg-slate-900 text-slate-500 border-white/5'
+                              }`}
+                            >
+                              {ruleEnabled ? '启用' : '禁用'}
+                            </button>
+
+                            {/* Edit */}
                             <button
                               onClick={() => handleOpenRuleModal(rule, idx)}
-                              title="编辑此规则"
-                              className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-white/5 transition-colors"
+                              title="编辑高级规则"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
+
+                            {/* Clone */}
+                            <button
+                              onClick={() => handleCloneRule(idx)}
+                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-blue-400 border border-white/5 transition-colors"
+                              title="克隆此规则"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Delete */}
                             <button
                               onClick={() => handleDeleteRule(idx)}
-                              title="删除此规则"
-                              className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded transition-colors"
+                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-600/20 text-slate-500 hover:text-rose-400 border border-white/5 transition-colors"
+                              title="删除规则"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1881,6 +2161,138 @@ export const JsonConfigPage: React.FC = () => {
                       ) : (
                         <div className="text-slate-500 p-2">使用系统默认 DNS</div>
                       )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Log Object Full Specification Visual Editor Section */}
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h4 className="font-bold text-white flex items-center gap-2 text-sm">
+                      <Terminal className="w-4 h-4 text-amber-400" />
+                      日志配置
+                    </h4>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold uppercase">
+                        {parsedConfig?.log?.loglevel || 'warning'}
+                      </span>
+                      {parsedConfig?.log?.dnsLog && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold">
+                          DNS LOG
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Grid 1: loglevel, dnsLog, maskAddress */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        日志输出等级
+                      </label>
+                      <CustomSelect
+                        value={parsedConfig?.log?.loglevel || 'warning'}
+                        onChange={handleLogLevelChange}
+                        options={LOG_LEVEL_OPTIONS}
+                        accentColor="purple"
+                        size="sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        IP/域名隐私遮罩
+                      </label>
+                      <CustomSelect
+                        value={parsedConfig?.log?.maskAddress || ''}
+                        onChange={handleLogMaskAddressChange}
+                        options={MASK_ADDRESS_OPTIONS}
+                        accentColor="purple"
+                        size="sm"
+                      />
+                    </div>
+
+                    <div className="flex flex-col justify-end">
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        DNS 查询日志
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleLogDnsLogToggle(!parsedConfig?.log?.dnsLog)}
+                        className={`w-full py-1.5 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all ${
+                          parsedConfig?.log?.dnsLog
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                            : 'bg-slate-950 text-slate-400 border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <span>记录 DNS 查询日志</span>
+                        <span className={`w-3.5 h-3.5 rounded-full ${parsedConfig?.log?.dnsLog ? 'bg-cyan-400 shadow-sm shadow-cyan-500/50' : 'bg-slate-700'}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Grid 2: access & error log path inputs with quick preset buttons */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-semibold text-slate-300">
+                          访问日志重定向
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleLogAccessChange('none')}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/5 transition-colors"
+                          >
+                            none (禁用)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLogAccessChange('')}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/5 transition-colors"
+                          >
+                            控制台输出
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={parsedConfig?.log?.access ?? ''}
+                        onChange={(e) => handleLogAccessChange(e.target.value)}
+                        placeholder="留空为控制台输出，或填 none / 日志文件路径"
+                        className="w-full bg-slate-950 px-3 py-1.5 rounded-xl border border-white/10 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500/50 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-semibold text-slate-300">
+                          错误日志重定向
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleLogErrorChange('none')}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/5 transition-colors"
+                          >
+                            none (禁用)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLogErrorChange('')}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/5 transition-colors"
+                          >
+                            控制台输出
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={parsedConfig?.log?.error ?? ''}
+                        onChange={(e) => handleLogErrorChange(e.target.value)}
+                        placeholder="留空为控制台输出，或填 none / 日志文件路径"
+                        className="w-full bg-slate-950 px-3 py-1.5 rounded-xl border border-white/10 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500/50 font-mono"
+                      />
                     </div>
                   </div>
                 </div>
@@ -2958,15 +3370,16 @@ export const JsonConfigPage: React.FC = () => {
       {/* Edit / Add Routing Rule Modal */}
       {ruleModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-          <div className={`w-full glass-card bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl transition-all duration-300 flex flex-col ${
-            ruleModal.isMaximized ? 'max-w-4xl h-[80vh]' : 'max-w-md max-h-[90vh]'
-          }`}>
-            <div className="flex items-center justify-between pb-3 border-b border-white/10 gap-2 shrink-0">
-              <h3 className="text-base font-bold text-white flex items-center gap-2 truncate min-w-0">
-                <Layers className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span className="truncate">{ruleModal.index !== null ? '编辑策略分流规则' : '新增策略分流规则'}</span>
-              </h3>
-              <div className="flex items-center gap-1.5 shrink-0">
+          <div className="bg-slate-900 border border-white/10 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-slate-900/80">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-bold text-white">
+                  {ruleModal.index !== null ? `编辑分流规则 (${ruleModal.description || '策略规则'})` : '新建高级分流路由规则'}
+                </h3>
+              </div>
+              <div className="flex items-center gap-1.5">
                 {/* Mode Switcher */}
                 <div className="flex items-center p-1 bg-slate-950/80 rounded-xl border border-white/10 text-xs shrink-0">
                   <button
@@ -2980,7 +3393,7 @@ export const JsonConfigPage: React.FC = () => {
                     }`}
                   >
                     <Eye className="w-3.5 h-3.5 shrink-0" />
-                    <span className="hidden sm:inline whitespace-nowrap">可视化结构</span>
+                    <span className="hidden sm:inline whitespace-nowrap">可视化</span>
                   </button>
                   <button
                     type="button"
@@ -2993,20 +3406,12 @@ export const JsonConfigPage: React.FC = () => {
                     }`}
                   >
                     <Code2 className="w-3.5 h-3.5 shrink-0" />
-                    <span className="hidden sm:inline whitespace-nowrap">JSON 源码</span>
+                    <span className="hidden sm:inline whitespace-nowrap">JSON</span>
                   </button>
                 </div>
                 <button
-                  type="button"
-                  onClick={() => setRuleModal((prev) => ({ ...prev, isMaximized: !prev.isMaximized }))}
-                  title={ruleModal.isMaximized ? '还原窗口大小' : '最大化 / 放大窗口'}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-                >
-                  {ruleModal.isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                </button>
-                <button
                   onClick={() => setRuleModal((prev) => ({ ...prev, isOpen: false }))}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"
+                  className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -3014,66 +3419,185 @@ export const JsonConfigPage: React.FC = () => {
             </div>
 
             {ruleModal.mode === 'visual' ? (
-              <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar py-3 space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">目标出站 Target Outbound</label>
-                  <CustomSelect
-                    value={ruleModal.outboundTag}
-                    onChange={(val) => setRuleModal((prev) => ({ ...prev, outboundTag: val }))}
-                    options={[
-                      ...(parsedConfig?.outbounds || []).map((ob) => ({
-                        value: ob.tag,
-                        label: `${ob.tag} (${ob.protocol})`,
-                      })),
-                      ...(!parsedConfig?.outbounds?.some((ob) => ob.tag === 'proxy') ? [{ value: 'proxy', label: 'proxy' }] : []),
-                      ...(!parsedConfig?.outbounds?.some((ob) => ob.tag === 'direct') ? [{ value: 'direct', label: 'direct' }] : []),
-                      ...(!parsedConfig?.outbounds?.some((ob) => ob.tag === 'block') ? [{ value: 'block', label: 'block' }] : []),
-                    ]}
-                    accentColor="emerald"
-                  />
+              /* Visual Mode Content */
+              <div className="p-6 space-y-5 overflow-y-auto flex-1 text-xs">
+                {/* Description & Target Outbound */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-slate-300 font-semibold flex items-center gap-1">
+                      规则描述名称 <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={ruleModal.description}
+                      onChange={(e) => setRuleModal((prev) => ({ ...prev, description: e.target.value }))}
+                      placeholder="例如: OpenAI & ChatGPT 流量规则"
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-slate-300 font-semibold text-xs sm:text-sm">指向出站目标 (代理组或特定节点)</label>
+                    <OutboundSelect
+                      value={ruleModal.outboundTag}
+                      onChange={(val) => setRuleModal((prev) => ({ ...prev, outboundTag: val }))}
+                      proxyGroups={proxyGroups}
+                      allNodes={allProxyNodes}
+                      size="md"
+                      fullWidth
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">匹配域名 Domain (英文逗号分隔)</label>
-                  <input
-                    type="text"
-                    placeholder="例如: geosite:openai, domain:chatgpt.com"
-                    value={ruleModal.domain}
-                    onChange={(e) => setRuleModal((prev) => ({ ...prev, domain: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
+                {/* Condition Type Tabs */}
+                <div className="space-y-3 pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-slate-300 font-semibold">规则匹配类型条件配置</label>
+                    <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-white/10 text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setRuleModal((prev) => ({ ...prev, activeTab: 'domain' }))}
+                        className={`px-3 py-1 rounded-lg transition-all ${
+                          ruleModal.activeTab === 'domain' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        域名 (Domain/GeoSite)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRuleModal((prev) => ({ ...prev, activeTab: 'ip' }))}
+                        className={`px-3 py-1 rounded-lg transition-all ${
+                          ruleModal.activeTab === 'ip' ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        IP / GeoIP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRuleModal((prev) => ({ ...prev, activeTab: 'port' }))}
+                        className={`px-3 py-1 rounded-lg transition-all ${
+                          ruleModal.activeTab === 'port' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        端口 (Port)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRuleModal((prev) => ({ ...prev, activeTab: 'protocol' }))}
+                        className={`px-3 py-1 rounded-lg transition-all ${
+                          ruleModal.activeTab === 'protocol' ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        协议 (Protocol)
+                      </button>
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">匹配 IP (英文逗号分隔)</label>
-                  <input
-                    type="text"
-                    placeholder="例如: geoip:cn, geoip:private, 1.1.1.1/32"
-                    value={ruleModal.ip}
-                    onChange={(e) => setRuleModal((prev) => ({ ...prev, ip: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
+                  {/* TAB 1: DOMAIN & GEOSITE */}
+                  {ruleModal.activeTab === 'domain' && (
+                    <div className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-white/10">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 font-semibold">域名与 GeoSite 清单 (一行一条规则)</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-500 mr-1">一键插入前缀:</span>
+                          <button type="button" onClick={() => insertDomainPrefix('domain:')} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 text-[10px] font-mono">domain:</button>
+                          <button type="button" onClick={() => insertDomainPrefix('full:')} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-blue-300 text-[10px] font-mono">full:</button>
+                          <button type="button" onClick={() => insertDomainPrefix('keyword:')} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-mono">keyword:</button>
+                          <button type="button" onClick={() => insertDomainPrefix('regexp:')} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-purple-300 text-[10px] font-mono">regexp:</button>
+                          <button type="button" onClick={() => insertDomainPrefix('geosite:')} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[10px] font-mono font-bold">geosite:</button>
+                        </div>
+                      </div>
+                      <textarea
+                        rows={5}
+                        value={ruleModal.domain}
+                        onChange={(e) => setRuleModal((prev) => ({ ...prev, domain: e.target.value }))}
+                        placeholder={`domain:openai.com\nfull:chatgpt.com\ngeosite:openai\nkeyword:telegram`}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-sky-200 font-mono placeholder-slate-600 focus:outline-none focus:border-blue-500 text-xs leading-relaxed"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        前缀说明: <code className="text-sky-300">domain:</code> 匹配包含所有子域名; <code className="text-blue-300">full:</code> 精准匹配完整域名; <code className="text-emerald-300">geosite:</code> Geo 数据库分类库。
+                      </p>
+                    </div>
+                  )}
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">网络协议 Network</label>
-                  <CustomSelect
-                    value={ruleModal.network}
-                    onChange={(val) => setRuleModal((prev) => ({ ...prev, network: val }))}
-                    options={RULE_NETWORK_OPTIONS}
-                    accentColor="emerald"
-                  />
+                  {/* TAB 2: IP & GEOIP */}
+                  {ruleModal.activeTab === 'ip' && (
+                    <div className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-white/10">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 font-semibold">IP 地址与 GeoIP 清单 (一行一条)</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setRuleModal((prev) => ({ ...prev, ip: prev.ip ? `${prev.ip}\ngeoip:cn` : 'geoip:cn' }))}
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[10px] font-mono font-bold"
+                          >
+                            + geoip:cn
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRuleModal((prev) => ({ ...prev, ip: prev.ip ? `${prev.ip}\ngeoip:private` : 'geoip:private' }))}
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[10px] font-mono font-bold"
+                          >
+                            + geoip:private
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        rows={5}
+                        value={ruleModal.ip}
+                        onChange={(e) => setRuleModal((prev) => ({ ...prev, ip: e.target.value }))}
+                        placeholder={`geoip:cn\ngeoip:private\n1.1.1.1/32\n192.168.0.0/16`}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-cyan-200 font-mono placeholder-slate-600 focus:outline-none focus:border-cyan-500 text-xs leading-relaxed"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        支持 CIDR 网段（如 <code className="text-cyan-300">192.168.1.0/24</code>）或 GeoIP 数据库库名称（如 <code className="text-cyan-300">geoip:cn</code>）。
+                      </p>
+                    </div>
+                  )}
+
+                  {/* TAB 3: PORT */}
+                  {ruleModal.activeTab === 'port' && (
+                    <div className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-white/10">
+                      <span className="text-slate-300 font-semibold block">目标端口或端口范围</span>
+                      <input
+                        type="text"
+                        value={ruleModal.port}
+                        onChange={(e) => setRuleModal((prev) => ({ ...prev, port: e.target.value }))}
+                        placeholder="例如: 80, 443 或 8000-9000"
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-amber-200 font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500 text-xs"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        可用英文逗号分隔多个端口（如 <code className="text-amber-300">80, 443, 8080</code>）或使用连字符指定范围（如 <code className="text-amber-300">1000-2000</code>）。
+                      </p>
+                    </div>
+                  )}
+
+                  {/* TAB 4: PROTOCOL */}
+                  {ruleModal.activeTab === 'protocol' && (
+                    <div className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-white/10">
+                      <span className="text-slate-300 font-semibold block">网络协议 (Protocol)</span>
+                      <input
+                        type="text"
+                        value={ruleModal.protocol}
+                        onChange={(e) => setRuleModal((prev) => ({ ...prev, protocol: e.target.value }))}
+                        placeholder="例如: http, tls, bittorrent"
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-purple-200 font-mono placeholder-slate-600 focus:outline-none focus:border-purple-500 text-xs"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        基于 Xray 的 Traffic Sniffing 功能识别流量协议。
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
-              <div className="flex-1 min-h-0 py-3 flex flex-col space-y-2.5">
+              /* JSON Mode Content */
+              <div className="flex-1 min-h-0 py-3 px-6 flex flex-col space-y-2.5">
                 <div className="flex items-center justify-between text-xs text-slate-400 shrink-0">
                   <span>编辑局部路由规则 JSON 对象 (符合 Xray 官方规范)</span>
                   <span className="font-mono text-[10px] text-slate-500">JSON Object</span>
                 </div>
-                <div className={`w-full rounded-xl border border-white/10 overflow-hidden bg-[#1e1e1e] ${
-                  ruleModal.isMaximized ? 'flex-1 min-h-[250px]' : 'h-[300px] shrink-0'
-                }`}>
+                <div className="w-full rounded-xl border border-white/10 overflow-hidden bg-[#1e1e1e] h-[300px] shrink-0">
                   <Editor
                     height="100%"
                     defaultLanguage="json"
@@ -3107,18 +3631,21 @@ export const JsonConfigPage: React.FC = () => {
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10 shrink-0">
+            {/* Footer Buttons */}
+            <div className="px-6 py-4 border-t border-white/10 bg-slate-900/80 flex items-center justify-end gap-3">
               <button
+                type="button"
                 onClick={() => setRuleModal((prev) => ({ ...prev, isOpen: false }))}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition-all cursor-pointer"
               >
                 取消
               </button>
               <button
+                type="button"
                 onClick={handleSaveRule}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 transition-all"
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
               >
-                保存规则
+                保存路由规则
               </button>
             </div>
           </div>

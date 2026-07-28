@@ -1,8 +1,32 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
-use std::process::Command;
-use tauri::Manager;
+use std::process::{Command, Child, Stdio};
+use std::sync::{LazyLock, Mutex};
+use tauri::{Emitter, Manager};
+
+static XRAY_PROCESS: LazyLock<Mutex<Option<Child>>> = LazyLock::new(|| Mutex::new(None));
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogPayload {
+    pub level: String,
+    pub message: String,
+    pub timestamp: String,
+}
+
+fn parse_log_level(line: &str) -> String {
+    let lower = line.to_lowercase();
+    if lower.contains("[error]") || lower.contains(" error:") || lower.contains("error ") {
+        "error".to_string()
+    } else if lower.contains("[warning]") || lower.contains("[warn]") || lower.contains(" warning:") {
+        "warning".to_string()
+    } else if lower.contains("[debug]") || lower.contains(" debug:") {
+        "debug".to_string()
+    } else {
+        "info".to_string()
+    }
+}
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -371,3 +395,183 @@ pub async fn update_geodata(
 
     get_geodata_info(app_handle)
 }
+
+pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle) -> Result<String, String> {
+    if let Some(p) = custom_path {
+        if !p.is_empty() && p != "bundled" && Path::new(p).exists() {
+            return Ok(p.to_string());
+        }
+    }
+
+    if let Ok(app_dir) = app_handle.path().app_data_dir() {
+        let cores_dir = app_dir.join("cores");
+        if cores_dir.exists() {
+            if let Ok(entries) = fs::read_dir(&cores_dir) {
+                for entry in entries.flatten() {
+                    let sub_bin = entry.path().join("xray");
+                    if sub_bin.exists() {
+                        return Ok(sub_bin.to_str().unwrap_or_default().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    let common_paths = [
+        "/opt/homebrew/bin/xray",
+        "/usr/local/bin/xray",
+        "/usr/bin/xray",
+    ];
+    for p in common_paths {
+        if Path::new(p).exists() {
+            return Ok(p.to_string());
+        }
+    }
+
+    if let Ok(out) = Command::new("which").arg("xray").output() {
+        if out.status.success() {
+            let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !path_str.is_empty() && Path::new(&path_str).exists() {
+                return Ok(path_str);
+            }
+        }
+    }
+
+    Err("未在系统中或应用目录中找到有效的 Xray 可执行程序".to_string())
+}
+
+#[tauri::command]
+pub fn stop_kernel() -> Result<(), String> {
+    let mut lock = XRAY_PROCESS.lock().map_err(|e| e.to_string())?;
+    if let Some(mut child) = lock.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn start_kernel(
+    app_handle: tauri::AppHandle,
+    config_json: String,
+    binary_path: Option<String>,
+) -> Result<(), String> {
+    let _ = stop_kernel();
+
+    let bin_path = find_xray_binary(binary_path.as_deref(), &app_handle)?;
+
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
+
+    fs::create_dir_all(&app_dir).map_err(|e| format!("创建应用数据目录失败: {}", e))?;
+    let config_file_path = app_dir.join("runtime_config.json");
+
+    fs::write(&config_file_path, &config_json)
+        .map_err(|e| format!("写入运行时配置文件失败: {}", e))?;
+
+    let mut child = Command::new(&bin_path)
+        .args(["run", "-config", config_file_path.to_str().unwrap_or_default()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("无法启动 Xray 进程 ({}): {}", bin_path, e))?;
+
+    // 1. Stream stdout
+    if let Some(stdout) = child.stdout.take() {
+        let app_handle_stdout = app_handle.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().flatten() {
+                let level = parse_log_level(&line);
+                let _ = app_handle_stdout.emit("xray-log", LogPayload {
+                    level,
+                    message: line,
+                    timestamp: "".to_string(),
+                });
+            }
+        });
+    }
+
+    // 2. Stream stderr
+    if let Some(stderr) = child.stderr.take() {
+        let app_handle_stderr = app_handle.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().flatten() {
+                let level = parse_log_level(&line);
+                let _ = app_handle_stderr.emit("xray-log", LogPayload {
+                    level,
+                    message: line,
+                    timestamp: "".to_string(),
+                });
+            }
+        });
+    }
+
+    // 3. Optional: Tail custom access / error log files if specified in config
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&config_json) {
+        if let Some(log_obj) = parsed.get("log") {
+            for key in ["access", "error"] {
+                if let Some(path_str) = log_obj.get(key).and_then(|v| v.as_str()) {
+                    let path_str = path_str.trim();
+                    if !path_str.is_empty() && path_str != "none" {
+                        let path_buf = std::path::PathBuf::from(path_str);
+                        let app_handle_file = app_handle.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(600));
+                            if let Ok(mut file) = std::fs::File::open(&path_buf) {
+                                let _ = file.seek(SeekFrom::End(0));
+                                let mut reader = BufReader::new(file);
+                                loop {
+                                    let mut line = String::new();
+                                    match reader.read_line(&mut line) {
+                                        Ok(0) => {
+                                            std::thread::sleep(std::time::Duration::from_millis(300));
+                                        }
+                                        Ok(_) => {
+                                            let trimmed = line.trim_end();
+                                            if !trimmed.is_empty() {
+                                                let level = parse_log_level(trimmed);
+                                                let _ = app_handle_file.emit("xray-log", LogPayload {
+                                                    level,
+                                                    message: trimmed.to_string(),
+                                                    timestamp: "".to_string(),
+                                                });
+                                            }
+                                        }
+                                        Err(_) => break,
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    let mut lock = XRAY_PROCESS.lock().map_err(|e| e.to_string())?;
+    *lock = Some(child);
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_kernel_status() -> Result<bool, String> {
+    let mut lock = XRAY_PROCESS.lock().map_err(|e| e.to_string())?;
+    if let Some(ref mut child) = *lock {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                *lock = None;
+                Ok(false)
+            }
+            Ok(None) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    } else {
+        Ok(false)
+    }
+}
+

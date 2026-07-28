@@ -81,10 +81,26 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
       );
     }
     if (value === 'proxy' || value === '代理') {
+      if (allNodes.length > 0) {
+        return (
+          <span className="flex items-center gap-1.5 text-purple-300 font-semibold truncate">
+            <Server className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span>节点: {allNodes[0].name}</span>
+          </span>
+        );
+      }
+      if (proxyGroups.length > 0) {
+        return (
+          <span className="flex items-center gap-1.5 text-blue-300 font-semibold truncate">
+            <Layers className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+            <span>{proxyGroups[0].name}</span>
+          </span>
+        );
+      }
       return (
-        <span className="flex items-center gap-1.5 text-blue-400 font-semibold truncate">
-          <Layers className="w-3.5 h-3.5 shrink-0" />
-          <span>代理 (proxy)</span>
+        <span className="flex items-center gap-1.5 text-emerald-400 font-semibold truncate">
+          <Zap className="w-3.5 h-3.5 shrink-0" />
+          <span>直连 (direct)</span>
         </span>
       );
     }
@@ -129,7 +145,6 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
 
   const actionOptions = [
     { value: 'direct', label: '直连 (direct)', color: 'text-emerald-400', icon: Zap },
-    { value: 'proxy', label: '代理 (proxy)', color: 'text-blue-400', icon: Layers },
     { value: 'block', label: '拒绝 (block)', color: 'text-rose-400', icon: Ban },
   ];
 

@@ -14,6 +14,11 @@ interface KernelStore {
   geoDataStatus: GeoDataStatus | null;
   isUpdatingGeoData: boolean;
 
+  // Standalone No-GUI Kernel Mode Settings
+  standaloneKernel: boolean;
+  keepKernelAliveOnExit: boolean;
+  autoStartKernelDaemon: boolean;
+
   loadInstalledKernels: () => Promise<void>;
   fetchRemoteReleases: () => Promise<void>;
   switchKernel: (kernel: KernelInfo) => void;
@@ -21,6 +26,9 @@ interface KernelStore {
   installRelease: (release: RemoteRelease) => Promise<void>;
   fetchGeoDataInfo: () => Promise<void>;
   updateGeoData: (source?: string) => Promise<void>;
+  toggleStandaloneKernel: () => void;
+  toggleKeepKernelAliveOnExit: () => void;
+  toggleAutoStartKernelDaemon: () => void;
 }
 
 const DEFAULT_BUNDLED_KERNEL: KernelInfo = {
@@ -41,6 +49,10 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
   error: null,
   geoDataStatus: null,
   isUpdatingGeoData: false,
+
+  standaloneKernel: false,
+  keepKernelAliveOnExit: false,
+  autoStartKernelDaemon: false,
 
   loadInstalledKernels: async () => {
     try {
@@ -221,4 +233,11 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
       });
     }
   },
+
+  toggleStandaloneKernel: () =>
+    set((state) => ({ standaloneKernel: !state.standaloneKernel })),
+  toggleKeepKernelAliveOnExit: () =>
+    set((state) => ({ keepKernelAliveOnExit: !state.keepKernelAliveOnExit })),
+  toggleAutoStartKernelDaemon: () =>
+    set((state) => ({ autoStartKernelDaemon: !state.autoStartKernelDaemon })),
 }));
