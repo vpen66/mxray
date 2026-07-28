@@ -651,7 +651,7 @@ export const SettingsPage: React.FC = () => {
             <input
               type="number"
               value={socksPort}
-              onChange={(e) => updatePorts(parseInt(e.target.value) || 10808, httpPort)}
+              onChange={(e) => updatePorts(parseInt(e.target.value) || 7890, httpPort)}
               className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-blue-500"
             />
           </div>
@@ -661,7 +661,7 @@ export const SettingsPage: React.FC = () => {
             <input
               type="number"
               value={httpPort}
-              onChange={(e) => updatePorts(socksPort, parseInt(e.target.value) || 10809)}
+              onChange={(e) => updatePorts(socksPort, parseInt(e.target.value) || 7891)}
               className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-blue-500"
             />
           </div>

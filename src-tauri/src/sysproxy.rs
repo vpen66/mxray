@@ -46,8 +46,8 @@ pub fn set_system_proxy(
     http_port: Option<u16>,
     socks_port: Option<u16>,
 ) -> Result<(), String> {
-    let h_port = http_port.unwrap_or(10809);
-    let s_port = socks_port.unwrap_or(10808);
+    let h_port = http_port.unwrap_or(7891);
+    let _s_port = socks_port.unwrap_or(7890);
     let host = "127.0.0.1";
 
     #[cfg(target_os = "macos")]
@@ -75,7 +75,7 @@ pub fn set_system_proxy(
 
                 // Set SOCKS proxy
                 let _ = Command::new("networksetup")
-                    .args(["-setsocksfirewallproxy", &service, host, &s_port.to_string()])
+                    .args(["-setsocksfirewallproxy", &service, host, &_s_port.to_string()])
                     .output();
                 let _ = Command::new("networksetup")
                     .args(["-setsocksfirewallproxystate", &service, "on"])
@@ -195,8 +195,8 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
                 if is_enabled {
                     return Ok(SystemProxyStatus {
                         enabled: true,
-                        http_port: 10809,
-                        socks_port: 10808,
+                        http_port: 7891,
+                        socks_port: 7890,
                         host: "127.0.0.1".to_string(),
                     });
                 }
@@ -204,8 +204,8 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
         }
         Ok(SystemProxyStatus {
             enabled: false,
-            http_port: 10809,
-            socks_port: 10808,
+            http_port: 7891,
+            socks_port: 7890,
             host: "127.0.0.1".to_string(),
         })
     }
@@ -214,8 +214,8 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
     {
         let reg_path = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
         let mut enabled = false;
-        let mut http_port = 10809;
-        let mut socks_port = 10808;
+        let mut http_port = 7891;
+        let socks_port = 7890;
 
         if let Ok(out) = Command::new("reg")
             .args(["query", reg_path, "/v", "ProxyEnable"])
@@ -264,8 +264,8 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
 
         Ok(SystemProxyStatus {
             enabled,
-            http_port: 10809,
-            socks_port: 10808,
+            http_port: 7891,
+            socks_port: 7890,
             host: "127.0.0.1".to_string(),
         })
     }
@@ -274,8 +274,8 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
     {
         Ok(SystemProxyStatus {
             enabled: false,
-            http_port: 10809,
-            socks_port: 10808,
+            http_port: 7891,
+            socks_port: 7890,
             host: "127.0.0.1".to_string(),
         })
     }

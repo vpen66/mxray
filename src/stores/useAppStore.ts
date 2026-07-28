@@ -76,6 +76,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (get().isTogglingSystemProxy) return;
     set({ isTogglingSystemProxy: true });
     const nextState = !get().coreState.systemProxy;
+    const { httpPort, socksPort } = useConfigStore.getState();
     try {
       if (nextState) {
         // 开启系统代理 -> 同时启动 Xray 内核
@@ -86,8 +87,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         }
         await invoke('set_system_proxy', {
           enable: true,
-          httpPort: 10809,
-          socksPort: 10808,
+          httpPort,
+          socksPort,
         });
         set((state) => ({
           coreState: { ...state.coreState, systemProxy: true, isRunning: true },
@@ -96,8 +97,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         // 关闭系统代理 -> 同时停止 Xray 内核（清理干净后台进程）
         await invoke('set_system_proxy', {
           enable: false,
-          httpPort: 10809,
-          socksPort: 10808,
+          httpPort,
+          socksPort,
         });
         try {
           await invoke('stop_kernel');
@@ -156,11 +157,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
       coreState: { ...state.coreState, isRunning: running },
     })),
   stopKernel: async () => {
+    const { httpPort, socksPort } = useConfigStore.getState();
     try {
       await invoke('set_system_proxy', {
         enable: false,
-        httpPort: 10809,
-        socksPort: 10808,
+        httpPort,
+        socksPort,
       });
       await invoke('stop_kernel');
     } catch {
@@ -171,12 +173,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }));
   },
   startKernel: async () => {
+    const { httpPort, socksPort } = useConfigStore.getState();
     try {
       await useConfigStore.getState().startActiveKernel();
       await invoke('set_system_proxy', {
         enable: true,
-        httpPort: 10809,
-        socksPort: 10808,
+        httpPort,
+        socksPort,
       });
     } catch {
       // web fallback

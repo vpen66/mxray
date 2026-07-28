@@ -57,7 +57,7 @@ export const TEMPLATE_STANDARD = `{
   "inbounds": [
     {
       "tag": "socks-in",
-      "port": 10808,
+      "port": 7890,
       "listen": "127.0.0.1",
       "protocol": "socks",
       "settings": {
@@ -71,7 +71,7 @@ export const TEMPLATE_STANDARD = `{
     },
     {
       "tag": "http-in",
-      "port": 10809,
+      "port": 7891,
       "listen": "127.0.0.1",
       "protocol": "http",
       "settings": {
@@ -164,7 +164,7 @@ export const TEMPLATE_TUN = `{
   "inbounds": [
     {
       "tag": "socks-in",
-      "port": 10808,
+      "port": 7890,
       "listen": "127.0.0.1",
       "protocol": "socks",
       "settings": {
@@ -238,7 +238,7 @@ export const TEMPLATE_MINIMAL = `{
   "inbounds": [
     {
       "tag": "socks-in",
-      "port": 10808,
+      "port": 7890,
       "listen": "127.0.0.1",
       "protocol": "socks",
       "settings": {
@@ -278,7 +278,7 @@ const INITIAL_PROFILES: XrayConfigProfile[] = [
   {
     id: 'cfg-default-standard',
     name: '默认标准分流配置',
-    description: '标准 SOCKS5 (10808) / HTTP (10809) 入站与 CN / OpenAI / Telegram 分流规则',
+    description: '标准 SOCKS5 (7890) / HTTP (7891) 入站与 CN / OpenAI / Telegram 分流规则',
     content: TEMPLATE_STANDARD,
     updatedAt: '2026-07-27 10:00',
     isDefault: true,
@@ -305,8 +305,8 @@ export const useConfigStore = create<ConfigStore>()(
       profiles: INITIAL_PROFILES,
       activeProfileId: 'cfg-default-standard',
       selectedProfileId: 'cfg-default-standard',
-      socksPort: 10808,
-      httpPort: 10809,
+      socksPort: 7890,
+      httpPort: 7891,
       dnsStrategy: 'IPIfNonMatch',
       enableFakeDns: true,
       sniffingEnabled: true,

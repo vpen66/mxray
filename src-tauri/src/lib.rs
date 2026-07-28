@@ -69,7 +69,7 @@ pub fn run() {
     app.run(|_app_handle, event| match event {
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
             let _ = kernel::stop_kernel();
-            let _ = sysproxy::set_system_proxy(false, Some(10809), Some(10808));
+            let _ = sysproxy::set_system_proxy(false, None, None);
         }
         _ => {}
     });

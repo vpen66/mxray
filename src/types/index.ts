@@ -61,12 +61,28 @@ export interface RoutingRule {
   id: string;
   type: 'field';
   outboundTag: string;
+  balancerTag?: string;
   domain?: string[];
   ip?: string[];
   port?: string;
+  sourcePort?: string;
+  network?: string;
+  source?: string[];
+  user?: string[];
+  inboundTag?: string[];
   protocol?: string[];
+  attributes?: Record<string, string>;
   enabled: boolean;
   description?: string;
+}
+
+export interface XrayBalancer {
+  tag: string;
+  selector: string[];
+  strategy?: {
+    type: 'random' | 'leastPing';
+  };
+  fallbackTag?: string;
 }
 
 export interface TrafficStats {
@@ -143,8 +159,10 @@ export interface XrayCustomConfig {
   inbounds?: XrayInbound[];
   outbounds?: XrayOutbound[];
   routing?: {
-    domainStrategy?: string;
+    domainStrategy?: 'AsIs' | 'IPIfNonMatch' | 'IPOnDemand';
+    domainMatcher?: 'hybrid' | 'linear' | 'mph';
     rules?: Record<string, any>[];
+    balancers?: XrayBalancer[];
   };
   dns?: Record<string, any>;
   policy?: Record<string, any>;

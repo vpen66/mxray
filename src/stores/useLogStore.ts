@@ -26,13 +26,13 @@ const MOCK_INITIAL_LOGS: LogEntry[] = [
     id: '2',
     timestamp: new Date(Date.now() - 60000 * 4.9).toLocaleTimeString(),
     level: 'info',
-    message: '[Inbound] socks-in listening on 127.0.0.1:10808 (UDP enabled)',
+    message: '[Inbound] socks-in listening on 127.0.0.1:7890 (UDP enabled)',
   },
   {
     id: '3',
     timestamp: new Date(Date.now() - 60000 * 4.8).toLocaleTimeString(),
     level: 'info',
-    message: '[Inbound] http-in listening on 127.0.0.1:10809',
+    message: '[Inbound] http-in listening on 127.0.0.1:7891',
   },
   {
     id: '4',

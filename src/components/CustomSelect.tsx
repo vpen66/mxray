@@ -20,6 +20,7 @@ interface CustomSelectProps {
   accentColor?: 'cyan' | 'blue' | 'emerald' | 'purple' | 'amber';
   className?: string;
   fullWidth?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export const CustomSelect: React.FC<CustomSelectProps> = ({
@@ -32,9 +33,14 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   accentColor = 'cyan',
   className = '',
   fullWidth = true,
+  onOpenChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
 
   // Close on click outside
   useEffect(() => {

@@ -351,7 +351,7 @@ export const JsonConfigPage: React.FC = () => {
     protocol: 'socks',
     customProtocol: '',
     listen: '127.0.0.1',
-    port: 10808,
+    port: 7890,
     sniffing: true,
     targetAddress: '8.8.8.8',
     targetPort: 53,
@@ -893,7 +893,7 @@ export const JsonConfigPage: React.FC = () => {
 
     const newInbound: any = {
       tag: ib.tag || 'inbound',
-      port: Number(ib.port) || 10808,
+      port: Number(ib.port) || 7890,
       listen: ib.listen || '127.0.0.1',
       protocol: targetProtocol,
     };
@@ -1008,7 +1008,7 @@ export const JsonConfigPage: React.FC = () => {
       protocol: isKnown ? ib.protocol : 'custom',
       customProtocol: isKnown ? '' : ib.protocol || '',
       listen: ib.listen || '127.0.0.1',
-      port: ib.port ?? 10808,
+      port: ib.port ?? 7890,
       sniffing: ib.sniffing?.enabled ?? true,
       targetAddress: ib.settings?.address || '8.8.8.8',
       targetPort: ib.settings?.port ?? 53,
@@ -1531,7 +1531,7 @@ export const JsonConfigPage: React.FC = () => {
         protocol: count === 1 ? 'http' : 'socks',
         customProtocol: '',
         listen: '127.0.0.1',
-        port: count === 0 ? 10808 : count === 1 ? 10809 : 10810 + count,
+        port: count === 0 ? 7890 : count === 1 ? 7891 : 7892 + count,
         sniffing: true,
         targetAddress: '8.8.8.8',
         targetPort: 53,
@@ -2241,9 +2241,6 @@ export const JsonConfigPage: React.FC = () => {
                     <h4 className="font-bold text-white flex items-center gap-2">
                       <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
                       <span>入站配置</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-                        步骤一 · 流量入口
-                      </span>
                     </h4>
                     <button
                       onClick={() => handleOpenInboundModal()}
@@ -2298,9 +2295,6 @@ export const JsonConfigPage: React.FC = () => {
                     <h4 className="font-bold text-white flex items-center gap-2">
                       <Layers className="w-4 h-4 text-emerald-400" />
                       <span>策略分流规则映射</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                        步骤二 · 路由匹配
-                      </span>
                     </h4>
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] text-emerald-300 font-mono">
@@ -2441,9 +2435,6 @@ export const JsonConfigPage: React.FC = () => {
                     <h4 className="font-bold text-white flex items-center gap-2">
                       <Server className="w-4 h-4 text-blue-400" />
                       <span>节点出站映射</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-300 border border-blue-500/20">
-                        步骤三 · 节点出站
-                      </span>
                     </h4>
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] text-blue-300 font-mono">
@@ -3063,7 +3054,7 @@ export const JsonConfigPage: React.FC = () => {
                       <label className="block text-xs font-semibold text-slate-300 mb-1">监听端口 Port</label>
                       <input
                         type="number"
-                        placeholder="10808"
+                        placeholder="7890"
                         value={inboundModal.port}
                         onChange={(e) => setInboundModal((prev) => ({ ...prev, port: e.target.value }))}
                         className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"

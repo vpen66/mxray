@@ -15,9 +15,13 @@ export interface XrayRoutingRule {
   domain?: string[];
   ip?: string[];
   port?: string;
-  protocol?: string[];
-  inboundTag?: string[];
+  sourcePort?: string;
   network?: string;
+  source?: string[];
+  user?: string[];
+  inboundTag?: string[];
+  protocol?: string[];
+  attributes?: Record<string, string>;
   enabled?: boolean;
   description?: string;
 }
@@ -526,7 +530,7 @@ export function syncNodesAndGroupsToConfigJson(
   const ruleKeys = new Set<string>();
 
   for (const r of combinedRules) {
-    const key = `${r.outboundTag}-${(r.domain || []).join(',')}-${(r.ip || []).join(',')}`;
+    const key = `${r.outboundTag || r.balancerTag || 'none'}-${(r.domain || []).join(',')}-${(r.ip || []).join(',')}-${r.port || ''}-${r.sourcePort || ''}-${r.network || ''}-${(r.protocol || []).join(',')}`;
     if (!ruleKeys.has(key)) {
       ruleKeys.add(key);
       baseRules.push(r);
