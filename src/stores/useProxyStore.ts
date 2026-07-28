@@ -4,10 +4,12 @@ import type { Profile, ProxyGroup, ProxyNode } from '../types';
 import { useConfigStore } from './useConfigStore';
 
 function triggerConfigSync(get: () => ProxyStore) {
-  setTimeout(() => {
+  setTimeout(async () => {
     const state = get();
     const allNodes = state.profiles.flatMap((p) => p.nodes);
-    useConfigStore.getState().syncNodesAndGroups(allNodes, state.proxyGroups, state.selectedNodeId);
+    const { useAppStore } = await import('./useAppStore');
+    const mode = useAppStore.getState().coreState.mode;
+    useConfigStore.getState().syncNodesAndGroups(allNodes, state.proxyGroups, state.selectedNodeId, mode);
   }, 0);
 }
 
@@ -19,6 +21,7 @@ interface ProxyStore {
   selectNode: (nodeId: string) => void;
   selectGroupNode: (groupId: string, nodeIdOrTag: string) => void;
   testNodeLatency: (nodeId: string) => Promise<void>;
+  testProfileLatencies: (profileId: string) => Promise<void>;
   testAllLatencies: () => Promise<void>;
   addProfile: (profile: Profile) => void;
   removeProfile: (profileId: string) => void;
@@ -107,6 +110,17 @@ export const useProxyStore = create<ProxyStore>()(
             ),
           })),
         }));
+      },
+
+      testProfileLatencies: async (profileId) => {
+        set({ isTestingLatency: true });
+        const profile = get().profiles.find((p) => p.id === profileId);
+        if (profile) {
+          for (const node of profile.nodes) {
+            await get().testNodeLatency(node.id);
+          }
+        }
+        set({ isTestingLatency: false });
       },
 
       testAllLatencies: async () => {

@@ -18,6 +18,7 @@ interface ConnectionStore {
   setFilterTab: (tab: 'active' | 'closed' | 'all') => void;
   setSelectedChainFilter: (chain: string) => void;
   setRegexMode: (enabled: boolean) => void;
+  updateModeConnections: (mode: string, activeNodeName?: string) => void;
   initConnectionSimulation: () => () => void;
 }
 
@@ -28,7 +29,7 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     network: 'TCP',
     inboundTag: 'tun-in',
     rule: 'Match',
-    chain: ['其他流量', '国际流量', 'jb-dcdb1d31rp'],
+    chain: ['其他流量', '国外流量', 'tw'],
     destinationIp: '43.129.21.90:443',
     processName: 'navicat',
     download: 8612,
@@ -60,7 +61,7 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     network: 'TCP',
     inboundTag: 'tun-in',
     rule: 'DomainKeyword(google)',
-    chain: ['国际流量', 'jb-dcdb1d31rp'],
+    chain: ['国外流量', 'tw'],
     destinationIp: '142.250.207.74:443',
     processName: 'chrome',
     download: 11980,
@@ -76,7 +77,7 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     network: 'TCP',
     inboundTag: 'tun-in',
     rule: 'DomainKeyword(google)',
-    chain: ['国际流量', 'jb-dcdb1d31rp'],
+    chain: ['国外流量', '6amuemkt5i'],
     destinationIp: '172.217.160.106:443',
     processName: 'Code Helper',
     download: 77824,
@@ -92,7 +93,7 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     network: 'TCP',
     inboundTag: 'socks-in',
     rule: 'DomainKeyword(google)',
-    chain: ['国际流量', 'jb-dcdb1d31rp'],
+    chain: ['国外流量', 'tw'],
     destinationIp: '108.177.125.188:5228',
     processName: 'system',
     download: 6892,
@@ -108,7 +109,7 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     network: 'TCP',
     inboundTag: 'tun-in',
     rule: 'DomainSuffix(chatgpt.com)',
-    chain: ['OpenAI', '国际流量', 'jb-dcdb1d31rp'],
+    chain: ['OpenAI', '国外流量', 'tw'],
     destinationIp: '104.18.32.7:443',
     processName: 'chrome',
     download: 5785,
@@ -156,7 +157,7 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     network: 'TCP',
     inboundTag: 'tun-in',
     rule: 'DomainSuffix(chatgpt.com)',
-    chain: ['OpenAI', '国际流量', 'jb-dcdb1d31rp'],
+    chain: ['OpenAI', '国外流量', 'tw'],
     destinationIp: '104.18.33.7:443',
     processName: 'chrome',
     download: 5765,
@@ -172,7 +173,7 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     network: 'UDP',
     inboundTag: 'tun-in',
     rule: 'Match',
-    chain: ['其他流量', '国际流量', 'jb-dcdb1d31rp'],
+    chain: ['其他流量', '国外流量', '6amuemkt5i'],
     destinationIp: '1.1.1.1:443',
     processName: 'dns-resolver',
     download: 7055,
@@ -188,7 +189,7 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     network: 'TCP',
     inboundTag: 'socks-in',
     rule: 'DomainSuffix(adblockplus.org)',
-    chain: ['国际流量', 'jb-dcdb1d31rp'],
+    chain: ['国外流量', 'tw'],
     destinationIp: '104.22.61.12:443',
     processName: 'chrome',
     download: 1054,
@@ -200,6 +201,20 @@ const INITIAL_CONNECTIONS: ConnectionItem[] = [
     closedTime: Date.now() - 30000,
   },
 ];
+
+const ORIGINAL_CONNECTIONS: Record<string, { rule: string; chain: string[] }> = {
+  'conn-1': { rule: 'Match', chain: ['其他流量', '国外流量', 'tw'] },
+  'conn-2': { rule: 'DomainSuffix(qq.com)', chain: ['国内流量', '直接连接', 'DIRECT'] },
+  'conn-3': { rule: 'DomainKeyword(google)', chain: ['国外流量', 'tw'] },
+  'conn-4': { rule: 'DomainKeyword(google)', chain: ['国外流量', '6amuemkt5i'] },
+  'conn-5': { rule: 'DomainKeyword(google)', chain: ['国外流量', 'tw'] },
+  'conn-6': { rule: 'DomainSuffix(chatgpt.com)', chain: ['OpenAI', '国外流量', 'tw'] },
+  'conn-7': { rule: 'GeoIP(cn)', chain: ['国内流量', '直接连接', 'DIRECT'] },
+  'conn-8': { rule: 'DomainSuffix(topode.com)', chain: ['DIRECT'] },
+  'conn-9': { rule: 'DomainSuffix(chatgpt.com)', chain: ['OpenAI', '国外流量', 'tw'] },
+  'conn-10': { rule: 'Match', chain: ['其他流量', '国外流量', '6amuemkt5i'] },
+  'conn-11': { rule: 'DomainSuffix(adblockplus.org)', chain: ['国外流量', 'tw'] },
+};
 
 export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   connections: INITIAL_CONNECTIONS,
@@ -235,6 +250,41 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   setFilterTab: (filterTab) => set({ filterTab }),
   setSelectedChainFilter: (selectedChainFilter) => set({ selectedChainFilter }),
   setRegexMode: (regexMode) => set({ regexMode }),
+
+  updateModeConnections: (mode: string, activeNodeName: string = '代理节点') =>
+    set((state) => ({
+      connections: state.connections.map((c) => {
+        if (mode === 'direct') {
+          return {
+            ...c,
+            rule: 'MXRay Mode Override: Direct',
+            chain: ['直连模式', 'DIRECT'],
+          };
+        }
+        if (mode === 'global') {
+          const isPrivate = c.host.startsWith('192.168.') || c.host.startsWith('10.') || c.host.startsWith('127.');
+          if (isPrivate) {
+            return {
+              ...c,
+              rule: 'MXRay Mode Override: Global Private Direct',
+              chain: ['局域网直连', 'DIRECT'],
+            };
+          }
+          return {
+            ...c,
+            rule: 'MXRay Mode Override: Global Proxy',
+            chain: ['全局代理', activeNodeName],
+          };
+        }
+        // Restoring 'rule' mode
+        const orig = ORIGINAL_CONNECTIONS[c.id];
+        return {
+          ...c,
+          rule: orig ? orig.rule : c.rule,
+          chain: orig ? orig.chain : c.chain,
+        };
+      }),
+    })),
 
   initConnectionSimulation: () => {
     const timer = setInterval(() => {

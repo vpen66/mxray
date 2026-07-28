@@ -1,4 +1,4 @@
-import type { ProxyNode, ProxyGroup } from '../types';
+import type { ProxyNode, ProxyGroup, OutboundMode } from '../types';
 
 export interface XrayOutbound {
   tag: string;
@@ -306,7 +306,8 @@ export function syncNodesAndGroupsToConfigJson(
   rawConfigJson: string,
   nodes: ProxyNode[],
   groups: ProxyGroup[] = [],
-  selectedNodeId?: string
+  selectedNodeId?: string,
+  mode: OutboundMode = 'rule'
 ): string {
   let config: XrayConfigObject = {};
 
@@ -380,7 +381,11 @@ export function syncNodesAndGroupsToConfigJson(
     };
   }
 
-  const existingRules = config.routing.rules || [];
+  // Clean out any previously injected mode override rules to keep user rules intact
+  const rawExistingRules = config.routing.rules || [];
+  const existingRules = rawExistingRules.filter(
+    (rule) => !(rule.description && rule.description.startsWith('MXRay Mode Override'))
+  );
 
   // Replace any existing rule pointing to 'proxy' with the active node's tag (if nodes exist)
   const updatedExistingRules = existingRules.map((rule) => {
@@ -429,19 +434,47 @@ export function syncNodesAndGroupsToConfigJson(
   }
 
   // Combine existing non-group rules with strategy group rules
-  const finalRules: XrayRoutingRule[] = [...groupRoutingRules, ...updatedExistingRules];
-  const uniqueRules: XrayRoutingRule[] = [];
+  const combinedRules: XrayRoutingRule[] = [...groupRoutingRules, ...updatedExistingRules];
+  const baseRules: XrayRoutingRule[] = [];
   const ruleKeys = new Set<string>();
 
-  for (const r of finalRules) {
+  for (const r of combinedRules) {
     const key = `${r.outboundTag}-${(r.domain || []).join(',')}-${(r.ip || []).join(',')}`;
     if (!ruleKeys.has(key)) {
       ruleKeys.add(key);
-      uniqueRules.push(r);
+      baseRules.push(r);
     }
   }
 
-  config.routing.rules = uniqueRules;
+  // Construct mode override rules dynamically based on selected mode
+  let modeOverrideRules: XrayRoutingRule[] = [];
+  if (mode === 'direct') {
+    modeOverrideRules = [
+      {
+        type: 'field',
+        outboundTag: 'direct',
+        network: 'tcp,udp',
+        description: 'MXRay Mode Override: Direct',
+      },
+    ];
+  } else if (mode === 'global') {
+    modeOverrideRules = [
+      {
+        type: 'field',
+        outboundTag: 'direct',
+        ip: ['geoip:private'],
+        description: 'MXRay Mode Override: Global Private Direct',
+      },
+      {
+        type: 'field',
+        outboundTag: activeNodeTag,
+        network: 'tcp,udp',
+        description: 'MXRay Mode Override: Global Proxy',
+      },
+    ];
+  }
+
+  config.routing.rules = [...modeOverrideRules, ...baseRules];
 
   return JSON.stringify(config, null, 2);
 }

@@ -113,7 +113,9 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
       );
     }
 
-    const matchedGroup = proxyGroups.find((g) => g.name === value || g.id === value);
+    const matchedGroup = proxyGroups.find(
+      (g) => g.name === value || g.id === value || (value && (value.startsWith(g.name) || value.includes(g.id)))
+    );
     if (matchedGroup) {
       return (
         <span className="flex items-center gap-1.5 text-blue-300 font-semibold truncate">
@@ -126,7 +128,9 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
       );
     }
 
-    const matchedNode = allNodes.find((n) => n.name === value || n.id === value);
+    const matchedNode = allNodes.find(
+      (n) => n.name === value || n.id === value || (value && (value.startsWith(n.name) || value.includes(n.id)))
+    );
     if (matchedNode) {
       return (
         <span className="flex items-center gap-1.5 text-purple-300 font-semibold truncate">
@@ -218,7 +222,7 @@ export const OutboundSelect: React.FC<OutboundSelectProps> = ({
           )}
 
           {/* Options Scroll List */}
-          <div className="p-1.5 overflow-y-auto space-y-2 text-xs custom-scrollbar">
+          <div className="p-1.5 overflow-y-auto overscroll-contain space-y-2 text-xs custom-scrollbar">
             {totalResults === 0 && (
               <div className="py-4 text-center text-slate-500 text-xs">
                 未找到匹配的出站目标

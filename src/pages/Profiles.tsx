@@ -3,13 +3,22 @@ import { Plus, Link2, Trash2, Sparkles, Code2, X, Globe, FileText } from 'lucide
 import { useProxyStore } from '../stores/useProxyStore';
 import type { Profile } from '../types';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { ProfileNodeSelect } from '../components/ProfileNodeSelect';
 
 import { parseSubscriptionContent, fetchAndParseSubscriptionUrl } from '../utils/subParser';
 import type { ProxyNode } from '../types';
 import { formatShanghaiTime } from '../utils/date';
 
 export const ProfilesPage: React.FC = () => {
-  const { profiles, addProfile, removeProfile } = useProxyStore();
+  const {
+    profiles,
+    selectedNodeId,
+    selectNode,
+    testNodeLatency,
+    testProfileLatencies,
+    addProfile,
+    removeProfile,
+  } = useProxyStore();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [deletingProfile, setDeletingProfile] = useState<Profile | null>(null);
@@ -152,6 +161,14 @@ export const ProfilesPage: React.FC = () => {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
+
+              <ProfileNodeSelect
+                profile={profile}
+                selectedNodeId={selectedNodeId}
+                onSelectNode={selectNode}
+                onTestNodeLatency={testNodeLatency}
+                onTestProfileLatencies={testProfileLatencies}
+              />
 
               <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-white/5">
                 <span>节点数量: <strong className="text-slate-200">{profile.nodes.length} 个</strong></span>

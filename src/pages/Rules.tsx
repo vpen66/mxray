@@ -10,6 +10,10 @@ import {
   X,
   Search,
   Sliders,
+  CheckSquare,
+  Square,
+  Power,
+  PowerOff,
 } from 'lucide-react';
 import type { RoutingRule } from '../types';
 import { useProxyStore } from '../stores/useProxyStore';
@@ -65,6 +69,10 @@ export const RulesPage: React.FC = () => {
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [activeOpenRuleId, setActiveOpenRuleId] = useState<string | null>(null);
+
+  // Multi-select state
+  const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
+  const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     if (!targetConfigProfile?.content) return;
@@ -132,6 +140,68 @@ export const RulesPage: React.FC = () => {
     }
   };
 
+  const filteredRules = rules.filter((r) => {
+    const q = searchQuery.toLowerCase();
+    return (
+      r.description?.toLowerCase().includes(q) ||
+      r.outboundTag.toLowerCase().includes(q) ||
+      r.domain?.some((d) => d.toLowerCase().includes(q)) ||
+      r.ip?.some((ip) => ip.toLowerCase().includes(q))
+    );
+  });
+
+  // Multi-select actions
+  const isAllSelected =
+    filteredRules.length > 0 &&
+    filteredRules.every((r) => selectedRuleIds.includes(r.id));
+
+  const toggleSelectRule = (id: string) => {
+    setSelectedRuleIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      const filteredIds = new Set(filteredRules.map((r) => r.id));
+      setSelectedRuleIds((prev) => prev.filter((id) => !filteredIds.has(id)));
+    } else {
+      const filteredIds = filteredRules.map((r) => r.id);
+      setSelectedRuleIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
+
+  const handleBatchEnable = () => {
+    if (selectedRuleIds.length === 0) return;
+    const selectedSet = new Set(selectedRuleIds);
+    const newRules = rules.map((r) =>
+      selectedSet.has(r.id) ? { ...r, enabled: true } : r
+    );
+    updateRulesAndSync(newRules);
+  };
+
+  const handleBatchDisable = () => {
+    if (selectedRuleIds.length === 0) return;
+    const selectedSet = new Set(selectedRuleIds);
+    const newRules = rules.map((r) =>
+      selectedSet.has(r.id) ? { ...r, enabled: false } : r
+    );
+    updateRulesAndSync(newRules);
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedRuleIds.length === 0) return;
+    setIsBatchDeleteModalOpen(true);
+  };
+
+  const handleConfirmBatchDelete = () => {
+    const selectedSet = new Set(selectedRuleIds);
+    const newRules = rules.filter((r) => !selectedSet.has(r.id));
+    updateRulesAndSync(newRules);
+    setSelectedRuleIds([]);
+    setIsBatchDeleteModalOpen(false);
+  };
+
   const handleOpenCreateModal = () => {
     setEditingRule(null);
     setIsModalOpen(true);
@@ -153,6 +223,7 @@ export const RulesPage: React.FC = () => {
   const handleConfirmDeleteRule = () => {
     if (deletingRule) {
       updateRulesAndSync(rules.filter((r) => r.id !== deletingRule.id));
+      setSelectedRuleIds((prev) => prev.filter((id) => id !== deletingRule.id));
       setDeletingRule(null);
     }
   };
@@ -193,17 +264,6 @@ export const RulesPage: React.FC = () => {
     setIsModalOpen(false);
   };
 
-
-  const filteredRules = rules.filter((r) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      r.description?.toLowerCase().includes(q) ||
-      r.outboundTag.toLowerCase().includes(q) ||
-      r.domain?.some((d) => d.toLowerCase().includes(q)) ||
-      r.ip?.some((ip) => ip.toLowerCase().includes(q))
-    );
-  });
-
   return (
     <div className="space-y-6">
       {/* Top Header & Actions */}
@@ -228,35 +288,116 @@ export const RulesPage: React.FC = () => {
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="flex items-center gap-2 bg-slate-900/60 p-3 rounded-xl border border-white/5">
-        <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-white/10 w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="搜索规则描述、域名关键字、IP或代理组..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent border-none text-xs text-white placeholder-slate-500 focus:outline-none w-full font-mono"
-          />
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-xl border border-white/5">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={toggleSelectAll}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950 border border-white/10 hover:border-blue-500/50 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer shrink-0"
+            title={isAllSelected ? '取消全选' : '全选当前规则'}
+          >
+            {isAllSelected ? (
+              <CheckSquare className="w-4 h-4 text-blue-400" />
+            ) : (
+              <Square className="w-4 h-4 text-slate-500" />
+            )}
+            <span>{isAllSelected ? '取消全选' : '全选'}</span>
+          </button>
+
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-white/10 flex-1 sm:w-80">
+            <Search className="w-4 h-4 text-slate-500 shrink-0" />
+            <input
+              type="text"
+              placeholder="搜索规则描述、域名关键字、IP或代理组..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none text-xs text-white placeholder-slate-500 focus:outline-none w-full font-mono"
+            />
+          </div>
         </div>
+
         <span className="text-[11px] text-slate-400 font-mono hidden sm:inline-block">
           共 {rules.length} 条路由规则 (按优先级自上而下第一匹配)
         </span>
       </div>
 
+      {/* Batch Actions Bar */}
+      {selectedRuleIds.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-blue-950/40 border border-blue-500/30 p-3 rounded-xl animate-fade-in backdrop-blur-sm shadow-lg shadow-blue-950/20">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+            <span className="text-xs font-bold text-blue-200">
+              已选中 <span className="text-white underline decoration-blue-400 font-mono">{selectedRuleIds.length}</span> 条路由规则
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleBatchEnable}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Power className="w-3.5 h-3.5" />
+              <span>批量启用</span>
+            </button>
+
+            <button
+              onClick={handleBatchDisable}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 text-xs font-bold transition-all cursor-pointer"
+            >
+              <PowerOff className="w-3.5 h-3.5" />
+              <span>批量关闭</span>
+            </button>
+
+            <button
+              onClick={handleBatchDelete}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>批量删除</span>
+            </button>
+
+            <div className="h-4 w-px bg-white/10 mx-1 hidden sm:block" />
+
+            <button
+              onClick={() => setSelectedRuleIds([])}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-white/5 text-xs transition-colors cursor-pointer"
+            >
+              取消选择
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Rules List */}
       <div className="space-y-3">
         {filteredRules.map((rule, idx) => {
           const isDropdownOpen = activeOpenRuleId === rule.id;
+          const isSelected = selectedRuleIds.includes(rule.id);
           return (
             <div
               key={rule.id}
               style={{ zIndex: isDropdownOpen ? 50 : rules.length - idx }}
               className={`glass-card relative p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
-                rule.enabled ? 'border-white/10 bg-slate-900/40' : 'border-white/5 opacity-50 bg-slate-950/40'
+                isSelected
+                  ? 'border-blue-500/50 bg-blue-950/20 ring-1 ring-blue-500/30'
+                  : rule.enabled
+                  ? 'border-white/10 bg-slate-900/40'
+                  : 'border-white/5 opacity-50 bg-slate-950/40'
               }`}
             >
               <div className="flex items-start md:items-center gap-3">
+                {/* Multi-select Checkbox */}
+                <button
+                  onClick={() => toggleSelectRule(rule.id)}
+                  className="p-1 rounded-md text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0 mt-0.5 md:mt-0"
+                  title={isSelected ? '取消选择' : '选择规则'}
+                >
+                  {isSelected ? (
+                    <CheckSquare className="w-4 h-4 text-blue-400" />
+                  ) : (
+                    <Square className="w-4 h-4 text-slate-600 hover:text-slate-400" />
+                  )}
+                </button>
+
                 {/* Order index badge & Priority controls */}
                 <div className="flex flex-col items-center gap-0.5 shrink-0">
                   <span className="w-6 h-6 rounded-lg bg-slate-950 border border-white/10 text-slate-300 font-mono text-xs font-bold flex items-center justify-center">
@@ -308,45 +449,45 @@ export const RulesPage: React.FC = () => {
                   />
                 </div>
 
-              {/* Actions: Enable Toggle, Edit, Clone, Delete */}
-              <button
-                onClick={() => handleToggleEnable(rule.id)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  rule.enabled
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                    : 'bg-slate-900 text-slate-500 border-white/5'
-                }`}
-              >
-                {rule.enabled ? '启用' : '禁用'}
-              </button>
+                {/* Actions: Enable Toggle, Edit, Clone, Delete */}
+                <button
+                  onClick={() => handleToggleEnable(rule.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                    rule.enabled
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-slate-900 text-slate-500 border-white/5'
+                  }`}
+                >
+                  {rule.enabled ? '启用' : '禁用'}
+                </button>
 
-              <button
-                onClick={() => handleOpenEditModal(rule)}
-                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-white/5 transition-colors"
-                title="编辑高级规则"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-              </button>
+                <button
+                  onClick={() => handleOpenEditModal(rule)}
+                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-white/5 transition-colors cursor-pointer"
+                  title="编辑高级规则"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
 
-              <button
-                onClick={() => handleClone(rule)}
-                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-blue-400 border border-white/5 transition-colors"
-                title="克隆此规则"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
+                <button
+                  onClick={() => handleClone(rule)}
+                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-blue-400 border border-white/5 transition-colors cursor-pointer"
+                  title="克隆此规则"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
 
-              <button
-                onClick={() => handleDeleteRule(rule)}
-                className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-600/20 text-slate-500 hover:text-rose-400 border border-white/5 transition-colors"
-                title="删除规则"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+                <button
+                  onClick={() => handleDeleteRule(rule)}
+                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-600/20 text-slate-500 hover:text-rose-400 border border-white/5 transition-colors cursor-pointer"
+                  title="删除规则"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
       </div>
 
       {/* Advanced Rule Creation & Editing Modal */}
@@ -360,7 +501,7 @@ export const RulesPage: React.FC = () => {
         />
       )}
 
-      {/* Delete Rule Confirmation Modal */}
+      {/* Delete Single Rule Confirmation Modal */}
       <ConfirmModal
         isOpen={!!deletingRule}
         title="删除分流规则"
@@ -372,6 +513,20 @@ export const RulesPage: React.FC = () => {
         confirmText="确认删除"
         onConfirm={handleConfirmDeleteRule}
         onCancel={() => setDeletingRule(null)}
+      />
+
+      {/* Delete Multiple Rules Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isBatchDeleteModalOpen}
+        title="批量删除分流规则"
+        message={
+          <span>
+            确定要批量删除选中的 <strong className="text-rose-400 font-semibold">{selectedRuleIds.length}</strong> 条分流规则吗？删除后配置无法撤销。
+          </span>
+        }
+        confirmText="确认批量删除"
+        onConfirm={handleConfirmBatchDelete}
+        onCancel={() => setIsBatchDeleteModalOpen(false)}
       />
     </div>
   );

@@ -108,7 +108,24 @@ export const ConnectionsPage: React.FC = () => {
     setTargetDomainRule(initialRule);
     setDomainRuleType('full');
 
-    const currentOutbound = conn.chain[conn.chain.length - 1] || 'direct';
+    let currentOutbound = conn.chain[conn.chain.length - 1] || 'direct';
+    const matchedNode = allNodes.find((n) => n.name === currentOutbound || n.id === currentOutbound || (currentOutbound && (currentOutbound.startsWith(n.name) || currentOutbound.includes(n.id))));
+    const matchedGroup = proxyGroups.find((g) => g.name === currentOutbound || g.id === currentOutbound || (currentOutbound && (currentOutbound.startsWith(g.name) || currentOutbound.includes(g.id))));
+
+    if (matchedNode) {
+      currentOutbound = matchedNode.name;
+    } else if (matchedGroup) {
+      currentOutbound = matchedGroup.name;
+    } else if (currentOutbound !== 'direct' && currentOutbound !== 'block' && currentOutbound !== 'DIRECT' && currentOutbound !== 'BLOCK') {
+      if (proxyGroups.length > 0) {
+        currentOutbound = proxyGroups[0].name;
+      } else if (allNodes.length > 0) {
+        currentOutbound = allNodes[0].name;
+      } else {
+        currentOutbound = 'direct';
+      }
+    }
+
     setTargetOutbound(currentOutbound);
     setRuleDescription(`针对 ${conn.host} 的自定义路由规则`);
   };
@@ -139,27 +156,59 @@ export const ConnectionsPage: React.FC = () => {
         config.routing.rules = [];
       }
 
+      const cleanHost = ruleEditingConnection.host.split(':')[0];
+      const rootDomain = cleanHost.split('.').slice(-2).join('.');
       const isIpRule = targetDomainRule.startsWith('ip:');
-      const ruleVal = targetDomainRule.replace(/^(domain:|ip:)/, '');
+      const formattedDomainRule = targetDomainRule.startsWith('domain:') || targetDomainRule.startsWith('ip:')
+        ? targetDomainRule
+        : `domain:${targetDomainRule}`;
+      const ruleVal = formattedDomainRule.replace(/^(domain:|ip:)/, '');
 
-      const ruleItem = isIpRule
+      // Helper to detect existing matching rule for this host/domain
+      const isRuleMatch = (r: any) => {
+        if (r.description && (r.description.includes(ruleEditingConnection.host) || r.description.includes(cleanHost))) {
+          return true;
+        }
+        if (r.domain && Array.isArray(r.domain)) {
+          if (
+            r.domain.includes(formattedDomainRule) ||
+            r.domain.includes(ruleVal) ||
+            r.domain.includes(cleanHost) ||
+            r.domain.includes(`domain:${cleanHost}`) ||
+            (rootDomain && r.domain.includes(`domain:${rootDomain}`))
+          ) {
+            return true;
+          }
+        }
+        if (r.ip && Array.isArray(r.ip)) {
+          if (r.ip.includes(ruleVal) || r.ip.includes(cleanHost)) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      // Filter out any existing duplicate rules for this host/domain to ensure no duplicate entries
+      const otherRules = config.routing.rules.filter((r: any) => !isRuleMatch(r));
+
+      const updatedRuleItem = isIpRule
         ? {
             type: 'field',
             outboundTag: targetOutbound,
             ip: [ruleVal],
             enabled: true,
-            description: ruleDescription || `针对 ${ruleEditingConnection.host} 的规则`,
+            description: ruleDescription || `针对 ${ruleEditingConnection.host} 的自定义路由规则`,
           }
         : {
             type: 'field',
             outboundTag: targetOutbound,
-            domain: [targetDomainRule.startsWith('domain:') ? targetDomainRule : `domain:${targetDomainRule}`],
+            domain: [formattedDomainRule],
             enabled: true,
-            description: ruleDescription || `针对 ${ruleEditingConnection.host} 的规则`,
+            description: ruleDescription || `针对 ${ruleEditingConnection.host} 的自定义路由规则`,
           };
 
-      // Prepend to routing.rules so it takes priority
-      config.routing.rules.unshift(ruleItem);
+      // Put the single updated rule at the top of routing rules
+      config.routing.rules = [updatedRuleItem, ...otherRules];
 
       // Save to config store profile
       updateProfile(targetConfigProfile.id, { content: JSON.stringify(config, null, 2) });
@@ -694,7 +743,7 @@ export const ConnectionsPage: React.FC = () => {
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+            <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto overscroll-contain custom-scrollbar">
               {/* Visual Pipeline Flowchart */}
               <div>
                 <div className="text-xs font-semibold text-slate-400 mb-3 flex items-center gap-1.5">
@@ -865,7 +914,7 @@ export const ConnectionsPage: React.FC = () => {
             </div>
 
             {/* Form Content Body with extra bottom padding for dropdown popovers */}
-            <div className="p-5 space-y-4 text-xs overflow-y-auto custom-scrollbar flex-1 pb-44">
+            <div className="p-5 space-y-4 text-xs overflow-y-auto overscroll-contain custom-scrollbar flex-1 pb-44">
               {/* Host Banner */}
               <div className="p-3 rounded-xl bg-slate-950 border border-white/10 space-y-1">
                 <div className="text-[11px] text-slate-400">当前目标主机 (Host)</div>

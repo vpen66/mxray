@@ -42,10 +42,36 @@ export const useAppStore = create<AppStore>((set, get) => ({
   isTogglingSystemProxy: false,
   isTogglingTunMode: false,
 
-  setMode: (mode) =>
+  setMode: async (mode) => {
     set((state) => ({
       coreState: { ...state.coreState, mode },
-    })),
+    }));
+
+    try {
+      const { useProxyStore } = await import('./useProxyStore');
+      const { useConfigStore } = await import('./useConfigStore');
+      const { useConnectionStore } = await import('./useConnectionStore');
+
+      const proxyState = useProxyStore.getState();
+      const allNodes = proxyState.profiles.flatMap((p) => p.nodes);
+      const activeNode = allNodes.find((n) => n.id === proxyState.selectedNodeId);
+
+      useConfigStore.getState().syncNodesAndGroups(
+        allNodes,
+        proxyState.proxyGroups,
+        proxyState.selectedNodeId,
+        mode
+      );
+
+      useConnectionStore.getState().updateModeConnections(mode, activeNode?.name || '代理节点');
+
+      if (get().coreState.isRunning) {
+        await useConfigStore.getState().startActiveKernel();
+      }
+    } catch (e) {
+      console.warn('Set mode sync warning:', e);
+    }
+  },
   toggleSystemProxy: async () => {
     if (get().isTogglingSystemProxy) return;
     set({ isTogglingSystemProxy: true });

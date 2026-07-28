@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { XrayConfigProfile } from '../types';
+import type { XrayConfigProfile, OutboundMode } from '../types';
 import { syncNodesAndGroupsToConfigJson } from '../utils/xrayMapper';
 import { invoke } from '@tauri-apps/api/core';
 import { getShanghaiNowString } from '../utils/date';
@@ -26,7 +26,7 @@ interface ConfigStore {
   setDnsStrategy: (strategy: string) => void;
   toggleFakeDns: () => void;
   toggleSniffing: () => void;
-  syncNodesAndGroups: (nodes: any[], groups: any[], selectedNodeId?: string) => void;
+  syncNodesAndGroups: (nodes: any[], groups: any[], selectedNodeId?: string, mode?: OutboundMode) => void;
   startActiveKernel: () => Promise<void>;
 }
 
@@ -394,11 +394,11 @@ export const useConfigStore = create<ConfigStore>()(
       toggleFakeDns: () => set((state) => ({ enableFakeDns: !state.enableFakeDns })),
       toggleSniffing: () => set((state) => ({ sniffingEnabled: !state.sniffingEnabled })),
       
-      syncNodesAndGroups: (nodes, groups, selectedNodeId) => {
+      syncNodesAndGroups: (nodes, groups, selectedNodeId, mode) => {
         set((prevState) => ({
           profiles: prevState.profiles.map((p) => ({
             ...p,
-            content: syncNodesAndGroupsToConfigJson(p.content, nodes, groups, selectedNodeId),
+            content: syncNodesAndGroupsToConfigJson(p.content, nodes, groups, selectedNodeId, mode),
           })),
         }));
       },

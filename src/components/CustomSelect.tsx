@@ -133,7 +133,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       {/* Popover Dropdown List */}
       {isOpen && !disabled && (
         <div className="absolute left-0 top-[calc(100%+6px)] min-w-full w-max max-w-[380px] max-h-60 bg-slate-900/98 backdrop-blur-2xl border border-slate-700/80 rounded-xl shadow-2xl shadow-black/90 z-[100] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
-          <div className="p-1.5 overflow-y-auto space-y-0.5 text-xs custom-scrollbar">
+          <div className="p-1.5 overflow-y-auto overscroll-contain space-y-0.5 text-xs custom-scrollbar">
             {options.length === 0 ? (
               <div className="py-3 text-center text-slate-500 text-xs">无可用选项</div>
             ) : (
