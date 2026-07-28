@@ -35,6 +35,8 @@ export interface XrayConfigObject {
   dns?: Record<string, any>;
   fakedns?: Record<string, any>[];
   policy?: Record<string, any>;
+  observatory?: Record<string, any>;
+  burstObservatory?: Record<string, any>;
   [key: string]: any;
 }
 
@@ -372,7 +374,7 @@ export function syncNodesAndGroupsToConfigJson(
 
   config.outbounds = finalOutbounds;
 
-  // Build/Sync routing rules based on strategy groups
+  // Build/Sync routing rules and balancers based on strategy groups
   if (!config.routing) {
     config.routing = {
       domainStrategy: 'IPIfNonMatch',
@@ -396,40 +398,119 @@ export function syncNodesAndGroupsToConfigJson(
   });
 
   const groupRoutingRules: XrayRoutingRule[] = [];
+  const balancers: Record<string, any>[] = [];
+  const observatorySubjectSelectors = new Set<string>();
+  let probeUrl = 'https://www.gstatic.com/generate_204';
+  let probeInterval = 10;
 
   for (const group of groups) {
     let targetOutboundTag = activeNodeTag;
-    if (group.selectedNodeId === 'DIRECT') {
-      targetOutboundTag = 'direct';
-    } else if (group.selectedNodeId === 'BLOCK' || group.selectedNodeId === 'REJECT') {
-      targetOutboundTag = 'block';
-    } else {
-      const targetNode = nodes.find((n) => n.id === group.selectedNodeId);
-      if (targetNode) {
-        targetOutboundTag = targetNode.name ? `${targetNode.name} [${targetNode.id.slice(-4)}]` : targetNode.id;
+    let targetBalancerTag: string | undefined = undefined;
+
+    const isAutoGroup = group.type === 'urltest' || group.type === 'fallback' || group.type === 'loadbalance';
+
+    if (isAutoGroup) {
+      // Find matching nodes for this group
+      let matchedNodes: ProxyNode[] = [];
+      if (group.useFilter && group.filter && group.filter.trim() !== '') {
+        try {
+          const regex = new RegExp(group.filter, 'i');
+          matchedNodes = nodes.filter((node) => regex.test(node.name) || regex.test(node.server));
+        } catch {
+          const keyword = group.filter.toLowerCase();
+          matchedNodes = nodes.filter((node) => node.name.toLowerCase().includes(keyword) || node.server.toLowerCase().includes(keyword));
+        }
+      } else if (group.nodeIds && group.nodeIds.length > 0) {
+        const set = new Set(group.nodeIds);
+        matchedNodes = nodes.filter((node) => set.has(node.id));
+      } else {
+        matchedNodes = nodes;
       }
+
+      if (matchedNodes.length > 0) {
+        const balancerTag = `balancer-${group.id.replace(/[^a-zA-Z0-9-]/g, '_')}`;
+        targetBalancerTag = balancerTag;
+
+        const selectors = matchedNodes.map((n) => (n.name ? `${n.name} [${n.id.slice(-4)}]` : n.id));
+        selectors.forEach((s) => observatorySubjectSelectors.add(s));
+
+        balancers.push({
+          tag: balancerTag,
+          selector: selectors,
+          strategy: {
+            type: group.type === 'loadbalance' ? 'random' : 'leastPing',
+          },
+        });
+
+        if (group.testUrl) probeUrl = group.testUrl;
+        if (group.interval) probeInterval = group.interval;
+      }
+    }
+
+    if (!targetBalancerTag) {
+      if (group.selectedNodeId === 'DIRECT') {
+        targetOutboundTag = 'direct';
+      } else if (group.selectedNodeId === 'BLOCK' || group.selectedNodeId === 'REJECT') {
+        targetOutboundTag = 'block';
+      } else {
+        const targetNode = nodes.find((n) => n.id === group.selectedNodeId);
+        if (targetNode) {
+          targetOutboundTag = targetNode.name ? `${targetNode.name} [${targetNode.id.slice(-4)}]` : targetNode.id;
+        }
+      }
+    }
+
+    const ruleBase: XrayRoutingRule = {
+      type: 'field',
+    };
+    if (targetBalancerTag) {
+      ruleBase.balancerTag = targetBalancerTag;
+    } else {
+      ruleBase.outboundTag = targetOutboundTag;
     }
 
     if (group.name === 'OpenAI' || group.name.toLowerCase().includes('openai')) {
       groupRoutingRules.push({
-        type: 'field',
-        outboundTag: targetOutboundTag,
+        ...ruleBase,
         domain: ['geosite:openai'],
       });
     } else if (group.name === 'Telegram' || group.name.toLowerCase().includes('telegram')) {
       groupRoutingRules.push({
-        type: 'field',
-        outboundTag: targetOutboundTag,
+        ...ruleBase,
         domain: ['geosite:telegram'],
         ip: ['geoip:telegram'],
       });
     } else if (group.name === '国内流量' || group.name.toLowerCase().includes('cn')) {
       groupRoutingRules.push({
-        type: 'field',
-        outboundTag: targetOutboundTag,
+        ...ruleBase,
         domain: ['geosite:cn'],
         ip: ['geoip:cn'],
       });
+    }
+  }
+
+  if (balancers.length > 0) {
+    config.routing.balancers = balancers;
+  }
+
+  if (observatorySubjectSelectors.size > 0) {
+    if (config.burstObservatory) {
+      // Merge selectors into existing burstObservatory if present
+      const existing = new Set(config.burstObservatory.subjectSelector || []);
+      observatorySubjectSelectors.forEach((s) => existing.add(s));
+      config.burstObservatory.subjectSelector = Array.from(existing);
+    } else if (config.observatory) {
+      // Merge selectors into existing observatory
+      const existing = new Set(config.observatory.subjectSelector || []);
+      observatorySubjectSelectors.forEach((s) => existing.add(s));
+      config.observatory.subjectSelector = Array.from(existing);
+    } else {
+      config.observatory = {
+        subjectSelector: Array.from(observatorySubjectSelectors),
+        probeUrl,
+        probeInterval: `${probeInterval}s`,
+        enableConcurrency: true,
+      };
     }
   }
 

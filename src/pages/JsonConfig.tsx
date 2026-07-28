@@ -28,6 +28,8 @@ import {
   ChevronUp,
   ChevronDown,
   Sliders,
+  Activity,
+  Info,
 } from 'lucide-react';
 import { useConfigStore, TEMPLATE_STANDARD, TEMPLATE_TUN, TEMPLATE_MINIMAL } from '../stores/useConfigStore';
 import { useAppStore } from '../stores/useAppStore';
@@ -156,6 +158,20 @@ const MASK_ADDRESS_OPTIONS = [
   { value: 'full', label: 'full' },
 ];
 
+const OBSERVATORY_TYPE_OPTIONS = [
+  { value: 'disabled', label: '禁用 (不开启连通性观测)' },
+  { value: 'observatory', label: 'observatory (后台固定周期连通性观测)' },
+  { value: 'burstObservatory', label: 'burstObservatory (突发随机打散连通性观测)' },
+];
+
+const PROBE_URL_PRESET_OPTIONS = [
+  { value: 'https://www.google.com/generate_204', label: 'Google 204 (https://www.google.com/generate_204)' },
+  { value: 'https://connectivitycheck.gstatic.com/generate_204', label: 'Gstatic 204 (https://connectivitycheck.gstatic.com/generate_204)' },
+  { value: 'https://cp.cloudflare.com/', label: 'Cloudflare 204 (https://cp.cloudflare.com/)' },
+  { value: 'https://www.v2ex.com/generate_204', label: 'V2EX 204 (https://www.v2ex.com/generate_204)' },
+  { value: 'custom', label: '自定义 URL...' },
+];
+
 export const JsonConfigPage: React.FC = () => {
   const {
     profiles,
@@ -245,10 +261,12 @@ export const JsonConfigPage: React.FC = () => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const [showDescPopover, setShowDescPopover] = useState(false);
 
-  // Scroll selected profile card into view
+  // Scroll selected profile card into view & reset popovers
   const selectedCardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    setShowDescPopover(false);
     if (selectedCardRef.current) {
       selectedCardRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
@@ -470,6 +488,41 @@ export const JsonConfigPage: React.FC = () => {
     server: '',
   });
 
+  // Observatory Modal State
+  const [observatoryModal, setObservatoryModal] = useState<{
+    isOpen: boolean;
+    isMaximized?: boolean;
+    mode: 'visual' | 'json';
+    type: 'disabled' | 'observatory' | 'burstObservatory';
+    subjectSelector: string[];
+    subjectInput: string;
+    probeUrl: string;
+    probeInterval: string;
+    enableConcurrency: boolean;
+    destination: string;
+    interval: string;
+    sampling: number | string;
+    timeout: string;
+    rawJsonText: string;
+    jsonError: string | null;
+  }>({
+    isOpen: false,
+    isMaximized: false,
+    mode: 'visual',
+    type: 'disabled',
+    subjectSelector: ['outbound', 'proxy'],
+    subjectInput: '',
+    probeUrl: 'https://www.google.com/generate_204',
+    probeInterval: '10s',
+    enableConcurrency: true,
+    destination: 'https://connectivitycheck.gstatic.com/generate_204',
+    interval: '1m',
+    sampling: 10,
+    timeout: '5s',
+    rawJsonText: '',
+    jsonError: null,
+  });
+
   const selectedProfile = profiles.find((p) => p.id === selectedProfileId) || profiles[0];
 
   const filteredProfiles = profiles.filter(
@@ -502,6 +555,212 @@ export const JsonConfigPage: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to update config JSON:', err);
     }
+  };
+
+  const handleOpenObservatoryModal = () => {
+    if (!parsedConfig) return;
+    let type: 'disabled' | 'observatory' | 'burstObservatory' = 'disabled';
+    let subjectSelector = ['outbound', 'proxy'];
+    let probeUrl = 'https://www.google.com/generate_204';
+    let probeInterval = '10s';
+    let enableConcurrency = true;
+    let destination = 'https://connectivitycheck.gstatic.com/generate_204';
+    let interval = '1m';
+    let sampling: number | string = 10;
+    let timeout = '5s';
+    let rawObj: any = null;
+
+    if (parsedConfig.burstObservatory) {
+      type = 'burstObservatory';
+      rawObj = parsedConfig.burstObservatory;
+      subjectSelector = Array.isArray(rawObj.subjectSelector) ? [...rawObj.subjectSelector] : ['outbound'];
+      if (rawObj.pingConfig) {
+        destination = rawObj.pingConfig.destination || destination;
+        interval = rawObj.pingConfig.interval || interval;
+        sampling = rawObj.pingConfig.sampling ?? sampling;
+        timeout = rawObj.pingConfig.timeout || timeout;
+      }
+    } else if (parsedConfig.observatory) {
+      type = 'observatory';
+      rawObj = parsedConfig.observatory;
+      subjectSelector = Array.isArray(rawObj.subjectSelector) ? [...rawObj.subjectSelector] : ['outbound'];
+      probeUrl = rawObj.probeUrl || probeUrl;
+      probeInterval = rawObj.probeInterval || probeInterval;
+      enableConcurrency = rawObj.enableConcurrency !== false;
+    }
+
+    const rawJsonText = rawObj
+      ? JSON.stringify(rawObj, null, 2)
+      : JSON.stringify(
+          {
+            subjectSelector: ['outbound'],
+            probeUrl: 'https://www.google.com/generate_204',
+            probeInterval: '10s',
+            enableConcurrency: true,
+          },
+          null,
+          2
+        );
+
+    setObservatoryModal({
+      isOpen: true,
+      isMaximized: false,
+      mode: 'visual',
+      type,
+      subjectSelector,
+      subjectInput: '',
+      probeUrl,
+      probeInterval,
+      enableConcurrency,
+      destination,
+      interval,
+      sampling,
+      timeout,
+      rawJsonText,
+      jsonError: null,
+    });
+  };
+
+  const handleSaveObservatory = () => {
+    updateParsedConfig((config) => {
+      if (observatoryModal.type === 'disabled') {
+        delete config.observatory;
+        delete config.burstObservatory;
+      } else if (observatoryModal.type === 'observatory') {
+        delete config.burstObservatory;
+        if (observatoryModal.mode === 'json') {
+          try {
+            config.observatory = JSON.parse(observatoryModal.rawJsonText);
+          } catch (err: any) {
+            setObservatoryModal((prev) => ({ ...prev, jsonError: `JSON 语法解析错误: ${err.message}` }));
+            return;
+          }
+        } else {
+          config.observatory = {
+            subjectSelector: observatoryModal.subjectSelector,
+            probeUrl: observatoryModal.probeUrl,
+            probeInterval: observatoryModal.probeInterval,
+            enableConcurrency: observatoryModal.enableConcurrency,
+          };
+        }
+      } else if (observatoryModal.type === 'burstObservatory') {
+        delete config.observatory;
+        if (observatoryModal.mode === 'json') {
+          try {
+            config.burstObservatory = JSON.parse(observatoryModal.rawJsonText);
+          } catch (err: any) {
+            setObservatoryModal((prev) => ({ ...prev, jsonError: `JSON 语法解析错误: ${err.message}` }));
+            return;
+          }
+        } else {
+          config.burstObservatory = {
+            subjectSelector: observatoryModal.subjectSelector,
+            pingConfig: {
+              destination: observatoryModal.destination,
+              interval: observatoryModal.interval,
+              sampling: Number(observatoryModal.sampling) || 10,
+              timeout: observatoryModal.timeout,
+            },
+          };
+        }
+      }
+    });
+
+    setObservatoryModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleSwitchObservatoryMode = (targetMode: 'visual' | 'json') => {
+    if (targetMode === 'json') {
+      let rawObj: any = {};
+      if (observatoryModal.type === 'observatory') {
+        rawObj = {
+          subjectSelector: observatoryModal.subjectSelector,
+          probeUrl: observatoryModal.probeUrl,
+          probeInterval: observatoryModal.probeInterval,
+          enableConcurrency: observatoryModal.enableConcurrency,
+        };
+      } else if (observatoryModal.type === 'burstObservatory') {
+        rawObj = {
+          subjectSelector: observatoryModal.subjectSelector,
+          pingConfig: {
+            destination: observatoryModal.destination,
+            interval: observatoryModal.interval,
+            sampling: Number(observatoryModal.sampling) || 10,
+            timeout: observatoryModal.timeout,
+          },
+        };
+      } else {
+        rawObj = {
+          subjectSelector: observatoryModal.subjectSelector.length > 0 ? observatoryModal.subjectSelector : ['outbound'],
+          probeUrl: observatoryModal.probeUrl || 'https://www.google.com/generate_204',
+          probeInterval: observatoryModal.probeInterval || '10s',
+          enableConcurrency: observatoryModal.enableConcurrency,
+        };
+      }
+      setObservatoryModal((prev) => ({
+        ...prev,
+        mode: 'json',
+        rawJsonText: JSON.stringify(rawObj, null, 2),
+        jsonError: null,
+      }));
+    } else {
+      try {
+        if (observatoryModal.rawJsonText.trim()) {
+          const parsed = JSON.parse(observatoryModal.rawJsonText);
+          if (parsed.pingConfig) {
+            setObservatoryModal((prev) => ({
+              ...prev,
+              mode: 'visual',
+              type: 'burstObservatory',
+              subjectSelector: Array.isArray(parsed.subjectSelector) ? parsed.subjectSelector : prev.subjectSelector,
+              destination: parsed.pingConfig.destination || prev.destination,
+              interval: parsed.pingConfig.interval || prev.interval,
+              sampling: parsed.pingConfig.sampling ?? prev.sampling,
+              timeout: parsed.pingConfig.timeout || prev.timeout,
+              jsonError: null,
+            }));
+          } else {
+            setObservatoryModal((prev) => ({
+              ...prev,
+              mode: 'visual',
+              type: 'observatory',
+              subjectSelector: Array.isArray(parsed.subjectSelector) ? parsed.subjectSelector : prev.subjectSelector,
+              probeUrl: parsed.probeUrl || prev.probeUrl,
+              probeInterval: parsed.probeInterval || prev.probeInterval,
+              enableConcurrency: parsed.enableConcurrency !== false,
+              jsonError: null,
+            }));
+          }
+        } else {
+          setObservatoryModal((prev) => ({ ...prev, mode: 'visual', jsonError: null }));
+        }
+      } catch (err: any) {
+        setObservatoryModal((prev) => ({
+          ...prev,
+          jsonError: `切回可视化模式失败: JSON 语法存在错误 (${err.message})`,
+        }));
+      }
+    }
+  };
+
+  const handleAddSubjectSelector = (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    setObservatoryModal((prev) => {
+      if (prev.subjectSelector.includes(trimmed)) return prev;
+      return {
+        ...prev,
+        subjectSelector: [...prev.subjectSelector, trimmed],
+        subjectInput: '',
+      };
+    });
+  };
+
+  const handleRemoveSubjectSelector = (index: number) => {
+    setObservatoryModal((prev) => ({
+      ...prev,
+      subjectSelector: prev.subjectSelector.filter((_, i) => i !== index),
+    }));
   };
 
   const handleLogLevelChange = (newLevel: string) => {
@@ -1649,18 +1908,52 @@ export const JsonConfigPage: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 relative">
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-bold text-white tracking-wide truncate">{selectedProfile.name}</h3>
                       <button
                         onClick={startEditTitle}
                         title="编辑名称与描述"
-                        className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                        className="text-slate-500 hover:text-slate-300 transition-colors shrink-0 cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
+
+                      {selectedProfile.description && (
+                        <div className="relative shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setShowDescPopover((prev) => !prev)}
+                            title="点击查看配置备注说明"
+                            className={`p-1 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${
+                              showDescPopover
+                                ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40'
+                                : 'text-slate-500 hover:text-slate-300 hover:bg-white/10'
+                            }`}
+                          >
+                            <Info className="w-3.5 h-3.5" />
+                          </button>
+
+                          {showDescPopover && (
+                            <div className="absolute left-0 top-full mt-2 z-50 w-72 sm:w-80 p-3 rounded-xl bg-slate-900/98 border border-white/15 backdrop-blur-2xl shadow-2xl animate-fadeIn text-xs text-slate-200 space-y-1.5">
+                              <div className="flex items-center justify-between font-bold text-slate-300 border-b border-white/10 pb-1.5">
+                                <span>配置备注说明</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowDescPopover(false)}
+                                  className="text-slate-400 hover:text-white p-0.5 rounded transition-colors"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-slate-300 leading-relaxed font-mono break-words">
+                                {selectedProfile.description}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5 truncate">{selectedProfile.description}</p>
                   </div>
                 )}
 
@@ -1911,21 +2204,21 @@ export const JsonConfigPage: React.FC = () => {
                         <div
                           key={idx}
                           style={{ zIndex: isDropdownOpen ? 50 : (parsedConfig?.routing?.rules?.length || 0) - idx }}
-                          className={`relative p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all ${
+                          className={`relative p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 transition-all ${
                             ruleEnabled ? 'border-white/10 bg-slate-950/60' : 'border-white/5 opacity-50 bg-slate-950/40'
                           }`}
                         >
-                          <div className="flex items-start md:items-center gap-3">
+                          <div className="flex items-center gap-3 shrink-0 min-w-0 max-w-full">
                             {/* Order index badge & Priority controls */}
-                            <div className="flex flex-col items-center gap-0.5 shrink-0">
+                            <div className="flex items-center gap-1.5 shrink-0">
                               <span className="w-6 h-6 rounded-lg bg-slate-950 border border-white/10 text-slate-300 font-mono text-xs font-bold flex items-center justify-center">
                                 {idx + 1}
                               </span>
-                              <div className="flex items-center gap-0.5 pt-0.5">
+                              <div className="flex items-center gap-0.5">
                                 <button
                                   onClick={() => handleMoveRuleUp(idx)}
                                   disabled={idx === 0}
-                                  className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+                                  className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors cursor-pointer"
                                   title="向上调高优先级"
                                 >
                                   <ChevronUp className="w-3.5 h-3.5" />
@@ -1933,7 +2226,7 @@ export const JsonConfigPage: React.FC = () => {
                                 <button
                                   onClick={() => handleMoveRuleDown(idx)}
                                   disabled={idx === (parsedConfig?.routing?.rules?.length || 1) - 1}
-                                  className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+                                  className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors cursor-pointer"
                                   title="向下调低优先级"
                                 >
                                   <ChevronDown className="w-3.5 h-3.5" />
@@ -1943,14 +2236,14 @@ export const JsonConfigPage: React.FC = () => {
 
                             {/* Rule Info */}
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide">{ruleDescription}</h4>
-                              </div>
+                              <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide break-keep truncate">
+                                {ruleDescription}
+                              </h4>
                             </div>
                           </div>
 
                           {/* Outbound Quick Target & Actions */}
-                          <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                          <div className="flex flex-wrap items-center gap-2 shrink-0 sm:ml-auto">
                             {/* Outbound Target Select */}
                             <div className="flex items-center gap-1.5 shrink-0">
                               <span className="text-slate-400 text-xs font-semibold shrink-0">出站:</span>
@@ -2111,6 +2404,96 @@ export const JsonConfigPage: React.FC = () => {
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* Observatory Object Section */}
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Activity className="w-4 h-4 text-emerald-400 mr-0.5" />
+                      <h4 className="font-bold text-white text-sm mr-1">连接观测</h4>
+                      {parsedConfig?.burstObservatory ? (
+                        <>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold">
+                            突发打散
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-white/10 font-semibold">
+                            {parsedConfig.burstObservatory.pingConfig?.interval || '1m'}
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-white/10 font-semibold">
+                            {parsedConfig.burstObservatory.pingConfig?.sampling ?? 10}次采样
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-white/10 font-semibold">
+                            {parsedConfig.burstObservatory.pingConfig?.timeout || '5s'}超时
+                          </span>
+                        </>
+                      ) : parsedConfig?.observatory ? (
+                        <>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
+                            固定周期
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300 border border-white/10 font-semibold">
+                            {parsedConfig.observatory.probeInterval || '10s'}
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-emerald-300 border border-white/10 font-semibold">
+                            {parsedConfig.observatory.enableConcurrency !== false ? '并发探测' : '单线程探测'}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/5">
+                          未开启
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={handleOpenObservatoryModal}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold transition-all cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>{parsedConfig?.observatory || parsedConfig?.burstObservatory ? '配置连通性观测' : '开启连通性观测'}</span>
+                    </button>
+                  </div>
+
+                  {parsedConfig?.burstObservatory ? (
+                    <div className="p-2 bg-slate-950/80 rounded-lg border border-white/5 text-xs space-y-2">
+                      <div className="flex items-center gap-2 text-slate-300 min-w-0">
+                        <span className="text-slate-400 text-[11px] shrink-0">探测目标:</span>
+                        <span className="font-mono text-amber-300 truncate flex-1 min-w-0 font-semibold select-all">
+                          {parsedConfig.burstObservatory.pingConfig?.destination || '未设置'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-white/5">
+                        <span className="text-slate-500 text-[10px]">匹配出站 Tag 前缀:</span>
+                        {(parsedConfig.burstObservatory.subjectSelector || []).map((tag: string, i: number) => (
+                          <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[10px] border border-white/5">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : parsedConfig?.observatory ? (
+                    <div className="p-2 bg-slate-950/80 rounded-lg border border-white/5 text-xs space-y-2">
+                      <div className="flex items-center gap-2 text-slate-300 min-w-0">
+                        <span className="text-slate-400 text-[11px] shrink-0">探测目标:</span>
+                        <span className="font-mono text-emerald-300 truncate flex-1 min-w-0 font-semibold select-all">
+                          {parsedConfig.observatory.probeUrl || '未设置'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-white/5">
+                        <span className="text-slate-500 text-[10px]">匹配出站 Tag 前缀:</span>
+                        {(parsedConfig.observatory.subjectSelector || []).map((tag: string, i: number) => (
+                          <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[10px] border border-white/5">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-slate-950/40 rounded-lg border border-dashed border-white/10 text-xs text-slate-400 flex items-center justify-between">
+                      <span>未启用出站连通性状态观测。点击右侧按钮进行图形化配置。</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* 4. Log Object Full Specification Visual Editor Section */}
@@ -3725,6 +4108,378 @@ export const JsonConfigPage: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition-all"
               >
                 保存 DNS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit / Add Observatory Modal */}
+      {observatoryModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+          <div
+            className={`w-full glass-card bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl transition-all duration-300 flex flex-col ${
+              observatoryModal.isMaximized ? 'max-w-4xl h-[85vh]' : 'max-w-xl max-h-[90vh]'
+            }`}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 gap-2 shrink-0">
+              <h3 className="text-base font-bold text-white flex items-center gap-2 truncate min-w-0">
+                <Activity className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span className="truncate">配置连通性观测</span>
+              </h3>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Mode Switcher */}
+                <div className="flex items-center p-1 bg-slate-950/80 rounded-xl border border-white/10 text-xs shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchObservatoryMode('visual')}
+                    title="可视化结构"
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all whitespace-nowrap ${
+                      observatoryModal.mode === 'visual'
+                        ? 'bg-emerald-600 text-white shadow-md font-bold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <Eye className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline whitespace-nowrap">可视化结构</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchObservatoryMode('json')}
+                    title="JSON 源码"
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all whitespace-nowrap ${
+                      observatoryModal.mode === 'json'
+                        ? 'bg-emerald-600 text-white shadow-md font-bold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <Code2 className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline whitespace-nowrap">JSON 源码</span>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setObservatoryModal((prev) => ({ ...prev, isMaximized: !prev.isMaximized }))}
+                  title={observatoryModal.isMaximized ? '还原窗口大小' : '最大化 / 放大窗口'}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  {observatoryModal.isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setObservatoryModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            {observatoryModal.mode === 'visual' ? (
+              <div className="py-4 space-y-4 overflow-y-auto flex-1 text-xs">
+                {/* 1. Observation Type Switch */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    观测服务模式类型
+                  </label>
+                  <CustomSelect
+                    value={observatoryModal.type}
+                    onChange={(val) => setObservatoryModal((prev) => ({ ...prev, type: val as any }))}
+                    options={OBSERVATORY_TYPE_OPTIONS}
+                    accentColor="emerald"
+                    size="md"
+                    fullWidth
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    遵循 Xray 官方规范：<code className="text-emerald-300">observatory</code> 为固定周期探测；<code className="text-amber-300">burstObservatory</code> 为突发打散随机探测。
+                  </p>
+                </div>
+
+                {observatoryModal.type !== 'disabled' && (
+                  <>
+                    {/* 2. Subject Selector Tag Manager */}
+                    <div className="space-y-2 bg-slate-950/60 p-3 rounded-xl border border-white/10">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-slate-200">
+                          匹配出站代理 Tag 标签前缀
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-500">一键添加前缀:</span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddSubjectSelector('outbound')}
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[10px] font-mono font-bold"
+                          >
+                            + outbound
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddSubjectSelector('proxy')}
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[10px] font-mono font-bold"
+                          >
+                            + proxy
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddSubjectSelector('node')}
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-purple-300 text-[10px] font-mono font-bold"
+                          >
+                            + node
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Tag Input Form */}
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleAddSubjectSelector(observatoryModal.subjectInput);
+                        }}
+                        className="flex gap-2"
+                      >
+                        <input
+                          type="text"
+                          value={observatoryModal.subjectInput}
+                          onChange={(e) => setObservatoryModal((prev) => ({ ...prev, subjectInput: e.target.value }))}
+                          placeholder="例如: proxy 或 outbound- (输入匹配前缀)"
+                          className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                        <button
+                          type="submit"
+                          className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all"
+                        >
+                          添加前缀
+                        </button>
+                      </form>
+
+                      {/* Added Tags Pills */}
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {observatoryModal.subjectSelector.map((tag, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-mono text-[11px]"
+                          >
+                            <span>{tag}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSubjectSelector(idx)}
+                              className="text-slate-400 hover:text-rose-400 transition-colors"
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))}
+                        {observatoryModal.subjectSelector.length === 0 && (
+                          <span className="text-[11px] text-amber-400">请至少添加一个匹配前缀 Tag</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 3. Fields for Standard Observatory */}
+                    {observatoryModal.type === 'observatory' && (
+                      <div className="space-y-3 bg-slate-950/60 p-3 rounded-xl border border-white/10">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-slate-200">
+                              连通性探测目标 URL
+                            </label>
+                            <span className="text-[10px] text-slate-400">快捷选择预设:</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            <CustomSelect
+                              value={PROBE_URL_PRESET_OPTIONS.some((o) => o.value === observatoryModal.probeUrl) ? observatoryModal.probeUrl : 'custom'}
+                              onChange={(val) => {
+                                if (val !== 'custom') {
+                                  setObservatoryModal((prev) => ({ ...prev, probeUrl: val }));
+                                }
+                              }}
+                              options={PROBE_URL_PRESET_OPTIONS}
+                              accentColor="emerald"
+                              size="sm"
+                              fullWidth
+                            />
+                            <input
+                              type="text"
+                              value={observatoryModal.probeUrl}
+                              onChange={(e) => setObservatoryModal((prev) => ({ ...prev, probeUrl: e.target.value }))}
+                              placeholder="https://www.google.com/generate_204"
+                              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                              探测周期间隔
+                            </label>
+                            <input
+                              type="text"
+                              value={observatoryModal.probeInterval}
+                              onChange={(e) => setObservatoryModal((prev) => ({ ...prev, probeInterval: e.target.value }))}
+                              placeholder="10s"
+                              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                            />
+                            <span className="text-[10px] text-slate-500">格式如: 10s, 30s, 1m</span>
+                          </div>
+
+                          <div className="flex flex-col justify-end">
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                              并发探测
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setObservatoryModal((prev) => ({ ...prev, enableConcurrency: !prev.enableConcurrency }))}
+                              className={`w-full py-1.5 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all ${
+                                observatoryModal.enableConcurrency
+                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                  : 'bg-slate-950 text-slate-400 border-white/10 hover:border-white/20'
+                              }`}
+                            >
+                              <span>{observatoryModal.enableConcurrency ? '并发发起探测' : '顺序单线程探测'}</span>
+                              <span className={`w-3.5 h-3.5 rounded-full ${observatoryModal.enableConcurrency ? 'bg-emerald-400 shadow-sm shadow-emerald-500/50' : 'bg-slate-700'}`} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. Fields for Burst Observatory */}
+                    {observatoryModal.type === 'burstObservatory' && (
+                      <div className="space-y-3 bg-slate-950/60 p-3 rounded-xl border border-white/10">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-slate-200">
+                              探测目标 URL
+                            </label>
+                            <span className="text-[10px] text-slate-400">快捷选择预设:</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            <CustomSelect
+                              value={PROBE_URL_PRESET_OPTIONS.some((o) => o.value === observatoryModal.destination) ? observatoryModal.destination : 'custom'}
+                              onChange={(val) => {
+                                if (val !== 'custom') {
+                                  setObservatoryModal((prev) => ({ ...prev, destination: val }));
+                                }
+                              }}
+                              options={PROBE_URL_PRESET_OPTIONS}
+                              accentColor="amber"
+                              size="sm"
+                              fullWidth
+                            />
+                            <input
+                              type="text"
+                              value={observatoryModal.destination}
+                              onChange={(e) => setObservatoryModal((prev) => ({ ...prev, destination: e.target.value }))}
+                              placeholder="https://connectivitycheck.gstatic.com/generate_204"
+                              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                              打散采样周期
+                            </label>
+                            <input
+                              type="text"
+                              value={observatoryModal.interval}
+                              onChange={(e) => setObservatoryModal((prev) => ({ ...prev, interval: e.target.value }))}
+                              placeholder="1m"
+                              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                              采样次数
+                            </label>
+                            <input
+                              type="number"
+                              value={observatoryModal.sampling}
+                              onChange={(e) => setObservatoryModal((prev) => ({ ...prev, sampling: e.target.value }))}
+                              placeholder="10"
+                              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                              超时时间
+                            </label>
+                            <input
+                              type="text"
+                              value={observatoryModal.timeout}
+                              onChange={(e) => setObservatoryModal((prev) => ({ ...prev, timeout: e.target.value }))}
+                              placeholder="5s"
+                              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              /* Modal Body (JSON Mode) */
+              <div className="flex-1 min-h-0 py-3 flex flex-col space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400 shrink-0">
+                  <span>编辑连通性观测 JSON 规范片段</span>
+                  <span className="font-mono text-[10px] text-slate-500">JSON Object</span>
+                </div>
+                <div className="w-full rounded-xl border border-white/10 overflow-hidden bg-[#1e1e1e] h-[300px] shrink-0">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="json"
+                    language="json"
+                    theme="vs-dark"
+                    value={observatoryModal.rawJsonText}
+                    onChange={(val) =>
+                      setObservatoryModal((prev) => ({ ...prev, rawJsonText: val || '', jsonError: null }))
+                    }
+                    options={{
+                      fontSize: 12,
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      tabSize: 2,
+                      formatOnPaste: true,
+                      formatOnType: true,
+                      padding: { top: 8, bottom: 8 },
+                      lineNumbersMinChars: 3,
+                      folding: true,
+                      mouseWheelZoom: true,
+                    }}
+                  />
+                </div>
+                {observatoryModal.jsonError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2 font-mono shrink-0 animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{observatoryModal.jsonError}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10 shrink-0">
+              <button
+                type="button"
+                onClick={() => setObservatoryModal((prev) => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveObservatory}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+              >
+                保存连通性观测配置
               </button>
             </div>
           </div>

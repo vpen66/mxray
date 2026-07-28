@@ -376,7 +376,7 @@ export const RulesPage: React.FC = () => {
             <div
               key={rule.id}
               style={{ zIndex: isDropdownOpen ? 50 : rules.length - idx }}
-              className={`glass-card relative p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
+              className={`glass-card relative p-4 rounded-xl border flex flex-wrap items-center justify-between gap-3 transition-all ${
                 isSelected
                   ? 'border-blue-500/50 bg-blue-950/20 ring-1 ring-blue-500/30'
                   : rule.enabled
@@ -384,11 +384,11 @@ export const RulesPage: React.FC = () => {
                   : 'border-white/5 opacity-50 bg-slate-950/40'
               }`}
             >
-              <div className="flex items-start md:items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0 min-w-0 max-w-full">
                 {/* Multi-select Checkbox */}
                 <button
                   onClick={() => toggleSelectRule(rule.id)}
-                  className="p-1 rounded-md text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0 mt-0.5 md:mt-0"
+                  className="p-1 rounded-md text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
                   title={isSelected ? '取消选择' : '选择规则'}
                 >
                   {isSelected ? (
@@ -399,15 +399,15 @@ export const RulesPage: React.FC = () => {
                 </button>
 
                 {/* Order index badge & Priority controls */}
-                <div className="flex flex-col items-center gap-0.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <span className="w-6 h-6 rounded-lg bg-slate-950 border border-white/10 text-slate-300 font-mono text-xs font-bold flex items-center justify-center">
                     {idx + 1}
                   </span>
-                  <div className="flex items-center gap-0.5 pt-0.5">
+                  <div className="flex items-center gap-0.5">
                     <button
                       onClick={() => handleMoveUp(idx)}
                       disabled={idx === 0}
-                      className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+                      className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors cursor-pointer"
                       title="向上调高优先级"
                     >
                       <ChevronUp className="w-3.5 h-3.5" />
@@ -415,7 +415,7 @@ export const RulesPage: React.FC = () => {
                     <button
                       onClick={() => handleMoveDown(idx)}
                       disabled={idx === rules.length - 1}
-                      className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+                      className="p-0.5 text-slate-500 hover:text-white disabled:opacity-20 transition-colors cursor-pointer"
                       title="向下调低优先级"
                     >
                       <ChevronDown className="w-3.5 h-3.5" />
@@ -425,14 +425,14 @@ export const RulesPage: React.FC = () => {
 
                 {/* Rule Info */}
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide">{rule.description}</h4>
-                  </div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide break-keep truncate">
+                    {rule.description}
+                  </h4>
                 </div>
               </div>
 
               {/* Outbound Quick Target & Actions */}
-              <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0 sm:ml-auto">
                 {/* Outbound Target ProxyGroup / Node Select */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-slate-400 text-xs font-semibold shrink-0">出站:</span>

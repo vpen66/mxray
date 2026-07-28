@@ -17,7 +17,7 @@ interface CustomSelectProps {
   placeholder?: string;
   disabled?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  accentColor?: 'cyan' | 'blue' | 'emerald' | 'purple';
+  accentColor?: 'cyan' | 'blue' | 'emerald' | 'purple' | 'amber';
   className?: string;
   fullWidth?: boolean;
 }
@@ -94,6 +94,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       activeBorder: 'border-purple-500/70 ring-2 ring-purple-500/20 text-purple-400',
       selectedBg: 'bg-purple-600/20 text-purple-300 font-bold border border-purple-500/30',
       checkColor: 'text-purple-400',
+    },
+    amber: {
+      activeBorder: 'border-amber-500/70 ring-2 ring-amber-500/20 text-amber-400',
+      selectedBg: 'bg-amber-600/20 text-amber-300 font-bold border border-amber-500/30',
+      checkColor: 'text-amber-400',
     },
   }[accentColor];
 

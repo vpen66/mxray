@@ -114,6 +114,23 @@ export interface XrayOutbound {
   mux?: Record<string, any>;
 }
 
+export interface XrayObservatoryConfig {
+  subjectSelector?: string[];
+  probeUrl?: string;
+  probeInterval?: string;
+  enableConcurrency?: boolean;
+}
+
+export interface XrayBurstObservatoryConfig {
+  subjectSelector?: string[];
+  pingConfig?: {
+    destination?: string;
+    interval?: string;
+    sampling?: number;
+    timeout?: string;
+  };
+}
+
 export interface XrayCustomConfig {
   log?: {
     access?: string;
@@ -130,6 +147,8 @@ export interface XrayCustomConfig {
   };
   dns?: Record<string, any>;
   policy?: Record<string, any>;
+  observatory?: XrayObservatoryConfig;
+  burstObservatory?: XrayBurstObservatoryConfig;
 }
 
 export interface XrayConfigProfile {

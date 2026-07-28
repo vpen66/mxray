@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Zap,
   Check,
@@ -76,12 +76,28 @@ export const ProxiesPage: React.FC = () => {
     isTestingLatency,
     testAllLatencies,
     testNodeLatency,
+    evaluateAutoSelect,
     addGroup,
     updateGroup,
     removeGroup,
   } = useProxyStore();
   const { coreState, setMode } = useAppStore();
   const mode = coreState.mode;
+
+  useEffect(() => {
+    const autoGroups = proxyGroups.filter((g) => g.type === 'urltest' || g.type === 'fallback');
+    if (autoGroups.length === 0) return;
+
+    // Minimum interval amongst urltest groups or 30s
+    const minIntervalSec = Math.min(...autoGroups.map((g) => g.interval || 30), 30);
+    const intervalMs = Math.max(minIntervalSec * 1000, 10000);
+
+    const timer = setInterval(() => {
+      evaluateAutoSelect();
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [proxyGroups, evaluateAutoSelect]);
 
   const [search, setSearch] = useState('');
   const [protocolFilter, setProtocolFilter] = useState<string>('all');
@@ -185,12 +201,23 @@ export const ProxiesPage: React.FC = () => {
 
     // Check if it's a node
     const node = allNodes.find((n) => n.id === selectedId || n.name === selectedId);
-    if (node) return node.name;
+    if (node) {
+      if (group.type === 'urltest' || group.type === 'fallback') {
+        const delayStr = node.delay && node.delay > 0 ? `${node.delay} ms` : '未测速';
+        return `⚡ 自动选优: ${node.name} (${delayStr})`;
+      }
+      return node.name;
+    }
 
     // Check if matching nodes exist for this group
     const groupMatchingNodes = getMatchingNodesForGroup(group, allNodes);
     if (groupMatchingNodes.length > 0) {
-      return groupMatchingNodes[0].name;
+      const first = groupMatchingNodes[0];
+      if (group.type === 'urltest' || group.type === 'fallback') {
+        const delayStr = first.delay && first.delay > 0 ? `${first.delay} ms` : '未测速';
+        return `⚡ 自动选优: ${first.name} (${delayStr})`;
+      }
+      return first.name;
     }
 
     return '直接连接 (无可用节点)';

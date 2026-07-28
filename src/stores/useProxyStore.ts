@@ -18,6 +18,7 @@ interface ProxyStore {
   selectedNodeId: string;
   proxyGroups: ProxyGroup[];
   isTestingLatency: boolean;
+  evaluateAutoSelect: () => void;
   selectNode: (nodeId: string) => void;
   selectGroupNode: (groupId: string, nodeIdOrTag: string) => void;
   testNodeLatency: (nodeId: string) => Promise<void>;
@@ -48,6 +49,52 @@ export const getMatchingNodesForGroup = (group: ProxyGroup, allNodes: ProxyNode[
   }
 
   return allNodes;
+};
+
+export const evaluateAutoSelectGroups = (
+  groups: ProxyGroup[],
+  allNodes: ProxyNode[]
+): { updatedGroups: ProxyGroup[]; hasChanges: boolean } => {
+  let hasChanges = false;
+  const updatedGroups = groups.map((group) => {
+    if (group.type !== 'urltest' && group.type !== 'fallback') {
+      return group;
+    }
+
+    const matchedNodes = getMatchingNodesForGroup(group, allNodes);
+    if (matchedNodes.length === 0) return group;
+
+    if (group.type === 'urltest') {
+      const validNodes = matchedNodes.filter((n) => n.delay && n.delay > 0);
+      if (validNodes.length === 0) return group;
+
+      validNodes.sort((a, b) => (a.delay || 99999) - (b.delay || 99999));
+      const bestNode = validNodes[0];
+
+      const currentNode = matchedNodes.find((n) => n.id === group.selectedNodeId);
+      const tolerance = group.tolerance || 50;
+
+      const currentDelay = currentNode?.delay && currentNode.delay > 0 ? currentNode.delay : Infinity;
+      const bestDelay = bestNode.delay || Infinity;
+
+      if (!currentNode || currentDelay === Infinity || currentDelay - bestDelay >= tolerance) {
+        if (group.selectedNodeId !== bestNode.id) {
+          hasChanges = true;
+          return { ...group, selectedNodeId: bestNode.id };
+        }
+      }
+    } else if (group.type === 'fallback') {
+      const onlineNode = matchedNodes.find((n) => n.delay && n.delay > 0);
+      if (onlineNode && group.selectedNodeId !== onlineNode.id) {
+        hasChanges = true;
+        return { ...group, selectedNodeId: onlineNode.id };
+      }
+    }
+
+    return group;
+  });
+
+  return { updatedGroups, hasChanges };
 };
 
 const LEGACY_HARDCODED_NAMES = new Set([
@@ -84,6 +131,15 @@ export const useProxyStore = create<ProxyStore>()(
       proxyGroups: INITIAL_GROUPS,
       isTestingLatency: false,
 
+      evaluateAutoSelect: () => {
+        const allNodes = get().profiles.flatMap((p) => p.nodes);
+        const { updatedGroups, hasChanges } = evaluateAutoSelectGroups(get().proxyGroups, allNodes);
+        if (hasChanges) {
+          set({ proxyGroups: updatedGroups });
+          triggerConfigSync(get);
+        }
+      },
+
       selectNode: (nodeId) => {
         set({ selectedNodeId: nodeId });
         triggerConfigSync(get);
@@ -110,6 +166,7 @@ export const useProxyStore = create<ProxyStore>()(
             ),
           })),
         }));
+        get().evaluateAutoSelect();
       },
 
       testProfileLatencies: async (profileId) => {
@@ -120,6 +177,7 @@ export const useProxyStore = create<ProxyStore>()(
             await get().testNodeLatency(node.id);
           }
         }
+        get().evaluateAutoSelect();
         set({ isTestingLatency: false });
       },
 
@@ -132,6 +190,7 @@ export const useProxyStore = create<ProxyStore>()(
         for (const id of allNodeIds) {
           await get().testNodeLatency(id);
         }
+        get().evaluateAutoSelect();
         set({ isTestingLatency: false });
       },
 
