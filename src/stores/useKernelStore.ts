@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { GeoDataStatus, KernelInfo, RemoteRelease } from '../types';
 import { invoke } from '@tauri-apps/api/core';
+import { getShanghaiNowString } from '../utils/date';
 
 interface KernelStore {
   activeKernel: KernelInfo;
@@ -183,7 +184,7 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
       set({ geoDataStatus: status });
     } catch {
       // Mock status for web/demo mode
-      const nowStr = new Date().toLocaleString('zh-CN');
+      const nowStr = getShanghaiNowString();
       set({
         geoDataStatus: {
           geoip: {
@@ -212,7 +213,7 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
     } catch (e: any) {
       // Fallback mock update in web mode
       await new Promise((r) => setTimeout(r, 1200));
-      const nowStr = new Date().toLocaleString('zh-CN');
+      const nowStr = getShanghaiNowString();
       set({
         isUpdatingGeoData: false,
         geoDataStatus: {

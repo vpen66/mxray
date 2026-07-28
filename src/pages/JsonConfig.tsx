@@ -27,13 +27,13 @@ import {
   Terminal,
   ChevronUp,
   ChevronDown,
-  Filter,
   Sliders,
 } from 'lucide-react';
 import { useConfigStore, TEMPLATE_STANDARD, TEMPLATE_TUN, TEMPLATE_MINIMAL } from '../stores/useConfigStore';
 import { useAppStore } from '../stores/useAppStore';
 import { extractNodesFromConfigJson, type XrayConfigObject } from '../utils/xrayMapper';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { formatShanghaiTime } from '../utils/date';
 import { CustomSelect } from '../components/CustomSelect';
 import { useProxyStore } from '../stores/useProxyStore';
 import { OutboundSelect } from '../components/OutboundSelect';
@@ -1596,7 +1596,7 @@ export const JsonConfigPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px] text-slate-500">
-                    <span>更新: {p.updatedAt}</span>
+                    <span>更新: {formatShanghaiTime(p.updatedAt)}</span>
 
                     <div className="flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
                       <button
@@ -1954,49 +1954,9 @@ export const JsonConfigPage: React.FC = () => {
                             </div>
 
                             {/* Rule Info */}
-                            <div className="space-y-1.5 min-w-0">
+                            <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span
-                                  className={`px-2.5 py-0.5 rounded text-[10px] font-bold border uppercase ${getOutboundBadgeStyle(
-                                    rule.outboundTag
-                                  )}`}
-                                >
-                                  {rule.outboundTag}
-                                </span>
                                 <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide">{ruleDescription}</h4>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-                                {rule.domain &&
-                                  (Array.isArray(rule.domain) ? rule.domain : [rule.domain]).map((d: string) => (
-                                    <span key={d} className="px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-white/10 flex items-center gap-1">
-                                      <Globe className="w-3 h-3 text-sky-400 shrink-0" />
-                                      {d}
-                                    </span>
-                                  ))}
-                                {rule.ip &&
-                                  (Array.isArray(rule.ip) ? rule.ip : [rule.ip]).map((ip: string) => (
-                                    <span key={ip} className="px-2 py-0.5 rounded bg-slate-950 text-cyan-300 border border-white/10 flex items-center gap-1">
-                                      <Filter className="w-3 h-3 text-cyan-400 shrink-0" />
-                                      {ip}
-                                    </span>
-                                  ))}
-                                {rule.port && (
-                                  <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-300 border border-white/10">
-                                    Port: {rule.port}
-                                  </span>
-                                )}
-                                {rule.protocol &&
-                                  (Array.isArray(rule.protocol) ? rule.protocol : [rule.protocol]).map((p: string) => (
-                                    <span key={p} className="px-2 py-0.5 rounded bg-slate-950 text-purple-300 border border-white/10">
-                                      Proto: {p}
-                                    </span>
-                                  ))}
-                                {rule.network && (
-                                  <span className="px-2 py-0.5 rounded bg-slate-950 text-blue-300 border border-white/10">
-                                    Net: {rule.network}
-                                  </span>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -2005,7 +1965,7 @@ export const JsonConfigPage: React.FC = () => {
                           <div className="flex items-center gap-2 self-end md:self-center shrink-0">
                             {/* Outbound Target Select */}
                             <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-slate-400 text-xs font-semibold shrink-0">指向出站:</span>
+                              <span className="text-slate-400 text-xs font-semibold shrink-0">出站:</span>
                               <OutboundSelect
                                 value={rule.outboundTag}
                                 onChange={(val) => handleChangeRuleOutbound(idx, val)}

@@ -6,6 +6,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 
 import { parseSubscriptionContent, fetchAndParseSubscriptionUrl } from '../utils/subParser';
 import type { ProxyNode } from '../types';
+import { formatShanghaiTime } from '../utils/date';
 
 export const ProfilesPage: React.FC = () => {
   const { profiles, addProfile, removeProfile } = useProxyStore();
@@ -154,7 +155,7 @@ export const ProfilesPage: React.FC = () => {
 
               <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-white/5">
                 <span>节点数量: <strong className="text-slate-200">{profile.nodes.length} 个</strong></span>
-                <span>更新时间: {new Date(profile.updatedAt).toLocaleString()}</span>
+                <span>更新时间: {formatShanghaiTime(profile.updatedAt)}</span>
               </div>
             </div>
           ))}

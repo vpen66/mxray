@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { XrayConfigProfile } from '../types';
 import { syncNodesAndGroupsToConfigJson } from '../utils/xrayMapper';
 import { invoke } from '@tauri-apps/api/core';
+import { getShanghaiNowString } from '../utils/date';
 
 interface ConfigStore {
   profiles: XrayConfigProfile[];
@@ -317,7 +318,7 @@ export const useConfigStore = create<ConfigStore>()(
           name: name.trim() || '自定义配置文件',
           description: description.trim() || '未添加描述',
           content,
-          updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+          updatedAt: getShanghaiNowString(),
         };
         set((state) => ({
           profiles: [...state.profiles, newProfile],
@@ -327,7 +328,7 @@ export const useConfigStore = create<ConfigStore>()(
       },
 
       updateProfile: (id, updates) => {
-        const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
+        const nowStr = getShanghaiNowString();
         set((state) => ({
           profiles: state.profiles.map((p) =>
             p.id === id ? { ...p, ...updates, updatedAt: nowStr } : p
@@ -368,7 +369,7 @@ export const useConfigStore = create<ConfigStore>()(
           id: newId,
           name: `${target.name} (副本)`,
           isDefault: false,
-          updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+          updatedAt: getShanghaiNowString(),
         };
 
         set((state) => ({

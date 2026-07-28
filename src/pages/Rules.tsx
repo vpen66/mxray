@@ -7,8 +7,6 @@ import {
   ChevronUp,
   ChevronDown,
   Copy,
-  Filter,
-  Globe,
   X,
   Search,
   Sliders,
@@ -302,44 +300,9 @@ export const RulesPage: React.FC = () => {
                 </div>
 
                 {/* Rule Info */}
-                <div className="space-y-1.5">
+                <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`px-2.5 py-0.5 rounded text-[10px] font-bold border uppercase ${getOutboundBadgeStyle(
-                        rule.outboundTag
-                      )}`}
-                    >
-                      {rule.outboundTag}
-                    </span>
                     <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide">{rule.description}</h4>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-                    {rule.domain &&
-                      rule.domain.map((d) => (
-                        <span key={d} className="px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-white/10 flex items-center gap-1">
-                          <Globe className="w-3 h-3 text-sky-400 shrink-0" />
-                          {d}
-                        </span>
-                      ))}
-                    {rule.ip &&
-                      rule.ip.map((ip) => (
-                        <span key={ip} className="px-2 py-0.5 rounded bg-slate-950 text-cyan-300 border border-white/10 flex items-center gap-1">
-                          <Filter className="w-3 h-3 text-cyan-400 shrink-0" />
-                          {ip}
-                        </span>
-                      ))}
-                    {rule.port && (
-                      <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-300 border border-white/10">
-                        Port: {rule.port}
-                      </span>
-                    )}
-                    {rule.protocol &&
-                      rule.protocol.map((p) => (
-                        <span key={p} className="px-2 py-0.5 rounded bg-slate-950 text-purple-300 border border-white/10">
-                          Proto: {p}
-                        </span>
-                      ))}
                   </div>
                 </div>
               </div>
@@ -348,7 +311,7 @@ export const RulesPage: React.FC = () => {
               <div className="flex items-center gap-2 self-end md:self-center shrink-0">
                 {/* Outbound Target ProxyGroup / Node Select */}
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-slate-400 text-xs font-semibold shrink-0">指向出站:</span>
+                  <span className="text-slate-400 text-xs font-semibold shrink-0">出站:</span>
                   <OutboundSelect
                     value={rule.outboundTag}
                     onChange={(val) => {

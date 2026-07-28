@@ -4,6 +4,7 @@ import { useConfigStore } from '../stores/useConfigStore';
 
 import { useKernelStore } from '../stores/useKernelStore';
 import { open } from '@tauri-apps/plugin-dialog';
+import { formatShanghaiTime } from '../utils/date';
 
 export const SettingsPage: React.FC = () => {
   const { socksPort, httpPort, enableFakeDns, sniffingEnabled, updatePorts, toggleFakeDns, toggleSniffing } = useConfigStore();
@@ -438,7 +439,7 @@ export const SettingsPage: React.FC = () => {
                 </span>
               </div>
               <div className="text-[11px] text-slate-400 space-y-1 font-mono">
-                <p>最后更新: {geoDataStatus?.geoip.updated_at || '暂无数据'}</p>
+                <p>最后更新: {geoDataStatus?.geoip.updated_at ? formatShanghaiTime(geoDataStatus.geoip.updated_at) : '暂无数据'}</p>
                 <p className="text-[10px] text-slate-500 truncate">包含全球 IP 划分、大陆 IP (`geoip:cn`) 与局域网段</p>
               </div>
             </div>
@@ -457,7 +458,7 @@ export const SettingsPage: React.FC = () => {
                 </span>
               </div>
               <div className="text-[11px] text-slate-400 space-y-1 font-mono">
-                <p>最后更新: {geoDataStatus?.geosite.updated_at || '暂无数据'}</p>
+                <p>最后更新: {geoDataStatus?.geosite.updated_at ? formatShanghaiTime(geoDataStatus.geosite.updated_at) : '暂无数据'}</p>
                 <p className="text-[10px] text-slate-500 truncate">包含国内常用网站 (`geosite:cn`)、GFW 列表及各类服务规则</p>
               </div>
             </div>
