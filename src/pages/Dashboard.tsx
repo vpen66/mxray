@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Activity, ShieldCheck, Radio, Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Activity, ShieldCheck, Radio, Loader2, Sliders } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAppStore } from '../stores/useAppStore';
 import { useProxyStore } from '../stores/useProxyStore';
@@ -21,6 +21,7 @@ export const DashboardPage: React.FC = () => {
     isTogglingSystemProxy,
     isTogglingTunMode,
     toggleKernel,
+    openTunModal,
   } = useAppStore();
   const { profiles, selectedNodeId } = useProxyStore();
 
@@ -157,14 +158,27 @@ export const DashboardPage: React.FC = () => {
               }`}
             >
               <span className="text-xs font-semibold whitespace-nowrap">TUN 模式</span>
-              <ToggleSwitch
-                checked={coreState.tunMode}
-                onChange={toggleTunMode}
-                loading={isTogglingTunMode}
-                activeColor="indigo"
-                size="sm"
-                ariaLabel="TUN 模式"
-              />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  title="配置 TUN 模式参数"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openTunModal();
+                  }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                </button>
+                <ToggleSwitch
+                  checked={coreState.tunMode}
+                  onChange={toggleTunMode}
+                  loading={isTogglingTunMode}
+                  activeColor="indigo"
+                  size="sm"
+                  ariaLabel="TUN 模式"
+                />
+              </div>
             </div>
           </div>
 

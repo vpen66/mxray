@@ -1,5 +1,6 @@
 use std::process::Command;
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemProxyStatus {
@@ -7,6 +8,33 @@ pub struct SystemProxyStatus {
     pub http_port: u16,
     pub socks_port: u16,
     pub host: String,
+}
+
+fn get_saved_ports_from_runtime_config(app_handle: &tauri::AppHandle) -> (u16, u16) {
+    let mut http_port = 0;
+    let mut socks_port = 0;
+    if let Ok(app_dir) = app_handle.path().app_data_dir() {
+        let config_path = app_dir.join("runtime_config.json");
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(inbounds) = json.get("inbounds").and_then(|v| v.as_array()) {
+                    for ib in inbounds {
+                        let tag = ib.get("tag").and_then(|v| v.as_str()).unwrap_or_default();
+                        let protocol = ib.get("protocol").and_then(|v| v.as_str()).unwrap_or_default();
+                        let port = ib.get("port").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+
+                        if (tag == "http-in" || protocol == "http") && port > 0 {
+                            http_port = port;
+                        }
+                        if (tag == "socks-in" || protocol == "socks") && port > 0 {
+                            socks_port = port;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (http_port, socks_port)
 }
 
 #[cfg(target_os = "macos")]
@@ -42,12 +70,20 @@ fn get_active_macos_network_services() -> Vec<String> {
 
 #[tauri::command]
 pub fn set_system_proxy(
+    app_handle: tauri::AppHandle,
     enable: bool,
     http_port: Option<u16>,
     socks_port: Option<u16>,
 ) -> Result<(), String> {
-    let h_port = http_port.unwrap_or(7891);
-    let _s_port = socks_port.unwrap_or(7890);
+    let (saved_http, saved_socks) = get_saved_ports_from_runtime_config(&app_handle);
+    let h_port = match http_port {
+        Some(p) if p > 0 => p,
+        _ => if saved_http > 0 { saved_http } else { 7891 },
+    };
+    let s_port = match socks_port {
+        Some(p) if p > 0 => p,
+        _ => if saved_socks > 0 { saved_socks } else { 7890 },
+    };
     let host = "127.0.0.1";
 
     #[cfg(target_os = "macos")]
@@ -58,28 +94,32 @@ pub fn set_system_proxy(
         for service in services {
             if enable {
                 // Set HTTP proxy
-                let _ = Command::new("networksetup")
-                    .args(["-setwebproxy", &service, host, &h_port.to_string()])
-                    .output();
-                let _ = Command::new("networksetup")
-                    .args(["-setwebproxystate", &service, "on"])
-                    .output();
+                if h_port > 0 {
+                    let _ = Command::new("networksetup")
+                        .args(["-setwebproxy", &service, host, &h_port.to_string()])
+                        .output();
+                    let _ = Command::new("networksetup")
+                        .args(["-setwebproxystate", &service, "on"])
+                        .output();
 
-                // Set HTTPS proxy
-                let _ = Command::new("networksetup")
-                    .args(["-setsecurewebproxy", &service, host, &h_port.to_string()])
-                    .output();
-                let _ = Command::new("networksetup")
-                    .args(["-setsecurewebproxystate", &service, "on"])
-                    .output();
+                    // Set HTTPS proxy
+                    let _ = Command::new("networksetup")
+                        .args(["-setsecurewebproxy", &service, host, &h_port.to_string()])
+                        .output();
+                    let _ = Command::new("networksetup")
+                        .args(["-setsecurewebproxystate", &service, "on"])
+                        .output();
+                }
 
                 // Set SOCKS proxy
-                let _ = Command::new("networksetup")
-                    .args(["-setsocksfirewallproxy", &service, host, &_s_port.to_string()])
-                    .output();
-                let _ = Command::new("networksetup")
-                    .args(["-setsocksfirewallproxystate", &service, "on"])
-                    .output();
+                if s_port > 0 {
+                    let _ = Command::new("networksetup")
+                        .args(["-setsocksfirewallproxy", &service, host, &s_port.to_string()])
+                        .output();
+                    let _ = Command::new("networksetup")
+                        .args(["-setsocksfirewallproxystate", &service, "on"])
+                        .output();
+                }
             } else {
                 // Turn off proxies
                 let _ = Command::new("networksetup")
@@ -100,7 +140,11 @@ pub fn set_system_proxy(
     {
         let reg_path = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
         if enable {
-            let proxy_server = format!("{}:{}", host, h_port);
+            let proxy_server = if s_port > 0 {
+                format!("http={}:{};https={}:{};socks={}:{}", host, h_port, host, h_port, host, s_port)
+            } else {
+                format!("{}:{}", host, h_port)
+            };
             let bypass = "<local>;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*";
 
             let _ = Command::new("reg")
@@ -133,24 +177,28 @@ pub fn set_system_proxy(
             let _ = Command::new("gsettings")
                 .args(["set", "org.gnome.system.proxy", "mode", "manual"])
                 .output();
-            let _ = Command::new("gsettings")
-                .args(["set", "org.gnome.system.proxy.http", "host", host])
-                .output();
-            let _ = Command::new("gsettings")
-                .args(["set", "org.gnome.system.proxy.http", "port", &h_port.to_string()])
-                .output();
-            let _ = Command::new("gsettings")
-                .args(["set", "org.gnome.system.proxy.https", "host", host])
-                .output();
-            let _ = Command::new("gsettings")
-                .args(["set", "org.gnome.system.proxy.https", "port", &h_port.to_string()])
-                .output();
-            let _ = Command::new("gsettings")
-                .args(["set", "org.gnome.system.proxy.socks", "host", host])
-                .output();
-            let _ = Command::new("gsettings")
-                .args(["set", "org.gnome.system.proxy.socks", "port", &s_port.to_string()])
-                .output();
+            if h_port > 0 {
+                let _ = Command::new("gsettings")
+                    .args(["set", "org.gnome.system.proxy.http", "host", host])
+                    .output();
+                let _ = Command::new("gsettings")
+                    .args(["set", "org.gnome.system.proxy.http", "port", &h_port.to_string()])
+                    .output();
+                let _ = Command::new("gsettings")
+                    .args(["set", "org.gnome.system.proxy.https", "host", host])
+                    .output();
+                let _ = Command::new("gsettings")
+                    .args(["set", "org.gnome.system.proxy.https", "port", &h_port.to_string()])
+                    .output();
+            }
+            if s_port > 0 {
+                let _ = Command::new("gsettings")
+                    .args(["set", "org.gnome.system.proxy.socks", "host", host])
+                    .output();
+                let _ = Command::new("gsettings")
+                    .args(["set", "org.gnome.system.proxy.socks", "port", &s_port.to_string()])
+                    .output();
+            }
 
             let _ = Command::new("kwriteconfig5")
                 .args(["--file", "kioslaverc", "--group", "Proxy Settings", "--key", "ProxyType", "1"])
@@ -181,7 +229,8 @@ pub fn set_system_proxy(
 }
 
 #[tauri::command]
-pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
+pub fn get_system_proxy_status(app_handle: tauri::AppHandle) -> Result<SystemProxyStatus, String> {
+    let (saved_http, saved_socks) = get_saved_ports_from_runtime_config(&app_handle);
     #[cfg(target_os = "macos")]
     {
         let services = get_active_macos_network_services();
@@ -193,10 +242,34 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 let is_enabled = stdout.lines().any(|l| l.contains("Enabled: Yes"));
                 if is_enabled {
+                    let mut http_port = 0;
+                    if let Some(line) = stdout.lines().find(|l| l.contains("Port:")) {
+                        if let Some(port_str) = line.split(':').nth(1) {
+                            if let Ok(p) = port_str.trim().parse::<u16>() {
+                                http_port = p;
+                            }
+                        }
+                    }
+
+                    let mut socks_port = 0;
+                    if let Ok(socks_out) = Command::new("networksetup")
+                        .args(["-getsocksfirewallproxy", &service])
+                        .output()
+                    {
+                        let socks_stdout = String::from_utf8_lossy(&socks_out.stdout);
+                        if let Some(line) = socks_stdout.lines().find(|l| l.contains("Port:")) {
+                            if let Some(port_str) = line.split(':').nth(1) {
+                                if let Ok(p) = port_str.trim().parse::<u16>() {
+                                    socks_port = p;
+                                }
+                            }
+                        }
+                    }
+
                     return Ok(SystemProxyStatus {
                         enabled: true,
-                        http_port: 7891,
-                        socks_port: 7890,
+                        http_port,
+                        socks_port,
                         host: "127.0.0.1".to_string(),
                     });
                 }
@@ -204,8 +277,8 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
         }
         Ok(SystemProxyStatus {
             enabled: false,
-            http_port: 7891,
-            socks_port: 7890,
+            http_port: saved_http,
+            socks_port: saved_socks,
             host: "127.0.0.1".to_string(),
         })
     }
@@ -214,8 +287,8 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
     {
         let reg_path = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
         let mut enabled = false;
-        let mut http_port = 7891;
-        let socks_port = 7890;
+        let mut http_port = 0;
+        let mut socks_port = 0;
 
         if let Ok(out) = Command::new("reg")
             .args(["query", reg_path, "/v", "ProxyEnable"])
@@ -232,11 +305,23 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
             .output()
         {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            if let Some(pos) = stdout.find(':') {
-                let port_str = stdout[pos + 1..].trim();
-                let port_clean: String = port_str.chars().take_while(|c| c.is_ascii_digit()).collect();
-                if let Ok(p) = port_clean.parse::<u16>() {
-                    http_port = p;
+            for part in stdout.split(';') {
+                let item = part.trim();
+                if item.contains("http=") {
+                    if let Some(pos) = item.rfind(':') {
+                        let port_str: String = item[pos + 1..].chars().take_while(|c| c.is_ascii_digit()).collect();
+                        if let Ok(p) = port_str.parse::<u16>() { http_port = p; }
+                    }
+                } else if item.contains("socks=") {
+                    if let Some(pos) = item.rfind(':') {
+                        let port_str: String = item[pos + 1..].chars().take_while(|c| c.is_ascii_digit()).collect();
+                        if let Ok(p) = port_str.parse::<u16>() { socks_port = p; }
+                    }
+                } else if item.contains(':') && http_port == 0 {
+                    if let Some(pos) = item.rfind(':') {
+                        let port_str: String = item[pos + 1..].chars().take_while(|c| c.is_ascii_digit()).collect();
+                        if let Ok(p) = port_str.parse::<u16>() { http_port = p; }
+                    }
                 }
             }
         }
@@ -252,6 +337,9 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
     #[cfg(target_os = "linux")]
     {
         let mut enabled = false;
+        let mut http_port = 0;
+        let mut socks_port = 0;
+
         if let Ok(out) = Command::new("gsettings")
             .args(["get", "org.gnome.system.proxy", "mode"])
             .output()
@@ -262,10 +350,32 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
             }
         }
 
+        if let Ok(out) = Command::new("gsettings")
+            .args(["get", "org.gnome.system.proxy.http", "port"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let port_clean: String = stdout.chars().filter(|c| c.is_ascii_digit()).collect();
+            if let Ok(p) = port_clean.parse::<u16>() {
+                if p > 0 { http_port = p; }
+            }
+        }
+
+        if let Ok(out) = Command::new("gsettings")
+            .args(["get", "org.gnome.system.proxy.socks", "port"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let port_clean: String = stdout.chars().filter(|c| c.is_ascii_digit()).collect();
+            if let Ok(p) = port_clean.parse::<u16>() {
+                if p > 0 { socks_port = p; }
+            }
+        }
+
         Ok(SystemProxyStatus {
             enabled,
-            http_port: 7891,
-            socks_port: 7890,
+            http_port,
+            socks_port,
             host: "127.0.0.1".to_string(),
         })
     }
@@ -274,8 +384,8 @@ pub fn get_system_proxy_status() -> Result<SystemProxyStatus, String> {
     {
         Ok(SystemProxyStatus {
             enabled: false,
-            http_port: 7891,
-            socks_port: 7890,
+            http_port: 0,
+            socks_port: 0,
             host: "127.0.0.1".to_string(),
         })
     }

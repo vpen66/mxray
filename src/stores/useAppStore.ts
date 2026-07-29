@@ -10,10 +10,17 @@ interface AppStore {
   trafficStats: TrafficStats;
   isTogglingSystemProxy: boolean;
   isTogglingTunMode: boolean;
+  autoStartApp: boolean;
+  isTogglingAutoStart: boolean;
+  isTunModalOpen: boolean;
+  openTunModal: () => void;
+  closeTunModal: () => void;
   setMode: (mode: OutboundMode) => void;
   toggleSystemProxy: () => Promise<void>;
   checkSystemProxyStatus: () => Promise<void>;
   toggleTunMode: () => Promise<void>;
+  toggleAutoStartApp: () => Promise<void>;
+  checkAutoStartStatus: () => Promise<void>;
   setCoreRunning: (running: boolean) => void;
   stopKernel: () => Promise<void>;
   startKernel: () => Promise<void>;
@@ -24,6 +31,9 @@ interface AppStore {
 export const useAppStore = create<AppStore>((set, get) => ({
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
+  isTunModalOpen: false,
+  openTunModal: () => set({ isTunModalOpen: true }),
+  closeTunModal: () => set({ isTunModalOpen: false }),
   coreState: {
     isRunning: false,
     version: 'Xray 26.3.27 (Xray-core)',
@@ -41,6 +51,39 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
   isTogglingSystemProxy: false,
   isTogglingTunMode: false,
+  autoStartApp: false,
+  isTogglingAutoStart: false,
+
+  checkAutoStartStatus: async () => {
+    try {
+      const { isEnabled } = await import('@tauri-apps/plugin-autostart');
+      const enabled = await isEnabled();
+      set({ autoStartApp: enabled });
+    } catch {
+      // Web fallback
+    }
+  },
+
+  toggleAutoStartApp: async () => {
+    if (get().isTogglingAutoStart) return;
+    set({ isTogglingAutoStart: true });
+    try {
+      const { enable, disable, isEnabled } = await import('@tauri-apps/plugin-autostart');
+      const currentlyEnabled = await isEnabled();
+      if (currentlyEnabled) {
+        await disable();
+        set({ autoStartApp: false });
+      } else {
+        await enable();
+        set({ autoStartApp: true });
+      }
+    } catch (e) {
+      console.warn('Toggle autostart warning:', e);
+      set((state) => ({ autoStartApp: !state.autoStartApp }));
+    } finally {
+      set({ isTogglingAutoStart: false });
+    }
+  },
 
   setMode: async (mode) => {
     set((state) => ({
@@ -50,11 +93,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const { useProxyStore } = await import('./useProxyStore');
       const { useConfigStore } = await import('./useConfigStore');
-      const { useConnectionStore } = await import('./useConnectionStore');
 
       const proxyState = useProxyStore.getState();
       const allNodes = proxyState.profiles.flatMap((p) => p.nodes);
-      const activeNode = allNodes.find((n) => n.id === proxyState.selectedNodeId);
 
       useConfigStore.getState().syncNodesAndGroups(
         allNodes,
@@ -62,8 +103,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
         proxyState.selectedNodeId,
         mode
       );
-
-      useConnectionStore.getState().updateModeConnections(mode, activeNode?.name || '代理节点');
 
       if (get().coreState.isRunning) {
         await useConfigStore.getState().startActiveKernel();
@@ -154,9 +193,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const minDelay = new Promise((resolve) => setTimeout(resolve, 450));
     try {
       await minDelay;
+      const nextTunMode = !get().coreState.tunMode;
       set((state) => ({
-        coreState: { ...state.coreState, tunMode: !state.coreState.tunMode },
+        coreState: { ...state.coreState, tunMode: nextTunMode },
       }));
+      if (get().coreState.isRunning) {
+        await useConfigStore.getState().startActiveKernel();
+      }
+    } catch (err) {
+      console.error('切换 TUN 模式失败:', err);
     } finally {
       set({ isTogglingTunMode: false });
     }

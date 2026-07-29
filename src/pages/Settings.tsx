@@ -3,12 +3,14 @@ import { Shield, Network, Cpu, HardDrive, Download, FolderOpen, CheckCircle, Ale
 import { useConfigStore } from '../stores/useConfigStore';
 import { useKernelStore } from '../stores/useKernelStore';
 import { useUpdateStore } from '../stores/useUpdateStore';
+import { useAppStore } from '../stores/useAppStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { formatShanghaiTime } from '../utils/date';
 import { ToggleSwitch } from '../components/ToggleSwitch';
 
 export const SettingsPage: React.FC = () => {
+  const { autoStartApp, isTogglingAutoStart, toggleAutoStartApp, checkAutoStartStatus } = useAppStore();
   const { socksPort, httpPort, enableFakeDns, sniffingEnabled, updatePorts, toggleFakeDns, toggleSniffing } = useConfigStore();
   const {
     activeKernel,
@@ -60,7 +62,8 @@ export const SettingsPage: React.FC = () => {
     loadInstalledKernels();
     fetchRemoteReleases();
     fetchGeoDataInfo();
-  }, [loadInstalledKernels, fetchRemoteReleases, fetchGeoDataInfo]);
+    checkAutoStartStatus();
+  }, [loadInstalledKernels, fetchRemoteReleases, fetchGeoDataInfo, checkAutoStartStatus]);
 
   useEffect(() => {
     const fetchCliInfo = async () => {
@@ -718,9 +721,13 @@ export const SettingsPage: React.FC = () => {
               <h4 className="font-bold text-white">开机自动启动 MXray</h4>
               <p className="text-slate-400">登录系统后后台静默启动并自动挂载核心代理</p>
             </div>
-            <button className="w-12 h-6 rounded-full bg-blue-600 relative p-0.5">
-              <div className="w-5 h-5 rounded-full bg-white translate-x-6 transition-transform" />
-            </button>
+            <ToggleSwitch
+              checked={autoStartApp}
+              onChange={toggleAutoStartApp}
+              loading={isTogglingAutoStart}
+              activeColor="blue"
+              ariaLabel="开机自动启动 MXray"
+            />
           </div>
         </div>
       </div>

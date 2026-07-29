@@ -156,12 +156,6 @@ const BLACKHOLE_RESPONSE_OPTIONS = [
   { value: 'http', label: 'http (返回 403 HTTP 阻断响应)' },
 ];
 
-const TUN_STACK_OPTIONS = [
-  { value: 'gvisor', label: 'gvisor (用户态网络栈，推荐)' },
-  { value: 'system', label: 'system (系统原生网络栈)' },
-  { value: 'lwip', label: 'lwip (轻量级网络栈)' },
-];
-
 const DNS_NON_IP_QUERY_OPTIONS = [
   { value: 'accept', label: 'accept (正常发起 DNS 查询)' },
   { value: 'drop', label: 'drop (丢弃非 IP 类 DNS 请求)' },
@@ -334,12 +328,15 @@ export const JsonConfigPage: React.FC = () => {
     wgSecretKey: string;
     wgPublicKey: string;
     wgAllowedIPs: string;
-    // tun inbound
+    // tun inbound (official Xray tun schema)
     tunName: string;
+    tunDesc: string;
     tunMtu: number | string;
-    tunStack: string;
-    autoRoute: boolean;
-    strictRoute: boolean;
+    tunGateway: string;
+    tunDns: string;
+    tunUserLevel: number | string;
+    tunAutoSystemRoutingTable: string;
+    tunAutoOutboundsInterface: string;
   }>({
     isOpen: false,
     isMaximized: false,
@@ -369,11 +366,14 @@ export const JsonConfigPage: React.FC = () => {
     wgSecretKey: '',
     wgPublicKey: '',
     wgAllowedIPs: '0.0.0.0/0',
-    tunName: 'tun0',
+    tunName: typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/.test(navigator.userAgent || navigator.platform) ? 'utun20' : 'tun0',
+    tunDesc: 'MXray TUN Adapter',
     tunMtu: 1500,
-    tunStack: 'gvisor',
-    autoRoute: true,
-    strictRoute: true,
+    tunGateway: '10.0.0.1/16, fc00::1/64',
+    tunDns: '1.1.1.1, 8.8.8.8',
+    tunUserLevel: 0,
+    tunAutoSystemRoutingTable: '0.0.0.0/0, ::/0',
+    tunAutoOutboundsInterface: 'auto',
   });
 
   // Outbound Modal State
@@ -964,13 +964,39 @@ export const JsonConfigPage: React.FC = () => {
         ],
       };
     } else if (targetProtocol === 'tun') {
+      const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/.test(navigator.userAgent || navigator.platform);
+      const isWin = typeof navigator !== 'undefined' && /Win/.test(navigator.userAgent || navigator.platform);
+      let nameVal = (ib.tunName ?? '').trim();
+      if (!nameVal || (isMac && !/^utun\d+$/i.test(nameVal))) {
+        nameVal = isMac ? 'utun20' : isWin ? 'wintun' : 'tun0';
+      }
+
+      const gatewayList = (ib.tunGateway || '')
+        .split(/[,,\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const dnsList = (ib.tunDns || '')
+        .split(/[,,\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const autoRoutingList = (ib.tunAutoSystemRoutingTable || '')
+        .split(/[,,\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       newInbound.settings = {
-        name: ib.tunName || 'tun0',
+        name: nameVal,
+        desc: (ib.tunDesc || '').trim() || 'MXray TUN Adapter',
         mtu: Number(ib.tunMtu) || 1500,
-        stack: ib.tunStack || 'gvisor',
-        autoRoute: ib.autoRoute,
-        strictRoute: ib.strictRoute,
+        gateway: gatewayList.length > 0 ? gatewayList : ['10.0.0.1/16', 'fc00::1/64'],
+        dns: dnsList.length > 0 ? dnsList : ['1.1.1.1', '8.8.8.8'],
+        userLevel: Number(ib.tunUserLevel) || 0,
+        autoSystemRoutingTable: autoRoutingList.length > 0 ? autoRoutingList : ['0.0.0.0/0', '::/0'],
+        autoOutboundsInterface: ib.tunAutoOutboundsInterface || 'auto',
       };
+      if (newInbound.sniffing) {
+        newInbound.sniffing.routeOnly = false;
+      }
     }
     return newInbound;
   };
@@ -1026,11 +1052,14 @@ export const JsonConfigPage: React.FC = () => {
       wgSecretKey: ib.settings?.secretKey || '',
       wgPublicKey: ib.settings?.peers?.[0]?.publicKey || '',
       wgAllowedIPs: ib.settings?.peers?.[0]?.allowedIPs?.[0] || '0.0.0.0/0',
-      tunName: ib.settings?.name || 'tun0',
+      tunName: ib.settings?.name || (typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/.test(navigator.userAgent || navigator.platform) ? 'utun20' : 'tun0'),
+      tunDesc: ib.settings?.desc || 'MXray TUN Adapter',
       tunMtu: ib.settings?.mtu ?? 1500,
-      tunStack: ib.settings?.stack || 'gvisor',
-      autoRoute: ib.settings?.autoRoute ?? true,
-      strictRoute: ib.settings?.strictRoute ?? true,
+      tunGateway: Array.isArray(ib.settings?.gateway) ? ib.settings.gateway.join(', ') : '10.0.0.1/16, fc00::1/64',
+      tunDns: Array.isArray(ib.settings?.dns) ? ib.settings.dns.join(', ') : '1.1.1.1, 8.8.8.8',
+      tunUserLevel: ib.settings?.userLevel ?? 0,
+      tunAutoSystemRoutingTable: Array.isArray(ib.settings?.autoSystemRoutingTable) ? ib.settings.autoSystemRoutingTable.join(', ') : '0.0.0.0/0, ::/0',
+      tunAutoOutboundsInterface: ib.settings?.autoOutboundsInterface || 'auto',
     };
   };
 
@@ -1521,6 +1550,7 @@ export const JsonConfigPage: React.FC = () => {
       });
     } else {
       const count = parsedConfig?.inbounds?.length || 0;
+      const { socksPort, httpPort } = useConfigStore.getState();
       const defaultState = {
         isOpen: true,
         index: null,
@@ -1531,7 +1561,7 @@ export const JsonConfigPage: React.FC = () => {
         protocol: count === 1 ? 'http' : 'socks',
         customProtocol: '',
         listen: '127.0.0.1',
-        port: count === 0 ? 7890 : count === 1 ? 7891 : 7892 + count,
+        port: count === 0 ? socksPort : count === 1 ? httpPort : socksPort + count,
         sniffing: true,
         targetAddress: '8.8.8.8',
         targetPort: 53,
@@ -1549,11 +1579,14 @@ export const JsonConfigPage: React.FC = () => {
         wgSecretKey: '',
         wgPublicKey: '',
         wgAllowedIPs: '0.0.0.0/0',
-        tunName: 'tun0',
+        tunName: typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/.test(navigator.userAgent || navigator.platform) ? 'utun20' : 'tun0',
+        tunDesc: 'MXray TUN Adapter',
         tunMtu: 1500,
-        tunStack: 'gvisor',
-        autoRoute: true,
-        strictRoute: true,
+        tunGateway: '10.0.0.1/16, fc00::1/64',
+        tunDns: '1.1.1.1, 8.8.8.8',
+        tunUserLevel: 0,
+        tunAutoSystemRoutingTable: '0.0.0.0/0, ::/0',
+        tunAutoOutboundsInterface: 'auto',
       };
       defaultState.rawJsonText = JSON.stringify(buildInboundObjectFromVisual(defaultState), null, 2);
       setInboundModal(defaultState);
@@ -1916,6 +1949,20 @@ export const JsonConfigPage: React.FC = () => {
     if (newTemplateType === 'tun') initialContent = TEMPLATE_TUN;
     if (newTemplateType === 'minimal') initialContent = TEMPLATE_MINIMAL;
     if (newTemplateType === 'blank') initialContent = '{\n  "log": {\n    "loglevel": "warning"\n  }\n}';
+
+    const { socksPort, httpPort } = useConfigStore.getState();
+    try {
+      const parsed = JSON.parse(initialContent);
+      if (Array.isArray(parsed.inbounds)) {
+        const socksIb = parsed.inbounds.find((ib: any) => ib.tag === 'socks-in' || ib.protocol === 'socks');
+        if (socksIb) socksIb.port = socksPort;
+        const httpIb = parsed.inbounds.find((ib: any) => ib.tag === 'http-in' || ib.protocol === 'http');
+        if (httpIb) httpIb.port = httpPort;
+      }
+      initialContent = JSON.stringify(parsed, null, 2);
+    } catch {
+      // Fallback
+    }
 
     const createdId = addProfile({
       name: newProfileName || '自定义配置文件',
@@ -3029,7 +3076,7 @@ export const JsonConfigPage: React.FC = () => {
               {inboundModal.mode === 'visual' ? (
                 <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar py-3 space-y-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">入站 Tag (标识名)</label>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">入站标识</label>
                     <input
                       type="text"
                       placeholder="如: socks-in, http-in 或 tunnel-in"
@@ -3041,7 +3088,7 @@ export const JsonConfigPage: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">协议 Protocol</label>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">传输协议</label>
                       <CustomSelect
                         value={inboundModal.protocol}
                         onChange={(val) => setInboundModal((prev) => ({ ...prev, protocol: val }))}
@@ -3051,7 +3098,7 @@ export const JsonConfigPage: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">监听端口 Port</label>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">监听端口</label>
                       <input
                         type="number"
                         placeholder="7890"
@@ -3064,7 +3111,7 @@ export const JsonConfigPage: React.FC = () => {
 
                   {inboundModal.protocol === 'custom' && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">自定义协议名称 Custom Protocol</label>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">自定义协议名称</label>
                       <input
                         type="text"
                         placeholder="例如: socks, http, dokodemo-door 等"
@@ -3352,15 +3399,31 @@ export const JsonConfigPage: React.FC = () => {
                   {/* 7. TUN 入站 */}
                   {effectiveProtocol === 'tun' && (
                     <div className="p-3 bg-cyan-950/20 border border-cyan-500/20 rounded-xl space-y-3">
-                      <div className="text-xs font-bold text-cyan-400">TUN 虚拟网卡入站设置</div>
+                      <div className="text-xs font-bold text-cyan-400">TUN 虚拟网卡入站设置（Xray 官方标准）</div>
                       <div className="grid grid-cols-3 gap-3">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1">网卡名称 Name</label>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">网卡名称</label>
                           <input
                             type="text"
-                            placeholder="tun0"
+                            placeholder={
+                              typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/.test(navigator.userAgent || navigator.platform)
+                                ? 'utun20'
+                                : typeof navigator !== 'undefined' && /Win/.test(navigator.userAgent || navigator.platform)
+                                ? 'wintun'
+                                : 'tun0'
+                            }
                             value={inboundModal.tunName}
                             onChange={(e) => setInboundModal((prev) => ({ ...prev, tunName: e.target.value }))}
+                            className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">网卡描述</label>
+                          <input
+                            type="text"
+                            placeholder="MXray TUN Adapter"
+                            value={inboundModal.tunDesc}
+                            onChange={(e) => setInboundModal((prev) => ({ ...prev, tunDesc: e.target.value }))}
                             className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                           />
                         </div>
@@ -3374,34 +3437,52 @@ export const JsonConfigPage: React.FC = () => {
                             className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                           />
                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1">网络栈 Stack</label>
-                          <CustomSelect
-                            value={inboundModal.tunStack}
-                            onChange={(val) => setInboundModal((prev) => ({ ...prev, tunStack: val }))}
-                            options={TUN_STACK_OPTIONS}
-                            accentColor="cyan"
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">网关地址池</label>
+                          <input
+                            type="text"
+                            placeholder="10.0.0.1/16, fc00::1/64"
+                            value={inboundModal.tunGateway}
+                            onChange={(e) => setInboundModal((prev) => ({ ...prev, tunGateway: e.target.value }))}
+                            className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">TUN DNS 服务器</label>
+                          <input
+                            type="text"
+                            placeholder="1.1.1.1, 8.8.8.8"
+                            value={inboundModal.tunDns}
+                            onChange={(e) => setInboundModal((prev) => ({ ...prev, tunDns: e.target.value }))}
+                            className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                           />
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 pt-1">
-                        <div className="flex items-center justify-between p-2 bg-slate-950/60 rounded-lg border border-white/5">
-                          <span className="text-xs text-slate-200">自动设置系统路由</span>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-2">
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">自动系统路由表 CIDR</label>
                           <input
-                            type="checkbox"
-                            checked={inboundModal.autoRoute}
-                            onChange={(e) => setInboundModal((prev) => ({ ...prev, autoRoute: e.target.checked }))}
-                            className="w-4 h-4 rounded border-white/20 bg-slate-900 text-cyan-600 focus:ring-cyan-500"
+                            type="text"
+                            placeholder="0.0.0.0/0, ::/0"
+                            value={inboundModal.tunAutoSystemRoutingTable}
+                            onChange={(e) => setInboundModal((prev) => ({ ...prev, tunAutoSystemRoutingTable: e.target.value }))}
+                            className="w-full px-3 py-2 bg-slate-950 rounded-xl border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                           />
                         </div>
-                        <div className="flex items-center justify-between p-2 bg-slate-950/60 rounded-lg border border-white/5">
-                          <span className="text-xs text-slate-200">严格路由模式</span>
-                          <input
-                            type="checkbox"
-                            checked={inboundModal.strictRoute}
-                            onChange={(e) => setInboundModal((prev) => ({ ...prev, strictRoute: e.target.checked }))}
-                            className="w-4 h-4 rounded border-white/20 bg-slate-900 text-cyan-600 focus:ring-cyan-500"
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1">自动出口网卡</label>
+                          <CustomSelect
+                            value={inboundModal.tunAutoOutboundsInterface}
+                            onChange={(val) => setInboundModal((prev) => ({ ...prev, tunAutoOutboundsInterface: val }))}
+                            options={[
+                              { value: 'auto', label: 'auto (自动关联)' },
+                              { value: 'direct', label: 'direct (内核自寻)' },
+                            ]}
+                            accentColor="cyan"
                           />
                         </div>
                       </div>

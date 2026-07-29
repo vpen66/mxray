@@ -399,19 +399,14 @@ export function syncNodesAndGroupsToConfigJson(
     (rule) => !(rule.description && rule.description.startsWith('MXRay Mode Override'))
   );
 
-  // Replace any existing rule pointing to 'proxy' with the active node's tag (if nodes exist)
-  const updatedExistingRules = existingRules.map((rule) => {
-    if (rule.outboundTag === 'proxy' && activeNodeTag !== 'proxy') {
-      return { ...rule, outboundTag: activeNodeTag };
-    }
-    return rule;
-  });
-
   const groupRoutingRules: XrayRoutingRule[] = [];
   const balancers: Record<string, any>[] = [];
   const observatorySubjectSelectors = new Set<string>();
   let probeUrl = 'https://www.gstatic.com/generate_204';
   let probeInterval = 10;
+
+  // Map of group name / group ID to target outboundTag or balancerTag
+  const groupTagMap = new Map<string, { outboundTag?: string; balancerTag?: string }>();
 
   for (const group of groups) {
     let targetOutboundTag = activeNodeTag;
@@ -470,6 +465,9 @@ export function syncNodesAndGroupsToConfigJson(
       }
     }
 
+    groupTagMap.set(group.name, { outboundTag: targetOutboundTag, balancerTag: targetBalancerTag });
+    groupTagMap.set(group.id, { outboundTag: targetOutboundTag, balancerTag: targetBalancerTag });
+
     const ruleBase: XrayRoutingRule = {
       type: 'field',
     };
@@ -496,8 +494,53 @@ export function syncNodesAndGroupsToConfigJson(
         domain: ['geosite:cn'],
         ip: ['geoip:cn'],
       });
+    } else if (
+      group.name === '国外流量' ||
+      group.name.toLowerCase().includes('global') ||
+      group.name.toLowerCase().includes('foreign') ||
+      group.name.toLowerCase().includes('proxy')
+    ) {
+      groupRoutingRules.push({
+        ...ruleBase,
+        domain: ['geosite:geolocation-!cn'],
+      });
     }
   }
+
+  const validOutboundTags = new Set(finalOutbounds.map((ob) => ob.tag));
+  const validBalancerTags = new Set(balancers.map((b) => b.tag as string));
+
+  // Map existing rules referencing group names or 'proxy' to actual outbound/balancer tags
+  const updatedExistingRules = existingRules.map((rule) => {
+    let r = { ...rule };
+
+    // Clear balancerTag if it's no longer a valid balancer
+    if (r.balancerTag && !validBalancerTags.has(r.balancerTag)) {
+      const { balancerTag: _b, ...rest } = r;
+      r = { ...rest, outboundTag: activeNodeTag };
+    }
+
+    if (r.outboundTag && groupTagMap.has(r.outboundTag)) {
+      const target = groupTagMap.get(r.outboundTag)!;
+      if (target.balancerTag) {
+        const { outboundTag: _outboundTag, ...rest } = r;
+        return { ...rest, balancerTag: target.balancerTag };
+      } else if (target.outboundTag) {
+        return { ...r, outboundTag: target.outboundTag };
+      }
+    }
+    if (r.outboundTag === 'proxy' && activeNodeTag !== 'proxy') {
+      return { ...r, outboundTag: activeNodeTag };
+    }
+    if (
+      r.outboundTag &&
+      !validOutboundTags.has(r.outboundTag) &&
+      !validBalancerTags.has(r.outboundTag)
+    ) {
+      return { ...r, outboundTag: activeNodeTag };
+    }
+    return r;
+  });
 
   if (balancers.length > 0) {
     config.routing.balancers = balancers;

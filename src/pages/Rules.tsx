@@ -664,7 +664,7 @@ const AdvancedRuleModal: React.FC<AdvancedRuleModalProps> = ({
   onSave,
 }) => {
   const [description, setDescription] = useState(editingRule?.description || '');
-  const [outboundTag, setOutboundTag] = useState(editingRule?.outboundTag || editingRule?.balancerTag || '国际流量');
+  const [outboundTag, setOutboundTag] = useState(editingRule?.outboundTag || editingRule?.balancerTag || 'direct');
 
   // Extended input fields for rule target conditions
   const [domainText, setDomainText] = useState(editingRule?.domain ? editingRule.domain.join('\n') : 'domain:google.com\ngeosite:gfw');

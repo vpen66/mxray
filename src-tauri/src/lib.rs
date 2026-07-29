@@ -45,6 +45,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::AppleScript, None))
         .invoke_handler(tauri::generate_handler![
             get_core_version,
             parse_subscription_link,
@@ -70,7 +71,7 @@ pub fn run() {
     app.run(|_app_handle, event| match event {
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
             let _ = kernel::stop_kernel();
-            let _ = sysproxy::set_system_proxy(false, None, None);
+            let _ = sysproxy::set_system_proxy(_app_handle.clone(), false, None, None);
         }
         _ => {}
     });

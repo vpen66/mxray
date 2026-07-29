@@ -12,7 +12,7 @@ import {
   Activity,
   Loader2,
   Power,
-  Network,
+  Sliders,
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
 import { useKernelStore } from '../stores/useKernelStore';
@@ -21,7 +21,6 @@ import { ToggleSwitch } from './ToggleSwitch';
 const NAV_ITEMS = [
   { id: 'dashboard', label: '控制台', icon: LayoutDashboard },
   { id: 'proxies', label: '节点代理', icon: Globe2 },
-  { id: 'connections', label: '连接追踪', icon: Network },
   { id: 'profiles', label: '订阅配置', icon: FolderGit2 },
   { id: 'rules', label: '路由规则', icon: Route },
   { id: 'logs', label: '实时日志', icon: Terminal },
@@ -39,6 +38,7 @@ export const Sidebar: React.FC = () => {
     isTogglingSystemProxy,
     isTogglingTunMode,
     toggleKernel,
+    openTunModal,
   } = useAppStore();
   const { activeKernel } = useKernelStore();
 
@@ -163,14 +163,27 @@ export const Sidebar: React.FC = () => {
               </span>
             </div>
           </div>
-          <ToggleSwitch
-            checked={coreState.tunMode}
-            onChange={toggleTunMode}
-            loading={isTogglingTunMode}
-            activeColor="indigo"
-            size="sm"
-            ariaLabel="原生 TUN 模式开关"
-          />
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              title="配置 TUN 模式参数"
+              onClick={(e) => {
+                e.stopPropagation();
+                openTunModal();
+              }}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+            </button>
+            <ToggleSwitch
+              checked={coreState.tunMode}
+              onChange={toggleTunMode}
+              loading={isTogglingTunMode}
+              activeColor="indigo"
+              size="sm"
+              ariaLabel="原生 TUN 模式开关"
+            />
+          </div>
         </div>
       </div>
     </aside>

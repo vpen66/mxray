@@ -502,6 +502,27 @@ pub fn stop_kernel() -> Result<(), String> {
         let _ = child.kill();
         let _ = child.wait();
     }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("pkill")
+            .args(["-9", "-f", "runtime_config.json"])
+            .output();
+
+        if let Ok(out) = Command::new("pgrep").args(["-f", "runtime_config.json"]).output() {
+            if out.status.success() && !out.stdout.is_empty() {
+                let _ = Command::new("osascript")
+                    .arg("-e")
+                    .arg("do shell script \"pkill -9 -f runtime_config.json || true\" with administrator privileges")
+                    .output();
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/F", "/IM", "xray.exe"])
+            .output();
+    }
     Ok(())
 }
 
@@ -515,6 +536,11 @@ pub fn start_kernel(
 
     let bin_path = find_xray_binary(binary_path.as_deref(), &app_handle)?;
 
+    let is_tun_enabled = config_json.contains("\"protocol\":\"tun\"")
+        || config_json.contains("\"protocol\": \"tun\"")
+        || config_json.contains("\"tag\":\"tun-in\"")
+        || config_json.contains("\"tag\": \"tun-in\"");
+
     let app_dir = app_handle
         .path()
         .app_data_dir()
@@ -525,6 +551,37 @@ pub fn start_kernel(
 
     fs::write(&config_file_path, &config_json)
         .map_err(|e| format!("写入运行时配置文件失败: {}", e))?;
+
+    #[cfg(target_os = "macos")]
+    if is_tun_enabled {
+        use std::os::unix::fs::MetadataExt;
+        let mut need_grant = true;
+        if let Ok(meta) = std::fs::metadata(&bin_path) {
+            if meta.uid() == 0 && (meta.mode() & 0o4000) != 0 {
+                need_grant = false;
+            }
+        }
+
+        if need_grant {
+            let escaped_bin = bin_path.replace('\'', "'\\''");
+            let script = format!(
+                "tell application \"System Events\" to activate\n\
+                 do shell script \"chown root:wheel '{}' && chmod u+s '{}'\" with administrator privileges",
+                escaped_bin, escaped_bin
+            );
+
+            let output = Command::new("osascript")
+                .arg("-e")
+                .arg(&script)
+                .output()
+                .map_err(|e| format!("唤起系统管理员授权失败: {}", e))?;
+
+            if !output.status.success() {
+                let err_msg = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("TUN 模式授权失败: 请在弹出的系统密码框中输入密码授权 ({})", err_msg.trim()));
+            }
+        }
+    }
 
     let mut child = Command::new(&bin_path)
         .args(["run", "-config", config_file_path.to_str().unwrap_or_default()])
@@ -552,10 +609,18 @@ pub fn start_kernel(
     // 2. Stream stderr
     if let Some(stderr) = child.stderr.take() {
         let app_handle_stderr = app_handle.clone();
+        let bin_path_log = bin_path.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines().flatten() {
                 let level = parse_log_level(&line);
+                if line.to_lowercase().contains("operation not permitted") {
+                    let _ = app_handle_stderr.emit("xray-log", LogPayload {
+                        level: "error".to_string(),
+                        message: format!("[提示] TUN 模式需要管理员权限创建虚拟网卡。请在终端运行: sudo chown root:wheel \"{}\" && sudo chmod +s \"{}\"", bin_path_log, bin_path_log),
+                        timestamp: "".to_string(),
+                    });
+                }
                 let _ = app_handle_stderr.emit("xray-log", LogPayload {
                     level,
                     message: line,

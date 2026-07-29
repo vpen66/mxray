@@ -30,33 +30,48 @@ impl ConfigBuilder {
                 },
                 "sniffing": {
                     "enabled": true,
-                    "destOverride": ["http", "tls", "quic"]
+                    "destOverride": ["http", "tls", "quic", "fakedns"],
+                    "routeOnly": false
                 }
             }),
             json!({
                 "tag": "http-in",
                 "port": self.http_port,
                 "listen": "127.0.0.1",
-                "protocol": "http"
+                "protocol": "http",
+                "sniffing": {
+                    "enabled": true,
+                    "destOverride": ["http", "tls", "quic", "fakedns"],
+                    "routeOnly": false
+                }
             }),
         ];
 
         if self.enable_tun {
+            let tun_name = if cfg!(target_os = "macos") {
+                "utun20"
+            } else if cfg!(target_os = "windows") {
+                "wintun"
+            } else {
+                "tun0"
+            };
             inbounds.push(json!({
                 "tag": "tun-in",
-                "protocol": "dokodemo-door",
+                "protocol": "tun",
                 "settings": {
-                    "network": "tcp,udp",
-                    "followRedirect": true
-                },
-                "streamSettings": {
-                    "sockopt": {
-                        "tproxy": "tproxy"
-                    }
+                    "name": tun_name,
+                    "desc": "MXray TUN Adapter",
+                    "mtu": 1500,
+                    "gateway": ["10.0.0.1/16", "fc00::1/64"],
+                    "dns": ["1.1.1.1", "8.8.8.8"],
+                    "userLevel": 0,
+                    "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
+                    "autoOutboundsInterface": "auto"
                 },
                 "sniffing": {
                     "enabled": true,
-                    "destOverride": ["http", "tls", "quic", "fakedns"]
+                    "destOverride": ["http", "tls", "quic", "fakedns"],
+                    "routeOnly": false
                 }
             }));
         }
@@ -94,7 +109,7 @@ impl ConfigBuilder {
                     {
                         "type": "field",
                         "outboundTag": "direct",
-                        "ip": ["geoip:cn", "geoip:private"]
+                        "ip": ["geoip:cn", "geoip:private", "127.0.0.0/8", "::1/128"]
                     },
                     {
                         "type": "field",

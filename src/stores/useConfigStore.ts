@@ -4,6 +4,7 @@ import type { XrayConfigProfile, OutboundMode } from '../types';
 import { syncNodesAndGroupsToConfigJson } from '../utils/xrayMapper';
 import { invoke } from '@tauri-apps/api/core';
 import { getShanghaiNowString } from '../utils/date';
+import { useAppStore } from './useAppStore';
 
 interface ConfigStore {
   profiles: XrayConfigProfile[];
@@ -66,7 +67,8 @@ export const TEMPLATE_STANDARD = `{
       },
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls", "quic", "fakedns"]
+        "destOverride": ["http", "tls", "quic", "fakedns"],
+        "routeOnly": false
       }
     },
     {
@@ -76,6 +78,11 @@ export const TEMPLATE_STANDARD = `{
       "protocol": "http",
       "settings": {
         "timeout": 0
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic", "fakedns"],
+        "routeOnly": false
       }
     }
   ],
@@ -170,19 +177,39 @@ export const TEMPLATE_TUN = `{
       "settings": {
         "auth": "noauth",
         "udp": true
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic", "fakedns"],
+        "routeOnly": false
+      }
+    },
+    {
+      "tag": "http-in",
+      "port": 7891,
+      "listen": "127.0.0.1",
+      "protocol": "http",
+      "settings": {
+        "timeout": 0
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic", "fakedns"],
+        "routeOnly": false
       }
     },
     {
       "tag": "tun-in",
-      "protocol": "dokodemo-door",
+      "protocol": "tun",
       "settings": {
-        "network": "tcp,udp",
-        "followRedirect": true
-      },
-      "streamSettings": {
-        "sockopt": {
-          "tproxy": "tproxy"
-        }
+        "name": "utun20",
+        "desc": "MXray TUN Adapter",
+        "mtu": 1500,
+        "gateway": ["10.0.0.1/16", "fc00::1/64"],
+        "dns": ["1.1.1.1", "8.8.8.8"],
+        "userLevel": 0,
+        "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
+        "autoOutboundsInterface": "auto"
       },
       "sniffing": {
         "enabled": true,
@@ -247,7 +274,8 @@ export const TEMPLATE_MINIMAL = `{
       },
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls", "quic"]
+        "destOverride": ["http", "tls", "quic", "fakedns"],
+        "routeOnly": false
       }
     }
   ],
@@ -278,7 +306,7 @@ const INITIAL_PROFILES: XrayConfigProfile[] = [
   {
     id: 'cfg-default-standard',
     name: '默认标准分流配置',
-    description: '标准 SOCKS5 (7890) / HTTP (7891) 入站与 CN / OpenAI / Telegram 分流规则',
+    description: '标准 SOCKS5 / HTTP 入站与 CN / OpenAI / Telegram 分流规则',
     content: TEMPLATE_STANDARD,
     updatedAt: '2026-07-27 10:00',
     isDefault: true,
@@ -389,7 +417,18 @@ export const useConfigStore = create<ConfigStore>()(
       },
       setSelectedProfileId: (id) => set({ selectedProfileId: id }),
 
-      updatePorts: (socks, http) => set({ socksPort: socks, httpPort: http }),
+      updatePorts: (socks, http) => {
+        set({ socksPort: socks, httpPort: http });
+        import('./useAppStore').then(({ useAppStore }) => {
+          const appState = useAppStore.getState();
+          if (appState.coreState.isRunning) {
+            if (appState.coreState.systemProxy) {
+              invoke('set_system_proxy', { enable: true, httpPort: http, socksPort: socks }).catch(() => {});
+            }
+            get().startActiveKernel();
+          }
+        });
+      },
       setDnsStrategy: (strategy) => set({ dnsStrategy: strategy }),
       toggleFakeDns: () => set((state) => ({ enableFakeDns: !state.enableFakeDns })),
       toggleSniffing: () => set((state) => ({ sniffingEnabled: !state.sniffingEnabled })),
@@ -409,10 +448,186 @@ export const useConfigStore = create<ConfigStore>()(
         if (activeProfile && activeProfile.content) {
           try {
             const config = JSON.parse(activeProfile.content);
+            // Validate outbounds and routing rules before starting kernel
+            const validOutboundTags = new Set(
+              (Array.isArray(config.outbounds) ? config.outbounds : [])
+                .map((ob: any) => ob.tag)
+                .filter(Boolean)
+            );
+            const validBalancerTags = new Set(
+              (Array.isArray(config.routing?.balancers) ? config.routing.balancers : [])
+                .map((b: any) => b.tag)
+                .filter(Boolean)
+            );
+
+            // Find primary proxy node outbound tag, defaulting to first node tag, or 'direct'
+            const nodeOutbound = (config.outbounds || []).find(
+              (ob: any) => ob.tag !== 'direct' && ob.tag !== 'block' && ob.tag !== 'proxy'
+            );
+            const primaryProxyTag = nodeOutbound?.tag || 'direct';
+
             if (config.routing?.rules && Array.isArray(config.routing.rules)) {
-              config.routing.rules = config.routing.rules.filter((r: any) => r.enabled !== false);
+              config.routing.rules = config.routing.rules
+                .filter((r: any) => r.enabled !== false)
+                .map((r: any) => {
+                  const updated = { ...r };
+
+                  if (updated.balancerTag && !validBalancerTags.has(updated.balancerTag)) {
+                    delete updated.balancerTag;
+                    updated.outboundTag = primaryProxyTag;
+                  }
+
+                  if (updated.outboundTag) {
+                    if (updated.outboundTag === 'proxy') {
+                      updated.outboundTag = primaryProxyTag;
+                    } else if (
+                      !validOutboundTags.has(updated.outboundTag) &&
+                      !validBalancerTags.has(updated.outboundTag)
+                    ) {
+                      updated.outboundTag = primaryProxyTag;
+                    }
+                  } else if (!updated.balancerTag) {
+                    updated.outboundTag = primaryProxyTag;
+                  }
+
+                  return updated;
+                });
             }
-            await invoke('start_kernel', { configJson: JSON.stringify(config, null, 2) });
+
+            const tunModeEnabled = useAppStore.getState().coreState.tunMode;
+
+            if (!Array.isArray(config.inbounds)) {
+              config.inbounds = [];
+            }
+
+            // Sync user settings ports with socks-in and http-in inbounds
+            const socksIdx = config.inbounds.findIndex(
+              (ib: any) => ib.tag === 'socks-in' || ib.protocol === 'socks'
+            );
+            if (socksIdx >= 0) {
+              config.inbounds[socksIdx].port = state.socksPort;
+              config.inbounds[socksIdx].listen = '127.0.0.1';
+            } else {
+              config.inbounds.unshift({
+                tag: 'socks-in',
+                port: state.socksPort,
+                listen: '127.0.0.1',
+                protocol: 'socks',
+                settings: { auth: 'noauth', udp: true },
+                sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic', 'fakedns'], routeOnly: false },
+              });
+            }
+
+            const httpIdx = config.inbounds.findIndex(
+              (ib: any) => ib.tag === 'http-in' || ib.protocol === 'http'
+            );
+            if (httpIdx >= 0) {
+              config.inbounds[httpIdx].port = state.httpPort;
+              config.inbounds[httpIdx].listen = '127.0.0.1';
+            } else {
+              const insertIdx = socksIdx >= 0 ? socksIdx + 1 : 1;
+              config.inbounds.splice(insertIdx, 0, {
+                tag: 'http-in',
+                port: state.httpPort,
+                listen: '127.0.0.1',
+                protocol: 'http',
+                settings: { timeout: 0 },
+                sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic', 'fakedns'], routeOnly: false },
+              });
+            }
+
+            const existingTunIdx = config.inbounds.findIndex(
+              (ib: any) => ib.tag === 'tun-in' || ib.protocol === 'tun'
+            );
+
+            const isMac =
+              typeof navigator !== 'undefined' &&
+              /Mac|iPhone|iPod|iPad/.test(navigator.userAgent || navigator.platform);
+            const isWin =
+              typeof navigator !== 'undefined' &&
+              /Win/.test(navigator.userAgent || navigator.platform);
+            const defaultTunName = isMac ? 'utun20' : isWin ? 'wintun' : 'tun0';
+
+            // Preserve or initialize user tun-in settings in active profile
+            if (existingTunIdx >= 0) {
+              const existingTun = config.inbounds[existingTunIdx];
+              let nameVal = existingTun.settings?.name || '';
+              if (!nameVal || (isMac && !/^utun\d+$/i.test(nameVal))) {
+                nameVal = defaultTunName;
+              }
+              config.inbounds[existingTunIdx] = {
+                ...existingTun,
+                tag: 'tun-in',
+                protocol: 'tun',
+                settings: {
+                  desc: 'MXray TUN Adapter',
+                  mtu: 1500,
+                  gateway: ['10.0.0.1/16', 'fc00::1/64'],
+                  dns: ['1.1.1.1', '8.8.8.8'],
+                  userLevel: 0,
+                  autoSystemRoutingTable: ['0.0.0.0/0', '::/0'],
+                  autoOutboundsInterface: 'auto',
+                  ...existingTun.settings,
+                  name: nameVal,
+                },
+                sniffing: {
+                  enabled: true,
+                  destOverride: ['http', 'tls', 'quic', 'fakedns'],
+                  ...existingTun.sniffing,
+                  routeOnly: false,
+                },
+              };
+            } else {
+              config.inbounds.push({
+                tag: 'tun-in',
+                protocol: 'tun',
+                settings: {
+                  name: defaultTunName,
+                  desc: 'MXray TUN Adapter',
+                  mtu: 1500,
+                  gateway: ['10.0.0.1/16', 'fc00::1/64'],
+                  dns: ['1.1.1.1', '8.8.8.8'],
+                  userLevel: 0,
+                  autoSystemRoutingTable: ['0.0.0.0/0', '::/0'],
+                  autoOutboundsInterface: 'auto',
+                },
+                sniffing: {
+                  enabled: true,
+                  destOverride: ['http', 'tls', 'quic', 'fakedns'],
+                  routeOnly: false,
+                },
+              });
+            }
+
+            // Save updated config to profile, retaining user custom TUN settings
+            const updatedProfileJson = JSON.stringify(config, null, 2);
+            set((prevState) => ({
+              profiles: prevState.profiles.map((p) =>
+                p.id === activeProfile.id ? { ...p, content: updatedProfileJson } : p
+              ),
+            }));
+
+            // Build runtime config for Xray kernel execution
+            const runtimeConfig = JSON.parse(updatedProfileJson);
+            if (!tunModeEnabled) {
+              runtimeConfig.inbounds = (runtimeConfig.inbounds || []).filter(
+                (ib: any) => ib.tag !== 'tun-in' && ib.protocol !== 'tun'
+              );
+            }
+
+            if (Array.isArray(runtimeConfig.inbounds)) {
+              runtimeConfig.inbounds = runtimeConfig.inbounds.map((ib: any) => ({
+                ...ib,
+                sniffing: {
+                  enabled: true,
+                  destOverride: ['http', 'tls', 'quic', 'fakedns'],
+                  ...(ib.sniffing || {}),
+                  routeOnly: false,
+                },
+              }));
+            }
+
+            await invoke('start_kernel', { configJson: JSON.stringify(runtimeConfig, null, 2) });
           } catch {
             // Web / mock environment fallback
           }

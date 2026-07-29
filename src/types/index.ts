@@ -102,11 +102,32 @@ export interface CoreState {
   activeNodeId?: string;
 }
 
+export type LogCategory =
+  | 'connection'
+  | 'router'
+  | 'dns'
+  | 'inbound'
+  | 'outbound'
+  | 'observatory'
+  | 'system'
+  | 'general';
+
 export interface LogEntry {
   id: string;
   timestamp: string;
   level: 'debug' | 'info' | 'warning' | 'error';
   message: string;
+  category?: LogCategory;
+  source?: string;
+  protocol?: string;
+  target?: string;
+  domain?: string;
+  port?: string;
+  outbound?: string;
+  chain?: string[];
+  rule?: string;
+  action?: string;
+  shortSummary?: string;
 }
 
 // Xray JSON Schema types for custom JSON merge editor
@@ -211,22 +232,6 @@ export interface GeoDataStatus {
   asset_dir: string;
 }
 
-export interface ConnectionItem {
-  id: string;
-  host: string;
-  network: 'TCP' | 'UDP';
-  inboundTag: string;
-  rule: string;
-  chain: string[];
-  destinationIp?: string;
-  processName?: string;
-  download: number; // bytes
-  upload: number; // bytes
-  downloadSpeed: number; // bytes/s
-  uploadSpeed: number; // bytes/s
-  status: 'active' | 'closed';
-  startTime: number; // timestamp ms
-  closedTime?: number;
-}
+
 
 
