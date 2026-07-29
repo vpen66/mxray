@@ -28,6 +28,10 @@ LOG_FILE=$6
 MANAGED_ROUTES_FILE=$7
 XRAY_PID=""
 NODE_IPS=""
+DIRECT_IPS=""
+NEW_DIRECT_IPS=""
+LOG_SCAN_LINE=0
+DIRECT_ROUTE_CHECK_TICK=0
 PHYSICAL_GATEWAY=""
 PHYSICAL_INTERFACE=""
 
@@ -54,10 +58,10 @@ resolve_endpoints() {
     done < "$ENDPOINTS_FILE"
 }
 
-ensure_endpoint_routes() {
+ensure_physical_routes() {
     [ -n "$PHYSICAL_GATEWAY" ] || return
     [ -n "$PHYSICAL_INTERFACE" ] || return
-    for IP in $NODE_IPS; do
+    for IP in "$@"; do
         DEST=$(/sbin/route -n get "$IP" 2>/dev/null | /usr/bin/awk '/destination:/{print $2; exit}')
         GATEWAY=$(/sbin/route -n get "$IP" 2>/dev/null | /usr/bin/awk '/gateway:/{print $2; exit}')
         INTERFACE=$(/sbin/route -n get "$IP" 2>/dev/null | /usr/bin/awk '/interface:/{print $2; exit}')
@@ -67,6 +71,38 @@ ensure_endpoint_routes() {
                 /usr/bin/grep -qxF "$IP" "$MANAGED_ROUTES_FILE" 2>/dev/null || echo "$IP" >> "$MANAGED_ROUTES_FILE"
             fi
         fi
+    done
+}
+
+discover_direct_routes() {
+    NEW_DIRECT_IPS=""
+    CURRENT_LINES=$(/usr/bin/wc -l < "$LOG_FILE" 2>/dev/null | /usr/bin/tr -d ' ')
+    case "$CURRENT_LINES" in ""|*[!0-9]*) return ;; esac
+    [ "$CURRENT_LINES" -lt "$LOG_SCAN_LINE" ] && LOG_SCAN_LINE=0
+    [ "$CURRENT_LINES" -le "$LOG_SCAN_LINE" ] && return
+    START_LINE=$((LOG_SCAN_LINE + 1))
+    NEW_IPS=$(/usr/bin/sed -n "${START_LINE},${CURRENT_LINES}p" "$LOG_FILE" 2>/dev/null | /usr/bin/awk '
+        /proxy\/freedom/ && (/network is unreachable/ || /no route to host/) {
+            line = $0
+            while (match(line, /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)) {
+                print substr(line, RSTART, RLENGTH)
+                line = substr(line, RSTART + RLENGTH)
+            }
+        }
+    ' | /usr/bin/sort -u)
+    LOG_SCAN_LINE=$CURRENT_LINES
+    for IP in $NEW_IPS; do
+        case "$IP" in
+            0.*|127.*|169.254.*|172.18.*|192.168.*|22[4-9].*|23[0-9].*|24[0-9].*|25[0-5].*) continue ;;
+        esac
+        case " $NODE_IPS $DIRECT_IPS " in
+            *" $IP "*) ;;
+            *)
+                DIRECT_IPS="$DIRECT_IPS $IP"
+                NEW_DIRECT_IPS="$NEW_DIRECT_IPS $IP"
+                echo "[Info] MXray discovered direct route target $IP" >> "$LOG_FILE"
+                ;;
+        esac
     done
 }
 
@@ -109,7 +145,7 @@ rm -f "$STOP_FILE"
 : > "$MANAGED_ROUTES_FILE"
 refresh_physical_route
 resolve_endpoints
-ensure_endpoint_routes
+ensure_physical_routes $NODE_IPS
 
 "$XRAY_BIN" run -config "$CONFIG_FILE" >> "$LOG_FILE" 2>&1 &
 XRAY_PID=$!
@@ -117,7 +153,13 @@ XRAY_PID=$!
 while kill -0 "$XRAY_PID" 2>/dev/null && [ ! -e "$STOP_FILE" ]; do
     if /sbin/ifconfig "$TUN_NAME" >/dev/null 2>&1; then
         refresh_physical_route
-        ensure_endpoint_routes
+        discover_direct_routes
+        ensure_physical_routes $NODE_IPS $NEW_DIRECT_IPS
+        DIRECT_ROUTE_CHECK_TICK=$((DIRECT_ROUTE_CHECK_TICK + 1))
+        if [ "$DIRECT_ROUTE_CHECK_TICK" -ge 10 ]; then
+            ensure_physical_routes $DIRECT_IPS
+            DIRECT_ROUTE_CHECK_TICK=0
+        fi
         ensure_tun_route 0.0.0.0/1 8.8.8.8
         ensure_tun_route 128.0.0.0/1 200.1.1.1
     fi
@@ -642,17 +684,6 @@ fn prepare_macos_tun_config(config_json: &str) -> Result<String, String> {
         .map(str::trim)
         .filter(|name| !name.is_empty() && !name.starts_with("utun"))
         .ok_or_else(|| "未找到可用的物理出站网卡".to_string())?;
-    let source_output = Command::new("ipconfig")
-        .args(["getifaddr", interface])
-        .output()
-        .map_err(|e| format!("读取物理网卡地址失败: {}", e))?;
-    let source_ip = String::from_utf8_lossy(&source_output.stdout)
-        .trim()
-        .to_string();
-    if source_ip.is_empty() {
-        return Err(format!("物理网卡 {} 没有可用的 IPv4 地址", interface));
-    }
-
     let mut config = serde_json::from_str::<serde_json::Value>(config_json)
         .map_err(|e| format!("解析 TUN 运行时配置失败: {}", e))?;
 
@@ -678,7 +709,24 @@ fn prepare_macos_tun_config(config_json: &str) -> Result<String, String> {
                 continue;
             }
             if let Some(outbound) = outbound.as_object_mut() {
-                outbound.insert("sendThrough".to_string(), serde_json::json!(source_ip));
+                outbound.remove("sendThrough");
+                let stream_settings = outbound
+                    .entry("streamSettings".to_string())
+                    .or_insert_with(|| serde_json::json!({}));
+                if !stream_settings.is_object() {
+                    *stream_settings = serde_json::json!({});
+                }
+                let stream_settings = stream_settings.as_object_mut().unwrap();
+                let sockopt = stream_settings
+                    .entry("sockopt".to_string())
+                    .or_insert_with(|| serde_json::json!({}));
+                if !sockopt.is_object() {
+                    *sockopt = serde_json::json!({});
+                }
+                sockopt
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("interface".to_string(), serde_json::json!(interface));
             }
         }
     }
