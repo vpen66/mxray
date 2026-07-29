@@ -57,13 +57,29 @@ export const useLogStore = create<LogStore>((set) => ({
 
   initLogListener: () => {
     let unlisten: (() => void) | undefined;
+    let pending: Array<{ level: LogEntry['level']; message: string }> = [];
+    const flushTimer = window.setInterval(() => {
+      if (pending.length === 0) return;
+      const batch = pending;
+      pending = [];
+      useLogStore.setState((state) => {
+        const entries = batch.map(({ level, message }) => ({
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: new Date().toLocaleTimeString(),
+          level,
+          message,
+          ...parseXrayLog(message, level),
+        }));
+        return { logs: [...state.logs, ...entries].slice(-500) };
+      });
+    }, 100);
     listen<{ level: string; message: string }>('xray-log', (event) => {
       const validLevels: Array<LogEntry['level']> = ['debug', 'info', 'warning', 'error'];
       const rawLevel = event.payload.level?.toLowerCase() || 'info';
       const level: LogEntry['level'] = validLevels.includes(rawLevel as any)
         ? (rawLevel as LogEntry['level'])
         : 'info';
-      useLogStore.getState().addLog(level, event.payload.message);
+      pending.push({ level, message: event.payload.message });
     })
       .then((unsub) => {
         unlisten = unsub;
@@ -73,6 +89,7 @@ export const useLogStore = create<LogStore>((set) => ({
       });
 
     return () => {
+      window.clearInterval(flushTimer);
       if (unlisten) unlisten();
     };
   },

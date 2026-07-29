@@ -121,11 +121,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const performToggle = async () => {
       try {
         if (nextState) {
-          // 开启系统代理 -> 同时启动 Xray 内核
-          try {
-            await useConfigStore.getState().startActiveKernel();
-          } catch (e) {
-            console.warn('Start kernel warning:', e);
+          // TUN 已运行时只切换系统代理，避免重复管理员授权
+          if (!get().coreState.isRunning) {
+            try {
+              await useConfigStore.getState().startActiveKernel();
+            } catch (e) {
+              console.warn('Start kernel warning:', e);
+            }
           }
           await invoke('set_system_proxy', {
             enable: true,
@@ -136,20 +138,28 @@ export const useAppStore = create<AppStore>((set, get) => ({
             coreState: { ...state.coreState, systemProxy: true, isRunning: true },
           }));
         } else {
-          // 关闭系统代理 -> 同时停止 Xray 内核（清理干净后台进程）
+          // 关闭系统代理
           await invoke('set_system_proxy', {
             enable: false,
             httpPort,
             socksPort,
           });
-          try {
-            await invoke('stop_kernel');
-          } catch (e) {
-            console.warn('Stop kernel warning:', e);
+          if (get().coreState.tunMode) {
+            // 若 TUN 模式仍开启，只关闭系统代理，不重启内核
+            set((state) => ({
+              coreState: { ...state.coreState, systemProxy: false, isRunning: true },
+            }));
+          } else {
+            // 系统代理与 TUN 均已关闭 -> 停止 Xray 内核
+            try {
+              await invoke('stop_kernel');
+            } catch (e) {
+              console.warn('Stop kernel warning:', e);
+            }
+            set((state) => ({
+              coreState: { ...state.coreState, systemProxy: false, isRunning: false },
+            }));
           }
-          set((state) => ({
-            coreState: { ...state.coreState, systemProxy: false, isRunning: false },
-          }));
         }
       } catch {
         // Fallback for web environment or error handling
@@ -157,7 +167,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           coreState: {
             ...state.coreState,
             systemProxy: nextState,
-            isRunning: nextState,
+            isRunning: nextState || state.coreState.tunMode,
           },
         }));
       }
@@ -192,14 +202,38 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ isTogglingTunMode: true });
     const minDelay = new Promise((resolve) => setTimeout(resolve, 450));
     try {
-      await minDelay;
       const nextTunMode = !get().coreState.tunMode;
       set((state) => ({
         coreState: { ...state.coreState, tunMode: nextTunMode },
       }));
-      if (get().coreState.isRunning) {
+
+      if (nextTunMode) {
+        // 单独开启 TUN 模式 -> 自动启动内核
         await useConfigStore.getState().startActiveKernel();
+        set((state) => ({
+          coreState: { ...state.coreState, isRunning: true },
+        }));
+      } else {
+        // 关闭 TUN 模式
+        if (get().coreState.systemProxy) {
+          // 若系统代理仍开启，重启内核以更新配置（移除 TUN 入站）
+          await useConfigStore.getState().startActiveKernel();
+          set((state) => ({
+            coreState: { ...state.coreState, isRunning: true },
+          }));
+        } else {
+          // 系统代理与 TUN 均已关闭 -> 停止内核
+          try {
+            await invoke('stop_kernel');
+          } catch {
+            // web fallback
+          }
+          set((state) => ({
+            coreState: { ...state.coreState, isRunning: false },
+          }));
+        }
       }
+      await minDelay;
     } catch (err) {
       console.error('切换 TUN 模式失败:', err);
     } finally {
@@ -223,27 +257,38 @@ export const useAppStore = create<AppStore>((set, get) => ({
       // web fallback
     }
     set((state) => ({
-      coreState: { ...state.coreState, systemProxy: false, isRunning: false },
+      coreState: { ...state.coreState, systemProxy: false, tunMode: false, isRunning: false },
     }));
   },
   startKernel: async () => {
     const { httpPort, socksPort } = useConfigStore.getState();
+    const currentTun = get().coreState.tunMode;
+    const currentSys = get().coreState.systemProxy;
+    const enableSysProxy = (!currentTun && !currentSys) ? true : currentSys;
+
     try {
+      if (enableSysProxy) {
+        await invoke('set_system_proxy', {
+          enable: true,
+          httpPort,
+          socksPort,
+        });
+      }
       await useConfigStore.getState().startActiveKernel();
-      await invoke('set_system_proxy', {
-        enable: true,
-        httpPort,
-        socksPort,
-      });
     } catch {
       // web fallback
     }
     set((state) => ({
-      coreState: { ...state.coreState, systemProxy: true, isRunning: true },
+      coreState: { ...state.coreState, systemProxy: enableSysProxy, isRunning: true },
     }));
   },
   toggleKernel: async () => {
-    await get().toggleSystemProxy();
+    const isRunning = get().coreState.isRunning;
+    if (isRunning) {
+      await get().stopKernel();
+    } else {
+      await get().startKernel();
+    }
   },
   updateTraffic: (upload, download) =>
     set((state) => ({

@@ -62,7 +62,7 @@ impl ConfigBuilder {
                     "name": tun_name,
                     "desc": "MXray TUN Adapter",
                     "mtu": 1500,
-                    "gateway": ["10.0.0.1/16", "fc00::1/64"],
+                    "gateway": ["172.18.0.1/30", "fdfe:dcba:9876::1/126"],
                     "dns": ["1.1.1.1", "8.8.8.8"],
                     "userLevel": 0,
                     "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
@@ -71,7 +71,7 @@ impl ConfigBuilder {
                 "sniffing": {
                     "enabled": true,
                     "destOverride": ["http", "tls", "quic", "fakedns"],
-                    "routeOnly": false
+                    "routeOnly": true
                 }
             }));
         }

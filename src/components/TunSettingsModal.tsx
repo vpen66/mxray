@@ -48,7 +48,7 @@ export const TunSettingsModal: React.FC = () => {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('MXray TUN Adapter');
   const [mtu, setMtu] = useState<number | string>(1500);
-  const [gatewayStr, setGatewayStr] = useState('10.0.0.1/16, fc00::1/64');
+  const [gatewayStr, setGatewayStr] = useState('172.18.0.1/30, fdfe:dcba:9876::1/126');
   const [dnsStr, setDnsStr] = useState('1.1.1.1, 8.8.8.8');
   const [userLevel, setUserLevel] = useState<number | string>(0);
   const [autoSystemRoutingTableStr, setAutoSystemRoutingTableStr] = useState('0.0.0.0/0, ::/0');
@@ -87,7 +87,7 @@ export const TunSettingsModal: React.FC = () => {
         setGatewayStr(
           Array.isArray(existingTun.settings?.gateway)
             ? existingTun.settings.gateway.join(', ')
-            : '10.0.0.1/16, fc00::1/64'
+            : '172.18.0.1/30, fdfe:dcba:9876::1/126'
         );
         setDnsStr(
           Array.isArray(existingTun.settings?.dns)
@@ -111,7 +111,7 @@ export const TunSettingsModal: React.FC = () => {
         setName(defaultTunName);
         setDesc('MXray TUN Adapter');
         setMtu(1500);
-        setGatewayStr('10.0.0.1/16, fc00::1/64');
+        setGatewayStr('172.18.0.1/30, fdfe:dcba:9876::1/126');
         setDnsStr('1.1.1.1, 8.8.8.8');
         setUserLevel(0);
         setAutoSystemRoutingTableStr('0.0.0.0/0, ::/0');
@@ -126,7 +126,7 @@ export const TunSettingsModal: React.FC = () => {
             name: defaultTunName,
             desc: 'MXray TUN Adapter',
             mtu: 1500,
-            gateway: ['10.0.0.1/16', 'fc00::1/64'],
+            gateway: ['172.18.0.1/30', 'fdfe:dcba:9876::1/126'],
             dns: ['1.1.1.1', '8.8.8.8'],
             userLevel: 0,
             autoSystemRoutingTable: ['0.0.0.0/0', '::/0'],
@@ -135,7 +135,7 @@ export const TunSettingsModal: React.FC = () => {
           sniffing: {
             enabled: true,
             destOverride: ['http', 'tls', 'quic', 'fakedns'],
-            routeOnly: false,
+            routeOnly: true,
           },
         };
         setJsonText(JSON.stringify(defaultTunObj, null, 2));
@@ -174,7 +174,7 @@ export const TunSettingsModal: React.FC = () => {
         name: nameVal,
         desc: desc.trim() || 'Wintun',
         mtu: Number(mtu) || 1500,
-        gateway: gatewayList.length > 0 ? gatewayList : ['10.0.0.1/16', 'fc00::1/64'],
+        gateway: gatewayList.length > 0 ? gatewayList : ['172.18.0.1/30', 'fdfe:dcba:9876::1/126'],
         dns: dnsList.length > 0 ? dnsList : ['1.1.1.1', '8.8.8.8'],
         userLevel: Number(userLevel) || 0,
         autoSystemRoutingTable: autoRoutingList.length > 0 ? autoRoutingList : ['0.0.0.0/0', '::/0'],
@@ -183,7 +183,7 @@ export const TunSettingsModal: React.FC = () => {
       sniffing: {
         enabled: sniffingEnabled,
         destOverride,
-        routeOnly: false,
+        routeOnly: true,
       },
     };
   };

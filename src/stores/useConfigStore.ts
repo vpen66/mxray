@@ -68,7 +68,7 @@ export const TEMPLATE_STANDARD = `{
       "sniffing": {
         "enabled": true,
         "destOverride": ["http", "tls", "quic", "fakedns"],
-        "routeOnly": false
+        "routeOnly": true
       }
     },
     {
@@ -82,7 +82,7 @@ export const TEMPLATE_STANDARD = `{
       "sniffing": {
         "enabled": true,
         "destOverride": ["http", "tls", "quic", "fakedns"],
-        "routeOnly": false
+        "routeOnly": true
       }
     }
   ],
@@ -181,7 +181,7 @@ export const TEMPLATE_TUN = `{
       "sniffing": {
         "enabled": true,
         "destOverride": ["http", "tls", "quic", "fakedns"],
-        "routeOnly": false
+        "routeOnly": true
       }
     },
     {
@@ -195,7 +195,7 @@ export const TEMPLATE_TUN = `{
       "sniffing": {
         "enabled": true,
         "destOverride": ["http", "tls", "quic", "fakedns"],
-        "routeOnly": false
+        "routeOnly": true
       }
     },
     {
@@ -205,7 +205,7 @@ export const TEMPLATE_TUN = `{
         "name": "utun20",
         "desc": "MXray TUN Adapter",
         "mtu": 1500,
-        "gateway": ["10.0.0.1/16", "fc00::1/64"],
+        "gateway": ["172.18.0.1/30", "fdfe:dcba:9876::1/126"],
         "dns": ["1.1.1.1", "8.8.8.8"],
         "userLevel": 0,
         "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
@@ -214,7 +214,7 @@ export const TEMPLATE_TUN = `{
       "sniffing": {
         "enabled": true,
         "destOverride": ["http", "tls", "quic", "fakedns"],
-        "routeOnly": false
+        "routeOnly": true
       }
     }
   ],
@@ -234,13 +234,24 @@ export const TEMPLATE_TUN = `{
     "rules": [
       {
         "type": "field",
-        "outboundTag": "proxy",
-        "inboundTag": ["tun-in"]
+        "outboundTag": "block",
+        "ip": ["224.0.0.0/3", "ff00::/8"]
+      },
+      {
+        "type": "field",
+        "outboundTag": "block",
+        "port": "135,137-139,5353",
+        "network": "udp"
       },
       {
         "type": "field",
         "outboundTag": "direct",
         "domain": ["geosite:cn", "geosite:private"]
+      },
+      {
+        "type": "field",
+        "outboundTag": "direct",
+        "ip": ["geoip:cn", "geoip:private"]
       },
       {
         "type": "field",
@@ -514,7 +525,7 @@ export const useConfigStore = create<ConfigStore>()(
                 listen: '127.0.0.1',
                 protocol: 'socks',
                 settings: { auth: 'noauth', udp: true },
-                sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic', 'fakedns'], routeOnly: false },
+                sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic', 'fakedns'], routeOnly: true },
               });
             }
 
@@ -532,7 +543,7 @@ export const useConfigStore = create<ConfigStore>()(
                 listen: '127.0.0.1',
                 protocol: 'http',
                 settings: { timeout: 0 },
-                sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic', 'fakedns'], routeOnly: false },
+                sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic', 'fakedns'], routeOnly: true },
               });
             }
 
@@ -555,26 +566,26 @@ export const useConfigStore = create<ConfigStore>()(
               if (!nameVal || (isMac && !/^utun\d+$/i.test(nameVal))) {
                 nameVal = defaultTunName;
               }
+              const existingGw = existingTun.settings?.gateway;
+              const hasLegacyGw = Array.isArray(existingGw) && existingGw.some((g: string) => g.includes('10.0.0.1/16'));
+              const gatewayVal = (!existingGw || hasLegacyGw)
+                ? ['172.18.0.1/30', 'fdfe:dcba:9876::1/126']
+                : existingGw;
+
               config.inbounds[existingTunIdx] = {
                 ...existingTun,
                 tag: 'tun-in',
                 protocol: 'tun',
                 settings: {
-                  desc: 'MXray TUN Adapter',
-                  mtu: 1500,
-                  gateway: ['10.0.0.1/16', 'fc00::1/64'],
-                  dns: ['1.1.1.1', '8.8.8.8'],
-                  userLevel: 0,
-                  autoSystemRoutingTable: ['0.0.0.0/0', '::/0'],
-                  autoOutboundsInterface: 'auto',
                   ...existingTun.settings,
                   name: nameVal,
+                  gateway: gatewayVal,
                 },
                 sniffing: {
                   enabled: true,
                   destOverride: ['http', 'tls', 'quic', 'fakedns'],
                   ...existingTun.sniffing,
-                  routeOnly: false,
+                  routeOnly: true,
                 },
               };
             } else {
@@ -585,7 +596,7 @@ export const useConfigStore = create<ConfigStore>()(
                   name: defaultTunName,
                   desc: 'MXray TUN Adapter',
                   mtu: 1500,
-                  gateway: ['10.0.0.1/16', 'fc00::1/64'],
+                  gateway: ['172.18.0.1/30', 'fdfe:dcba:9876::1/126'],
                   dns: ['1.1.1.1', '8.8.8.8'],
                   userLevel: 0,
                   autoSystemRoutingTable: ['0.0.0.0/0', '::/0'],
@@ -594,7 +605,7 @@ export const useConfigStore = create<ConfigStore>()(
                 sniffing: {
                   enabled: true,
                   destOverride: ['http', 'tls', 'quic', 'fakedns'],
-                  routeOnly: false,
+                  routeOnly: true,
                 },
               });
             }
@@ -622,7 +633,7 @@ export const useConfigStore = create<ConfigStore>()(
                   enabled: true,
                   destOverride: ['http', 'tls', 'quic', 'fakedns'],
                   ...(ib.sniffing || {}),
-                  routeOnly: false,
+                  routeOnly: true,
                 },
               }));
             }

@@ -988,14 +988,14 @@ export const JsonConfigPage: React.FC = () => {
         name: nameVal,
         desc: (ib.tunDesc || '').trim() || 'MXray TUN Adapter',
         mtu: Number(ib.tunMtu) || 1500,
-        gateway: gatewayList.length > 0 ? gatewayList : ['10.0.0.1/16', 'fc00::1/64'],
+        gateway: gatewayList.length > 0 ? gatewayList : ['172.18.0.1/30', 'fdfe:dcba:9876::1/126'],
         dns: dnsList.length > 0 ? dnsList : ['1.1.1.1', '8.8.8.8'],
         userLevel: Number(ib.tunUserLevel) || 0,
         autoSystemRoutingTable: autoRoutingList.length > 0 ? autoRoutingList : ['0.0.0.0/0', '::/0'],
         autoOutboundsInterface: ib.tunAutoOutboundsInterface || 'auto',
       };
       if (newInbound.sniffing) {
-        newInbound.sniffing.routeOnly = false;
+        newInbound.sniffing.routeOnly = true;
       }
     }
     return newInbound;
