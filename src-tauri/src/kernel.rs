@@ -1169,6 +1169,104 @@ pub fn get_cli_command(
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VlessEncKeys {
+    pub x25519_decryption: String,
+    pub x25519_encryption: String,
+    pub mlkem768_decryption: String,
+    pub mlkem768_encryption: String,
+}
+
+#[tauri::command]
+pub fn generate_vless_encryption(
+    app_handle: tauri::AppHandle,
+    binary_path: Option<String>,
+) -> Result<VlessEncKeys, String> {
+    let bin_path = find_xray_binary(binary_path.as_deref(), &app_handle)?;
+
+    let output = Command::new(&bin_path)
+        .arg("vlessenc")
+        .output()
+        .map_err(|e| format!("无法运行 xray vlessenc: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("xray vlessenc 执行失败: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut x25519_dec = String::new();
+    let mut x25519_enc = String::new();
+    let mut mlkem768_dec = String::new();
+    let mut mlkem768_enc = String::new();
+
+    let mut current_section = "";
+    let mut _dec_collected = 0_u8;
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.contains("Authentication: X25519") {
+            current_section = "x25519";
+        } else if trimmed.contains("Authentication: ML-KEM-768") {
+            current_section = "mlkem768";
+        } else if trimmed.starts_with("\"decryption\"") {
+            if let Some(val) = trimmed.strip_prefix("\"decryption\":") {
+                let val = val.trim().trim_matches('"');
+                match current_section {
+                    "x25519" => { x25519_dec = val.to_string(); _dec_collected += 1; }
+                    "mlkem768" => { mlkem768_dec = val.to_string(); _dec_collected += 1; }
+                    _ => {}
+                }
+            }
+        } else if trimmed.starts_with("\"encryption\"") {
+            if let Some(val) = trimmed.strip_prefix("\"encryption\":") {
+                let val = val.trim().trim_matches('"');
+                match current_section {
+                    "x25519" => x25519_enc = val.to_string(),
+                    "mlkem768" => mlkem768_enc = val.to_string(),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if x25519_dec.is_empty() && mlkem768_dec.is_empty() {
+        return Err("xray vlessenc 未能生成有效的加密密钥".to_string());
+    }
+
+    Ok(VlessEncKeys {
+        x25519_decryption: x25519_dec,
+        x25519_encryption: x25519_enc,
+        mlkem768_decryption: mlkem768_dec,
+        mlkem768_encryption: mlkem768_enc,
+    })
+}
+
+#[tauri::command]
+pub fn generate_uuid(
+    app_handle: tauri::AppHandle,
+    binary_path: Option<String>,
+) -> Result<String, String> {
+    let bin_path = find_xray_binary(binary_path.as_deref(), &app_handle)?;
+
+    let output = Command::new(&bin_path)
+        .arg("uuid")
+        .output()
+        .map_err(|e| format!("无法运行 xray uuid: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("xray uuid 执行失败: {}", stderr.trim()));
+    }
+
+    let uuid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if uuid.is_empty() {
+        return Err("xray uuid 未返回有效结果".to_string());
+    }
+
+    Ok(uuid)
+}
+
 async fn ping_host_latency(address: &str) -> Option<i64> {
     let clean = address.trim();
     if clean.is_empty() {
