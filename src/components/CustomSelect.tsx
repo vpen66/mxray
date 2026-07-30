@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 
@@ -67,8 +67,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  // Check if dropdown should open upward when space is limited below
-  useEffect(() => {
+  // Calculate dropdown position synchronously before paint to avoid flicker
+  useLayoutEffect(() => {
     if (isOpen && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
@@ -156,7 +156,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       </button>
 
       {/* Popover Dropdown List - rendered via Portal to avoid overflow clipping */}
-      {isOpen && !disabled && createPortal(
+      {isOpen && !disabled && dropPosition.bottom > 0 && createPortal(
         <div
           className={`fixed w-max max-w-[380px] bg-slate-900/98 backdrop-blur-2xl border border-slate-700/80 rounded-xl shadow-2xl shadow-black/90 z-[9999] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}
           style={{

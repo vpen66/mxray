@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   FileCode2,
@@ -12,6 +12,21 @@ import {
   Code2,
   Eye,
   ChevronRight,
+  List,
+  Hash,
+  Layers,
+  ArrowRight,
+  Globe,
+  Shield,
+  Server,
+  Settings,
+  Activity,
+  Navigation,
+  Box,
+  Map,
+  Tag,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useConfigStore, TEMPLATE_STANDARD, TEMPLATE_TUN, TEMPLATE_MINIMAL } from '../stores/useConfigStore';
 import { useAppStore } from '../stores/useAppStore';
@@ -51,6 +66,7 @@ import { AddModuleModal } from './config-modals/AddModuleModal';
 import { InboundModal } from './config-modals/InboundModal';
 import { OutboundModal } from './config-modals/OutboundModal';
 import { RoutingRuleModal } from './config-modals/RoutingRuleModal';
+import { BalancerModal } from './config-modals/BalancerModal';
 import { DnsModal } from './config-modals/DnsModal';
 import { LogModal } from './config-modals/LogModal';
 import { ApiModal } from './config-modals/ApiModal';
@@ -85,10 +101,73 @@ export const JsonConfigPage: React.FC = () => {
     [profiles, selectedProfileId]
   );
 
+  // Monaco editor ref for TOC navigation
+  const editorRef = useRef<any>(null);
+  const monacoRef = useRef<any>(null);
+
+  const handleEditorDidMount = useCallback((editor: any, monaco: any) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+  }, []);
+
+  const [tocCollapsed, setTocCollapsed] = useState(false);
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
   const [editorContent, setEditorContent] = useState<string>(selectedProfile?.content || TEMPLATE_STANDARD);
   const setIsSaved = useState(true)[1];
   const [jsonError, setJsonError] = useState<string | null>(null);
+
+  // Parse top-level keys with line numbers from JSON text
+  const topLevelKeys = useMemo(() => {
+    const keys: { key: string; line: number }[] = [];
+    const lines = editorContent.split('\n');
+    let depth = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const stripped = line.replace(/\/\/.*/g, '').trim();
+      // Check for top-level key at depth 1 BEFORE counting braces on this line
+      if (depth === 1) {
+        const match = line.match(/^\s*"([^"]+)"\s*:/);
+        if (match) {
+          keys.push({ key: match[1], line: i + 1 });
+        }
+      }
+      // Track brace depth
+      for (const ch of stripped) {
+        if (ch === '{' || ch === '[') depth++;
+        if (ch === '}' || ch === ']') depth--;
+      }
+    }
+    return keys;
+  }, [editorContent]);
+
+  // TOC key icon & color mapping
+  const tocKeyMeta: Record<string, { icon: React.FC<any>; color: string }> = {
+    log:         { icon: FileCode2,   color: 'text-sky-400' },
+    api:         { icon: Tag,         color: 'text-violet-400' },
+    dns:         { icon: Globe,       color: 'text-cyan-400' },
+    fakedns:     { icon: Shield,      color: 'text-pink-400' },
+    inbounds:    { icon: ArrowRight,  color: 'text-emerald-400' },
+    outbounds:   { icon: Navigation,  color: 'text-orange-400' },
+    routing:     { icon: Map,         color: 'text-yellow-400' },
+    policy:      { icon: Settings,    color: 'text-slate-400' },
+    reverse:     { icon: Layers,      color: 'text-indigo-400' },
+    transport:   { icon: Server,      color: 'text-teal-400' },
+    stats:       { icon: Activity,    color: 'text-lime-400' },
+    metrics:     { icon: Activity,    color: 'text-fuchsia-400' },
+    observatory: { icon: Hash,        color: 'text-amber-400' },
+    burstObservatory: { icon: Hash,   color: 'text-amber-400' },
+    geodata:     { icon: Globe,       color: 'text-blue-400' },
+    version:     { icon: Tag,         color: 'text-rose-400' },
+    env:         { icon: Box,         color: 'text-green-400' },
+  };
+
+  const handleTocClick = useCallback((line: number) => {
+    if (editorRef.current) {
+      editorRef.current.revealLineInCenter(line);
+      editorRef.current.setPosition({ lineNumber: line, column: 1 });
+      editorRef.current.focus();
+    }
+  }, []);
 
   // Sync content when selected profile changes
   React.useEffect(() => {
@@ -161,7 +240,7 @@ export const JsonConfigPage: React.FC = () => {
     } else if (moduleId === 'outbounds') {
       setActiveModal({ type: 'outbound_add', initialValue: MODULE_DEFINITIONS.find((d) => d.id === 'outbounds')?.defaultTemplate });
     } else if (moduleId === 'routing' || moduleId === 'routing.rules') {
-      setActiveModal({ type: 'routing_rule_add', initialValue: { type: 'field', outboundTag: 'proxy' } });
+      setActiveModal({ type: 'routing_rule_add', initialValue: { type: 'field', outboundTag: 'direct' } });
     } else if (moduleId === 'fakedns') {
       setActiveModal({ type: 'fakedns_add', initialValue: { ipPool: '198.18.0.0/15', poolSize: 65535 } });
     } else {
@@ -457,6 +536,9 @@ export const JsonConfigPage: React.FC = () => {
                     handleUpdateContent(JSON.stringify(config, null, 2));
                   } catch { /* ignore */ }
                 }}
+                onAddBalancer={() => setActiveModal({ type: 'balancer_add' })}
+                onEditBalancer={(idx) => setActiveModal({ type: 'balancer_edit', index: idx, initialValue: parsedConfig?.routing?.balancers?.[idx] })}
+                onDeleteBalancer={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'routing.balancers', idx))}
               />
 
               {/* Outbounds Section */}
@@ -563,20 +645,71 @@ export const JsonConfigPage: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="h-full min-h-[500px] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
-              <Editor
-                height="100%"
-                defaultLanguage="json"
-                theme="vs-dark"
-                value={editorContent}
-                onChange={(val) => handleUpdateContent(val || '')}
-                options={{
-                  minimap: { enabled: true },
-                  fontSize: 13,
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                }}
-              />
+            <div className="flex h-full min-h-[500px] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+              {/* TOC Sidebar */}
+              {topLevelKeys.length > 0 && (
+                <div className={`${tocCollapsed ? 'w-11' : 'w-44'} shrink-0 bg-slate-900/80 border-r border-white/10 flex flex-col transition-all duration-200`}>
+                  <div className={`${tocCollapsed ? 'px-1.5 justify-center' : 'px-3'} py-2 border-b border-white/10 flex items-center gap-1.5`}>
+                    {!tocCollapsed && (
+                      <>
+                        <List className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span className="text-[11px] font-semibold text-slate-300 tracking-wide flex-1">目录导航</span>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setTocCollapsed(!tocCollapsed)}
+                      className={`p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors ${tocCollapsed ? '' : 'shrink-0'}`}
+                      title={tocCollapsed ? '展开目录' : '收起目录'}
+                    >
+                      {tocCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <div className={`flex-1 overflow-y-auto py-1.5 space-y-0.5 ${tocCollapsed ? 'px-1' : 'px-1.5'}`}>
+                    {topLevelKeys.map(({ key, line }) => {
+                      const meta = tocKeyMeta[key];
+                      const Icon = meta?.icon || Hash;
+                      const iconColor = meta?.color || 'text-slate-400';
+                      return (
+                        <button
+                          key={`${key}-${line}`}
+                          type="button"
+                          onClick={() => handleTocClick(line)}
+                          className={`w-full flex items-center gap-2 py-1.5 rounded-lg text-left text-[11px] font-medium text-slate-300 hover:bg-white/8 hover:text-white transition-colors group ${
+                            tocCollapsed ? 'px-0 justify-center' : 'px-2'
+                          }`}
+                          title={tocCollapsed ? `${key} (第 ${line} 行)` : `跳转到第 ${line} 行`}
+                        >
+                          <Icon className={`w-3 h-3 shrink-0 ${iconColor}`} />
+                          {!tocCollapsed && (
+                            <>
+                              <span className="truncate flex-1">{key}</span>
+                              <span className="text-[9px] text-slate-500 group-hover:text-slate-400 tabular-nums">L{line}</span>
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Editor */}
+              <div className="flex-1 min-w-0">
+                <Editor
+                  height="100%"
+                  defaultLanguage="json"
+                  theme="vs-dark"
+                  value={editorContent}
+                  onChange={(val) => handleUpdateContent(val || '')}
+                  onMount={handleEditorDidMount}
+                  options={{
+                    minimap: { enabled: true },
+                    fontSize: 13,
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -629,6 +762,22 @@ export const JsonConfigPage: React.FC = () => {
             handleUpdateContent(updateArrayItemInConfig(editorContent, 'routing.rules', activeModal.index, val));
           } else {
             handleUpdateContent(addArrayItemInConfig(editorContent, 'routing.rules', val));
+          }
+        }}
+      />
+
+      {/* Balancer Modal */}
+      <BalancerModal
+        isOpen={activeModal?.type === 'balancer_add' || activeModal?.type === 'balancer_edit'}
+        onClose={() => setActiveModal(null)}
+        initialValue={activeModal?.initialValue}
+        availableOutboundOptions={availableOutboundOptions}
+        existingTags={(parsedConfig?.routing?.balancers || []).map((b: any) => b.tag).filter(Boolean)}
+        onSave={(val) => {
+          if (activeModal?.type === 'balancer_edit' && typeof activeModal.index === 'number') {
+            handleUpdateContent(updateArrayItemInConfig(editorContent, 'routing.balancers', activeModal.index, val));
+          } else {
+            handleUpdateContent(addArrayItemInConfig(editorContent, 'routing.balancers', val));
           }
         }}
       />

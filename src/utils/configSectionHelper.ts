@@ -249,6 +249,10 @@ export function addArrayItemInConfig(jsonStr: string, moduleId: string, item: an
       if (!config.routing) config.routing = {};
       if (!Array.isArray(config.routing.rules)) config.routing.rules = [];
       config.routing.rules.push(item);
+    } else if (moduleId === 'routing.balancers') {
+      if (!config.routing) config.routing = {};
+      if (!Array.isArray(config.routing.balancers)) config.routing.balancers = [];
+      config.routing.balancers.push(item);
     } else {
       if (!Array.isArray(config[moduleId])) config[moduleId] = [];
       config[moduleId].push(item);
@@ -268,6 +272,10 @@ export function updateArrayItemInConfig(jsonStr: string, moduleId: string, index
     if (moduleId === 'routing.rules') {
       if (config.routing?.rules && Array.isArray(config.routing.rules) && index >= 0 && index < config.routing.rules.length) {
         config.routing.rules[index] = item;
+      }
+    } else if (moduleId === 'routing.balancers') {
+      if (config.routing?.balancers && Array.isArray(config.routing.balancers) && index >= 0 && index < config.routing.balancers.length) {
+        config.routing.balancers[index] = item;
       }
     } else {
       if (Array.isArray(config[moduleId]) && index >= 0 && index < config[moduleId].length) {
@@ -290,6 +298,10 @@ export function removeArrayItemInConfig(jsonStr: string, moduleId: string, index
       if (config.routing?.rules && Array.isArray(config.routing.rules)) {
         config.routing.rules.splice(index, 1);
       }
+    } else if (moduleId === 'routing.balancers') {
+      if (config.routing?.balancers && Array.isArray(config.routing.balancers)) {
+        config.routing.balancers.splice(index, 1);
+      }
     } else {
       if (Array.isArray(config[moduleId])) {
         config[moduleId].splice(index, 1);
@@ -307,6 +319,8 @@ export function moveArrayItemInConfig(jsonStr: string, moduleId: string, fromInd
     let arr: any[] | undefined;
     if (moduleId === 'routing.rules') {
       arr = config.routing?.rules;
+    } else if (moduleId === 'routing.balancers') {
+      arr = config.routing?.balancers;
     } else {
       arr = config[moduleId];
     }
