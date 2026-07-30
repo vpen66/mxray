@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 
 export interface SelectOption {
@@ -36,6 +37,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   onOpenChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
+  const [dropPosition, setDropPosition] = useState({ top: 0, bottom: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,6 +65,17 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       document.addEventListener('keydown', handleKeyDown);
     }
     return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  // Check if dropdown should open upward when space is limited below
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setDropUp(spaceBelow < 260 && spaceAbove > spaceBelow);
+      setDropPosition({ top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width });
+    }
   }, [isOpen]);
 
   const selectedOption = options.find((opt) => opt.value === value);
@@ -141,10 +155,19 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         />
       </button>
 
-      {/* Popover Dropdown List */}
-      {isOpen && !disabled && (
-        <div className="absolute left-0 top-[calc(100%+6px)] min-w-full w-max max-w-[380px] max-h-60 bg-slate-900/98 backdrop-blur-2xl border border-slate-700/80 rounded-xl shadow-2xl shadow-black/90 z-[100] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
-          <div className="p-1.5 overflow-y-auto overscroll-contain space-y-0.5 text-xs custom-scrollbar">
+      {/* Popover Dropdown List - rendered via Portal to avoid overflow clipping */}
+      {isOpen && !disabled && createPortal(
+        <div
+          className={`fixed w-max max-w-[380px] bg-slate-900/98 backdrop-blur-2xl border border-slate-700/80 rounded-xl shadow-2xl shadow-black/90 z-[9999] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}
+          style={{
+            left: dropPosition.left,
+            ...(dropUp
+              ? { bottom: `${window.innerHeight - dropPosition.top + 6}px` }
+              : { top: dropPosition.bottom + 6 }),
+            minWidth: dropPosition.width,
+          }}
+        >
+          <div className="p-1.5 overflow-y-auto overscroll-contain space-y-0.5 text-xs custom-scrollbar max-h-[50vh]">
             {options.length === 0 ? (
               <div className="py-3 text-center text-slate-500 text-xs">无可用选项</div>
             ) : (
@@ -182,7 +205,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

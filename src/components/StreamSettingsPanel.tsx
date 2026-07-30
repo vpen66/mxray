@@ -199,6 +199,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
   const [realityPassword, setRealityPassword] = useState('');
   const [realityShortId, setRealityShortId] = useState('');
   const [realitySpiderX, setRealitySpiderX] = useState('/');
+  const [realityMldsa65Verify, setRealityMldsa65Verify] = useState('');
 
   // REALITY settings (inbound/server)
   const [realityShow, setRealityShow] = useState(false);
@@ -248,9 +249,13 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
   const onChangeRef = useRef(onChange);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
+  // Only load initial value once on mount to prevent flicker from parent re-renders
+  const hasLoadedRef = useRef(false);
+
   // ── Load initial value ──
   useEffect(() => {
-    if (!initialValue) return;
+    if (hasLoadedRef.current || !initialValue) return;
+    hasLoadedRef.current = true;
     const s = initialValue;
     setMethod(s.method || s.network || 'raw');
     setSecurity(s.security || 'none');
@@ -315,6 +320,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
     setRealityPassword(reality.password || reality.publicKey || '');
     setRealityShortId(reality.shortId || '');
     setRealitySpiderX(reality.spiderX || '/');
+    setRealityMldsa65Verify(reality.mldsa65Verify || '');
     setRealityShow(reality.show === true);
     setRealityTarget(reality.target || '');
     setRealityServerNames(Array.isArray(reality.serverNames) ? reality.serverNames.join(', ') : (reality.serverNames || ''));
@@ -367,7 +373,8 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
       setSockoptTcpKeepAliveInterval(so.tcpKeepAliveInterval ?? 0);
       setSockoptTcpMptcp(so.tcpMptcp === true);
     }
-  }, [initialValue]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Build and emit ──
   const buildAndEmit = useCallback(() => {
@@ -472,6 +479,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
         if (realityPassword) rs.password = realityPassword;
         if (realityShortId) rs.shortId = realityShortId;
         if (realitySpiderX && realitySpiderX !== '/') rs.spiderX = realitySpiderX;
+        if (realityMldsa65Verify) rs.mldsa65Verify = realityMldsa65Verify;
         result.realitySettings = rs;
       }
     } else if (security === 'tls') {
@@ -545,7 +553,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
     grpcHealthTimeout, grpcPermitWithoutStream, grpcInitialWindowsSize,
     wsAcceptProxy, wsPath, wsHost, wsHeaders, wsHeartbeat,
     hupAcceptProxy, hupPath, hupHost, hupHeaders,
-    realityServerName, realityFingerprint, realityPassword, realityShortId, realitySpiderX,
+    realityServerName, realityFingerprint, realityPassword, realityShortId, realitySpiderX, realityMldsa65Verify,
     realityShow, realityTarget, realityServerNames, realityPrivateKey, realityShortIds,
     tlsServerName, tlsAllowInsecure, tlsFingerprint, tlsAlpn, tlsDisableSystemRoot,
     tlsEnableSessionResumption, tlsPinnedCert, tlsCertFile, tlsKeyFile,
@@ -867,7 +875,11 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
           </div>
           <div>
             <label className={labelCls}>密码</label>
-            <input type="text" value={realityPassword} onChange={e => setRealityPassword(e.target.value)} placeholder="x25519 公钥" className={inputSmall} />
+            <input type="text" value={realityPassword} onChange={e => setRealityPassword(e.target.value)} placeholder="公钥" className={inputSmall} />
+          </div>
+          <div>
+            <label className={labelCls}>ML-DSA-65 公钥</label>
+            <input type="text" value={realityMldsa65Verify} onChange={e => setRealityMldsa65Verify(e.target.value)} placeholder="后量子签名验证公钥" className={inputSmall} />
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
             <div>

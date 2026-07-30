@@ -27,6 +27,7 @@ const OUTBOUND_PROTOCOL_OPTIONS = [
 const VLESS_FLOW_OPTIONS = [
   { value: '', label: '无流控' },
   { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' },
+  { value: 'xtls-rprx-vision-udp443', label: 'xtls-rprx-vision-udp443' },
 ];
 
 const VMESS_SECURITY_OPTIONS = [

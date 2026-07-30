@@ -24,6 +24,7 @@ import {
   addArrayItemInConfig,
   updateArrayItemInConfig,
   removeArrayItemInConfig,
+  moveArrayItemInConfig,
   getAvailableModules,
   MODULE_DEFINITIONS,
 } from '../utils/configSectionHelper';
@@ -437,6 +438,24 @@ export const JsonConfigPage: React.FC = () => {
                     const updatedRule = { ...targetRule, enabled: targetRule.enabled === false };
                     handleUpdateContent(updateArrayItemInConfig(editorContent, 'routing.rules', idx, updatedRule));
                   }
+                }}
+                onMoveRule={(idx, dir) => handleUpdateContent(moveArrayItemInConfig(editorContent, 'routing.rules', idx, dir))}
+                onEditDomainStrategy={(val) => {
+                  try {
+                    const config = JSON.parse(editorContent || '{}');
+                    if (config.routing) config.routing.domainStrategy = val;
+                    handleUpdateContent(JSON.stringify(config, null, 2));
+                  } catch { /* ignore */ }
+                }}
+                onEditDomainMatcher={(val) => {
+                  try {
+                    const config = JSON.parse(editorContent || '{}');
+                    if (config.routing) {
+                      if (val) config.routing.domainMatcher = val;
+                      else delete config.routing.domainMatcher;
+                    }
+                    handleUpdateContent(JSON.stringify(config, null, 2));
+                  } catch { /* ignore */ }
                 }}
               />
 
