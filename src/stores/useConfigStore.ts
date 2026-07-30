@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { XrayConfigProfile, OutboundMode } from '../types';
-import { syncNodesAndGroupsToConfigJson } from '../utils/xrayMapper';
+import type { XrayConfigProfile } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { getShanghaiNowString } from '../utils/date';
 import { useAppStore } from './useAppStore';
@@ -27,7 +26,6 @@ interface ConfigStore {
   setDnsStrategy: (strategy: string) => void;
   toggleFakeDns: () => void;
   toggleSniffing: () => void;
-  syncNodesAndGroups: (nodes: any[], groups: any[], selectedNodeId?: string, mode?: OutboundMode) => void;
   startActiveKernel: () => Promise<void>;
 }
 
@@ -420,38 +418,25 @@ export const useConfigStore = create<ConfigStore>()(
 
       setActiveProfileId: (id) => {
         set({ activeProfileId: id });
-        import('./useAppStore').then(({ useAppStore }) => {
-          if (useAppStore.getState().coreState.isRunning) {
-            get().startActiveKernel();
-          }
-        });
+        if (useAppStore.getState().coreState.isRunning) {
+          get().startActiveKernel();
+        }
       },
       setSelectedProfileId: (id) => set({ selectedProfileId: id }),
 
       updatePorts: (socks, http) => {
         set({ socksPort: socks, httpPort: http });
-        import('./useAppStore').then(({ useAppStore }) => {
-          const appState = useAppStore.getState();
-          if (appState.coreState.isRunning) {
-            if (appState.coreState.systemProxy) {
-              invoke('set_system_proxy', { enable: true, httpPort: http, socksPort: socks }).catch(() => {});
-            }
-            get().startActiveKernel();
+        const appState = useAppStore.getState();
+        if (appState.coreState.isRunning) {
+          if (appState.coreState.systemProxy) {
+            invoke('set_system_proxy', { enable: true, httpPort: http, socksPort: socks }).catch(() => {});
           }
-        });
+          get().startActiveKernel();
+        }
       },
       setDnsStrategy: (strategy) => set({ dnsStrategy: strategy }),
       toggleFakeDns: () => set((state) => ({ enableFakeDns: !state.enableFakeDns })),
       toggleSniffing: () => set((state) => ({ sniffingEnabled: !state.sniffingEnabled })),
-      
-      syncNodesAndGroups: (nodes, groups, selectedNodeId, mode) => {
-        set((prevState) => ({
-          profiles: prevState.profiles.map((p) => ({
-            ...p,
-            content: syncNodesAndGroupsToConfigJson(p.content, nodes, groups, selectedNodeId, mode),
-          })),
-        }));
-      },
 
       startActiveKernel: async () => {
         const state = get();

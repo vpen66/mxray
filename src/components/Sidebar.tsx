@@ -1,9 +1,5 @@
 import React from 'react';
 import {
-  LayoutDashboard,
-  Globe2,
-  FolderGit2,
-  Route,
   Terminal,
   FileCode2,
   Settings,
@@ -19,12 +15,8 @@ import { useKernelStore } from '../stores/useKernelStore';
 import { ToggleSwitch } from './ToggleSwitch';
 
 const NAV_ITEMS = [
-  { id: 'dashboard', label: '控制台', icon: LayoutDashboard },
-  { id: 'proxies', label: '节点代理', icon: Globe2 },
-  { id: 'profiles', label: '订阅配置', icon: FolderGit2 },
-  { id: 'rules', label: '路由规则', icon: Route },
-  { id: 'logs', label: '实时日志', icon: Terminal },
   { id: 'json-config', label: '高级配置', icon: FileCode2 },
+  { id: 'logs', label: '实时日志', icon: Terminal },
   { id: 'settings', label: '系统设置', icon: Settings },
 ];
 
@@ -32,6 +24,7 @@ export const Sidebar: React.FC = () => {
   const {
     activeTab,
     setActiveTab,
+    toggleLeftPanel,
     coreState,
     toggleSystemProxy,
     toggleTunMode,
@@ -98,7 +91,14 @@ export const Sidebar: React.FC = () => {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  if (item.id === 'json-config') {
+                    setActiveTab(item.id);
+                    toggleLeftPanel();
+                  } else {
+                    setActiveTab(item.id);
+                  }
+                }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   isActive
                     ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-md shadow-blue-500/10'

@@ -3,10 +3,6 @@ import { Sidebar } from './components/Sidebar';
 import { TunSettingsModal } from './components/TunSettingsModal';
 import { useAppStore } from './stores/useAppStore';
 import { useLogStore } from './stores/useLogStore';
-import { DashboardPage } from './pages/Dashboard';
-import { ProxiesPage } from './pages/Proxies';
-import { ProfilesPage } from './pages/Profiles';
-import { RulesPage } from './pages/Rules';
 import { LogsPage } from './pages/Logs';
 import { JsonConfigPage } from './pages/JsonConfig';
 import { SettingsPage } from './pages/Settings';
@@ -25,22 +21,14 @@ export function App() {
 
   const renderActivePage = () => {
     switch (activeTab) {
-      case 'dashboard':
-        return <DashboardPage />;
-      case 'proxies':
-        return <ProxiesPage />;
-      case 'profiles':
-        return <ProfilesPage />;
-      case 'rules':
-        return <RulesPage />;
-      case 'logs':
-        return <LogsPage />;
       case 'json-config':
         return <JsonConfigPage />;
+      case 'logs':
+        return <LogsPage />;
       case 'settings':
         return <SettingsPage />;
       default:
-        return <DashboardPage />;
+        return <JsonConfigPage />;
     }
   };
 

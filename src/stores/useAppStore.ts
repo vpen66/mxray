@@ -1,13 +1,14 @@
 import { create } from 'zustand';
-import type { CoreState, OutboundMode, TrafficStats } from '../types';
+import type { CoreState } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { useConfigStore } from './useConfigStore';
 
 interface AppStore {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  isLeftPanelOpen: boolean;
+  toggleLeftPanel: () => void;
   coreState: CoreState;
-  trafficStats: TrafficStats;
   isTogglingSystemProxy: boolean;
   isTogglingTunMode: boolean;
   autoStartApp: boolean;
@@ -15,7 +16,6 @@ interface AppStore {
   isTunModalOpen: boolean;
   openTunModal: () => void;
   closeTunModal: () => void;
-  setMode: (mode: OutboundMode) => void;
   toggleSystemProxy: () => Promise<void>;
   checkSystemProxyStatus: () => Promise<void>;
   toggleTunMode: () => Promise<void>;
@@ -25,12 +25,13 @@ interface AppStore {
   stopKernel: () => Promise<void>;
   startKernel: () => Promise<void>;
   toggleKernel: () => Promise<void>;
-  updateTraffic: (upload: number, download: number) => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  activeTab: 'dashboard',
+  activeTab: 'json-config',
   setActiveTab: (tab) => set({ activeTab: tab }),
+  isLeftPanelOpen: false,
+  toggleLeftPanel: () => set((state) => ({ isLeftPanelOpen: !state.isLeftPanelOpen })),
   isTunModalOpen: false,
   openTunModal: () => set({ isTunModalOpen: true }),
   closeTunModal: () => set({ isTunModalOpen: false }),
@@ -38,16 +39,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     isRunning: false,
     version: 'Xray 26.3.27 (Xray-core)',
     uptime: 0,
-    mode: 'rule',
     systemProxy: false,
     tunMode: false,
-    activeNodeId: '',
-  },
-  trafficStats: {
-    uploadSpeed: 0,
-    downloadSpeed: 0,
-    totalUpload: 0,
-    totalDownload: 0,
   },
   isTogglingSystemProxy: false,
   isTogglingTunMode: false,
@@ -85,32 +78,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
-  setMode: async (mode) => {
-    set((state) => ({
-      coreState: { ...state.coreState, mode },
-    }));
-
-    try {
-      const { useProxyStore } = await import('./useProxyStore');
-      const { useConfigStore } = await import('./useConfigStore');
-
-      const proxyState = useProxyStore.getState();
-      const allNodes = proxyState.profiles.flatMap((p) => p.nodes);
-
-      useConfigStore.getState().syncNodesAndGroups(
-        allNodes,
-        proxyState.proxyGroups,
-        proxyState.selectedNodeId,
-        mode
-      );
-
-      if (get().coreState.isRunning) {
-        await useConfigStore.getState().startActiveKernel();
-      }
-    } catch (e) {
-      console.warn('Set mode sync warning:', e);
-    }
-  },
   toggleSystemProxy: async () => {
     if (get().isTogglingSystemProxy) return;
     set({ isTogglingSystemProxy: true });
@@ -290,14 +257,4 @@ export const useAppStore = create<AppStore>((set, get) => ({
       await get().startKernel();
     }
   },
-  updateTraffic: (upload, download) =>
-    set((state) => ({
-      trafficStats: {
-        ...state.trafficStats,
-        uploadSpeed: upload,
-        downloadSpeed: download,
-        totalUpload: state.trafficStats.totalUpload + upload,
-        totalDownload: state.trafficStats.totalDownload + download,
-      },
-    })),
 }));

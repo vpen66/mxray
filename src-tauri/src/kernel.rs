@@ -281,7 +281,7 @@ pub fn list_installed_kernels(app_handle: tauri::AppHandle) -> Result<Vec<Kernel
     // 1. Add Bundled / Default kernel info
     kernels.push(KernelInfo {
         name: "Xray-core (内置)".to_string(),
-        version: "v26.3.27".to_string(),
+        version: "v26.7.28".to_string(),
         path: "bundled".to_string(),
         kernel_type: "bundled".to_string(),
         is_valid: true,

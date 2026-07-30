@@ -28,10 +28,8 @@ import {
 import { useLogStore } from '../stores/useLogStore';
 import type { LogEntry } from '../types';
 import { CustomSelect, type SelectOption } from '../components/CustomSelect';
-import { OutboundSelect } from '../components/OutboundSelect';
 import { parseXrayLog, stripLeadingTimestamp } from '../utils/logParser';
 import { useConfigStore } from '../stores/useConfigStore';
-import { useProxyStore } from '../stores/useProxyStore';
 
 function getRootDomain(domain: string): string {
   if (!domain || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(domain)) {
@@ -108,10 +106,8 @@ export const LogsPage: React.FC = () => {
     setAggregateDuplicates,
   } = useLogStore();
 
-  const { proxyGroups, profiles: proxyProfiles } = useProxyStore();
   const { profiles: configProfiles, selectedProfileId, activeProfileId, updateProfile, startActiveKernel } = useConfigStore();
   const targetConfigProfile = configProfiles.find((p) => p.id === (selectedProfileId || activeProfileId)) || configProfiles[0];
-  const allNodes = proxyProfiles.flatMap((p) => p.nodes);
 
   const logContainerRef = useRef<HTMLDivElement>(null);
   const [selectedLog, setSelectedLog] = useState<AggregatedLogEntry | null>(null);
@@ -789,16 +785,17 @@ export const LogsPage: React.FC = () => {
               />
             </div>
 
-            {/* Target Outbound Selector using OutboundSelect (Rule 5 Compliance) */}
+            {/* 目标出站策略选择器 */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300 block">调整目标出站策略 / 节点</label>
-              <OutboundSelect
+              <CustomSelect
                 value={targetOutbound}
                 onChange={(val) => setTargetOutbound(val)}
-                proxyGroups={proxyGroups}
-                allNodes={allNodes}
-                size="md"
-                fullWidth
+                options={[
+                  { value: 'proxy', label: '代理' },
+                  { value: 'direct', label: '直连' },
+                  { value: 'block', label: '拒绝' },
+                ]}
               />
             </div>
 
