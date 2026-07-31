@@ -158,6 +158,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       {/* Popover Dropdown List - rendered via Portal to avoid overflow clipping */}
       {isOpen && !disabled && dropPosition.bottom > 0 && createPortal(
         <div
+          onMouseDown={(e) => e.stopPropagation()}
           className={`fixed w-max max-w-[380px] bg-slate-900/98 backdrop-blur-2xl border border-slate-700/80 rounded-xl shadow-2xl shadow-black/90 z-[9999] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}
           style={{
             left: dropPosition.left,

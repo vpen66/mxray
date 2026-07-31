@@ -105,6 +105,8 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
 
   // VLESS-specific
   const [vlessFlow, setVlessFlow] = useState('xtls-rprx-vision');
+  const [vlessReverseTag, setVlessReverseTag] = useState('');
+  const [vlessReverseSniffing, setVlessReverseSniffing] = useState(false);
   // VMess-specific
   const [vmessSecurity, setVmessSecurity] = useState('auto');
   const [vmessAlterId, setVmessAlterId] = useState(0);
@@ -156,7 +158,11 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
         tag: 'proxy-new',
         protocol: 'vless',
         settings: {
-          vnext: [{ address: 'example.com', port: 443, users: [{ id: '', encryption: 'none', flow: 'xtls-rprx-vision' }] }],
+          address: 'example.com',
+          port: 443,
+          id: '',
+          encryption: 'none',
+          flow: 'xtls-rprx-vision',
         },
         streamSettings: { method: 'raw', security: 'reality', realitySettings: { serverName: '', publicKey: '', shortId: '' } },
       };
@@ -165,12 +171,22 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
       setProtocol(val.protocol || 'vless');
 
       // Extract address/port/uuid from settings
-      if (val.settings?.vnext && val.settings.vnext[0]) {
+      if (val.protocol === 'vless' && val.settings?.address !== undefined) {
+        // VLESS flat format (official spec)
+        setAddress(val.settings.address || '');
+        setPort(val.settings.port || 443);
+        setUuid(val.settings.id || '');
+        setVlessFlow(val.settings.flow || 'xtls-rprx-vision');
+        setUserLevel(val.settings.level ?? 0);
+        setVlessReverseTag(val.settings.reverse?.tag || '');
+        setVlessReverseSniffing(!!val.settings.reverse?.sniffing);
+      } else if (val.settings?.vnext && val.settings.vnext[0]) {
         const vn = val.settings.vnext[0];
         setAddress(vn.address || '');
         setPort(vn.port || 443);
         setUuid(vn.users?.[0]?.id || '');
-        setVlessFlow(vn.users?.[0]?.flow || 'xtls-rprx-vision');
+        const vlessUser = vn.users?.[0] || {};
+        setVlessFlow('flow' in vlessUser ? vlessUser.flow : 'xtls-rprx-vision');
         setVmessSecurity(vn.users?.[0]?.security || 'auto');
         setVmessAlterId(vn.users?.[0]?.alterId ?? 0);
       } else if (val.settings?.servers && val.settings.servers[0]) {
@@ -191,7 +207,10 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
       }
 
       // Common user-level email/level
-      if (val.settings?.vnext?.[0]?.users?.[0]) {
+      if (val.protocol === 'vless' && val.settings?.address !== undefined) {
+        setUserEmail('');
+        setUserLevel(val.settings.level ?? 0);
+      } else if (val.settings?.vnext?.[0]?.users?.[0]) {
         setUserEmail('');
         setUserLevel(val.settings.vnext[0].users[0].level ?? 0);
       } else if (val.settings?.servers?.[0]) {
@@ -282,20 +301,21 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
     const trimmedAddr = address.trim();
 
     switch (protocol) {
-      case 'vless':
+      case 'vless': {
         settings = {
-          vnext: [{
-            address: trimmedAddr,
-            port: numPort,
-            users: [{
-              id: uuid.trim(),
-              encryption: 'none',
-              ...(vlessFlow ? { flow: vlessFlow } : {}),
-              ...(userLevel > 0 ? { level: userLevel } : {}),
-            }],
-          }],
+          address: trimmedAddr,
+          port: numPort,
+          id: uuid.trim(),
+          encryption: 'none',
+          flow: vlessFlow,
+          ...(userLevel > 0 ? { level: userLevel } : {}),
         };
+        const reverseObj: any = {};
+        if (vlessReverseTag.trim()) reverseObj.tag = vlessReverseTag.trim();
+        if (vlessReverseSniffing) reverseObj.sniffing = {};
+        if (Object.keys(reverseObj).length > 0) settings.reverse = reverseObj;
         break;
+      }
       case 'vmess':
         settings = {
           vnext: [{
@@ -535,6 +555,20 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                       <div>
                         <label className={labelCls}>用户等级</label>
                         <input type="number" value={userLevel} onChange={(e) => setUserLevel(Number(e.target.value) || 0)} className={inputSmall} />
+                      </div>
+                      <div className="p-3 bg-slate-800/30 border border-white/5 rounded-xl space-y-3">
+                        <p className="text-xs font-semibold text-blue-300">反向代理</p>
+                        <p className="text-[11px] text-slate-500">启用后该出站可作为 VLESS 反向代理出站，向服务端注册隧道并保留公网源 IP。</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className={labelCls}>反向入站标识 tag</label>
+                            <input type="text" value={vlessReverseTag} onChange={(e) => setVlessReverseTag(e.target.value)} placeholder="留空则不启用" className={inputSmall} />
+                          </div>
+                          <div className="flex items-end gap-2">
+                            <ToggleSwitch checked={vlessReverseSniffing} onChange={() => setVlessReverseSniffing(p => !p)} activeColor="blue" size="sm" ariaLabel="启用流量嗅探" />
+                            <span className="text-xs text-slate-400">启用流量嗅探 sniffing</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -813,7 +847,8 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 </div>
               )}
 
-              {/* Outbound-level: sendThrough / targetStrategy */}\n              <div className="border-t border-white/10 pt-4 mt-2">
+              {/* Outbound-level: sendThrough / targetStrategy */}
+              <div className="border-t border-white/10 pt-4 mt-2">
                 <p className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wide">出站高级设置</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>

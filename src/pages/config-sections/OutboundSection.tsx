@@ -43,7 +43,9 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
           const isProxyNode = !isDirect && !isBlock;
 
           let address = '系统内置';
-          if (ob.settings?.vnext && ob.settings.vnext[0]) {
+          if (ob.settings?.address !== undefined && ob.settings?.port !== undefined) {
+            address = `${ob.settings.address}:${ob.settings.port}`;
+          } else if (ob.settings?.vnext && ob.settings.vnext[0]) {
             address = `${ob.settings.vnext[0].address}:${ob.settings.vnext[0].port}`;
           } else if (ob.settings?.servers && ob.settings.servers[0]) {
             address = `${ob.settings.servers[0].address}:${ob.settings.servers[0].port}`;

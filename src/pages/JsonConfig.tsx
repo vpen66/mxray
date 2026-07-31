@@ -296,6 +296,14 @@ export const JsonConfigPage: React.FC = () => {
 
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          <button
+            onClick={() => setIsNewProfileModalOpen(true)}
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-white border border-white/10 rounded-lg transition-all font-medium"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            新建
+          </button>
+
           {profiles.map((p) => {
             const isSelected = p.id === selectedProfileId;
             const isActive = p.id === activeProfileId;
@@ -361,13 +369,6 @@ export const JsonConfigPage: React.FC = () => {
             );
           })}
 
-          <button
-            onClick={() => setIsNewProfileModalOpen(true)}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-white border border-white/10 rounded-lg transition-all font-medium"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            新建
-          </button>
         </div>
       </div>
 
