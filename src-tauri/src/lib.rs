@@ -10,13 +10,16 @@ fn get_core_version() -> String {
 
 #[tauri::command]
 fn parse_subscription_link(link: String) -> Result<String, String> {
-    if link.starts_with("vless://") {
-        config::parser::ConfigParser::parse_vless(&link)
-            .map(|node| serde_json::to_string(&node).unwrap_or_default())
-            .map_err(|e| e.to_string())
-    } else {
-        Err("Unsupported protocol link".into())
-    }
+    config::parser::ConfigParser::parse_share_link(&link)
+        .map(|node| serde_json::to_string(&node).unwrap_or_default())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn parse_subscription_content(content: String) -> Result<String, String> {
+    config::parser::ConfigParser::parse_subscription_content(&content)
+        .map(|nodes| serde_json::to_string(&nodes).unwrap_or_default())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -60,6 +63,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_core_version,
             parse_subscription_link,
+            parse_subscription_content,
             fetch_subscription,
             kernel::detect_kernel,
             kernel::list_installed_kernels,

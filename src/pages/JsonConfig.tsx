@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { useConfigStore, TEMPLATE_STANDARD, TEMPLATE_TUN, TEMPLATE_MINIMAL } from '../stores/useConfigStore';
+import { useConfigStore } from '../stores/useConfigStore';
 import { useAppStore } from '../stores/useAppStore';
 import { ConfirmModal } from '../components/ConfirmModal';
 
@@ -83,6 +83,7 @@ import { ObservatoryModal } from './config-modals/ObservatoryModal';
 import { GeodataModal } from './config-modals/GeodataModal';
 import { VersionModal } from './config-modals/VersionModal';
 import { EnvModal } from './config-modals/EnvModal';
+import { SubscriptionImportModal } from './config-modals/SubscriptionImportModal';
 
 export const JsonConfigPage: React.FC = () => {
   const {
@@ -116,7 +117,7 @@ export const JsonConfigPage: React.FC = () => {
 
   const [tocCollapsed, setTocCollapsed] = useState(false);
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
-  const [editorContent, setEditorContent] = useState<string>(selectedProfile?.content || TEMPLATE_STANDARD);
+  const [editorContent, setEditorContent] = useState<string>(selectedProfile?.content || '{}');
   const setIsSaved = useState(true)[1];
   const [jsonError, setJsonError] = useState<string | null>(null);
 
@@ -187,13 +188,13 @@ export const JsonConfigPage: React.FC = () => {
   const [isNewProfileModalOpen, setIsNewProfileModalOpen] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileDesc, setNewProfileDesc] = useState('');
-  const [newProfileTemplate, setNewProfileTemplate] = useState('standard');
 
   // Confirm delete profile modal
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Active Editing Modals state
   const [isAddModuleModalOpen, setIsAddModuleModalOpen] = useState(false);
+  const [isSubscriptionImportOpen, setIsSubscriptionImportOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<{
     type: string;
     index?: number;
@@ -260,14 +261,10 @@ export const JsonConfigPage: React.FC = () => {
 
   // Profile management handlers
   const handleCreateProfile = () => {
-    let tpl = TEMPLATE_STANDARD;
-    if (newProfileTemplate === 'tun') tpl = TEMPLATE_TUN;
-    if (newProfileTemplate === 'minimal') tpl = TEMPLATE_MINIMAL;
-
     const createdId = addProfile({
       name: newProfileName,
       description: newProfileDesc,
-      content: tpl,
+      content: '{}',
     });
     setSelectedProfileId(createdId);
     setIsNewProfileModalOpen(false);
@@ -612,6 +609,7 @@ export const JsonConfigPage: React.FC = () => {
                 onAddOutbound={() => setActiveModal({ type: 'outbound_add' })}
                 onEditOutbound={(idx) => setActiveModal({ type: 'outbound_edit', index: idx, initialValue: parsedConfig.outbounds[idx] })}
                 onDeleteOutbound={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'outbounds', idx))}
+                onImportSubscription={() => setIsSubscriptionImportOpen(true)}
               />
 
               {/* Api Section */}
@@ -961,6 +959,19 @@ export const JsonConfigPage: React.FC = () => {
         onSave={(val) => handleUpdateContent(setModuleInConfig(editorContent, 'env', val))}
       />
 
+      {/* Subscription Import Modal */}
+      <SubscriptionImportModal
+        isOpen={isSubscriptionImportOpen}
+        onClose={() => setIsSubscriptionImportOpen(false)}
+        onImport={(nodes) => {
+          let currentContent = editorContent;
+          for (const node of nodes) {
+            currentContent = addArrayItemInConfig(currentContent, 'outbounds', node);
+          }
+          handleUpdateContent(currentContent);
+        }}
+      />
+
       {/* New Profile Modal */}
       {isNewProfileModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -995,30 +1006,6 @@ export const JsonConfigPage: React.FC = () => {
                 placeholder="描述此配置文件的应用场景..."
                 className="w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">模板选择</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'standard', name: '标准分流' },
-                  { id: 'tun', name: 'TUN 透明代理' },
-                  { id: 'minimal', name: '极简调试' },
-                ].map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => setNewProfileTemplate(tpl.id)}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all ${
-                      newProfileTemplate === tpl.id
-                        ? 'bg-blue-600/20 border-blue-500/40 text-blue-300'
-                        : 'bg-slate-950/40 border-white/10 text-slate-400 hover:bg-white/5'
-                    }`}
-                  >
-                    {tpl.name}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

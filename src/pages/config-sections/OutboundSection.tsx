@@ -1,11 +1,12 @@
 import React from 'react';
-import { Globe, Plus, Edit3, Trash2, ShieldCheck } from 'lucide-react';
+import { Globe, Plus, Edit3, Trash2, ShieldCheck, Download } from 'lucide-react';
 
 interface OutboundSectionProps {
   outbounds: any[];
   onAddOutbound: () => void;
   onEditOutbound: (index: number) => void;
   onDeleteOutbound: (index: number) => void;
+  onImportSubscription?: () => void;
 }
 
 export const OutboundSection: React.FC<OutboundSectionProps> = ({
@@ -13,6 +14,7 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
   onAddOutbound,
   onEditOutbound,
   onDeleteOutbound,
+  onImportSubscription,
 }) => {
   return (
     <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4">
@@ -26,14 +28,26 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
             <p className="text-xs text-slate-400">管理节点出站与直连阻断策略</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onAddOutbound}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 rounded-xl transition-all font-medium"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          添加出站
-        </button>
+        <div className="flex items-center gap-2">
+          {onImportSubscription && (
+            <button
+              type="button"
+              onClick={onImportSubscription}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 rounded-xl transition-all font-medium"
+            >
+              <Download className="w-3.5 h-3.5" />
+              导入订阅
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onAddOutbound}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 rounded-xl transition-all font-medium"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            添加出站
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
