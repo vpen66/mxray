@@ -31,7 +31,7 @@ import {
   FileUp,
 } from 'lucide-react';
 import { save, open } from '@tauri-apps/plugin-dialog';
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import { useConfigStore, TEMPLATE_STANDARD, TEMPLATE_TUN, TEMPLATE_MINIMAL } from '../stores/useConfigStore';
 import { useAppStore } from '../stores/useAppStore';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -368,66 +368,6 @@ export const JsonConfigPage: React.FC = () => {
             <Plus className="w-3.5 h-3.5" />
             新建
           </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={async () => {
-                if (!selectedProfile) return;
-                try {
-                  const filePath = await save({
-                    title: '导出配置文件',
-                    defaultPath: `${selectedProfile.name}.json`,
-                    filters: [{ name: 'JSON 配置文件', extensions: ['json'] }],
-                  });
-                  if (filePath) {
-                    await writeTextFile(filePath, selectedProfile.content);
-                  }
-                } catch (err) {
-                  console.error('导出失败:', err);
-                }
-              }}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-white border border-white/10 rounded-lg transition-all font-medium"
-              title="导出当前配置文件为 JSON"
-            >
-              <FileDown className="w-3.5 h-3.5" />
-              导出
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  const filePath = await open({
-                    title: '导入配置文件',
-                    filters: [{ name: 'JSON 配置文件', extensions: ['json'] }],
-                    multiple: false,
-                    directory: false,
-                  });
-                  if (filePath && typeof filePath === 'string') {
-                    const content = await readTextFile(filePath);
-                    // Validate JSON
-                    JSON.parse(content);
-                    // Extract filename without extension as profile name
-                    const fileName = filePath.split('/').pop()?.replace(/\.json$/i, '') || '导入的配置';
-                    const createdId = addProfile({
-                      name: fileName,
-                      description: '从文件导入的配置',
-                      content,
-                    });
-                    setSelectedProfileId(createdId);
-                  }
-                } catch (err: any) {
-                  console.error('导入失败:', err);
-                  if (err?.message?.includes('JSON')) {
-                    alert('导入失败：文件格式无效，请确保是合法的 JSON 配置文件');
-                  }
-                }
-              }}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-white border border-white/10 rounded-lg transition-all font-medium"
-              title="从 JSON 文件导入配置"
-            >
-              <FileUp className="w-3.5 h-3.5" />
-              导入
-            </button>
-          </div>
         </div>
       </div>
 
@@ -478,6 +418,65 @@ export const JsonConfigPage: React.FC = () => {
                 JSON 源码
               </button>
             </div>
+
+            {/* Import/Export Buttons */}
+            <button
+              type="button"
+              onClick={async () => {
+                if (!selectedProfile) return;
+                try {
+                  const filePath = await save({
+                    title: '导出配置文件',
+                    defaultPath: `${selectedProfile.name}.json`,
+                    filters: [{ name: 'JSON 配置文件', extensions: ['json'] }],
+                  });
+                  if (filePath) {
+                    await invoke('write_text_file', { path: filePath, content: selectedProfile.content });
+                  }
+                } catch (err) {
+                  console.error('导出失败:', err);
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-white border border-white/10 rounded-xl transition-all font-medium"
+              title="导出当前配置文件为 JSON"
+            >
+              <FileUp className="w-3.5 h-3.5" />
+              导出
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const filePath = await open({
+                    title: '导入配置文件',
+                    filters: [{ name: 'JSON 配置文件', extensions: ['json'] }],
+                    multiple: false,
+                    directory: false,
+                  });
+                  if (filePath && typeof filePath === 'string') {
+                    const content = await invoke('read_text_file', { path: filePath }) as string;
+                    JSON.parse(content);
+                    const fileName = filePath.split('/').pop()?.replace(/\.json$/i, '') || '导入的配置';
+                    const createdId = addProfile({
+                      name: fileName,
+                      description: '从文件导入的配置',
+                      content,
+                    });
+                    setSelectedProfileId(createdId);
+                  }
+                } catch (err: any) {
+                  console.error('导入失败:', err);
+                  if (err?.message?.includes('JSON')) {
+                    alert('导入失败：文件格式无效，请确保是合法的 JSON 配置文件');
+                  }
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-white border border-white/10 rounded-xl transition-all font-medium"
+              title="从 JSON 文件导入配置"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              导入
+            </button>
 
             {/* Add Module Button */}
             <button

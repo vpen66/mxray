@@ -39,6 +39,16 @@ async fn fetch_subscription(url: String) -> Result<String, String> {
     Ok(text)
 }
 
+#[tauri::command]
+fn write_text_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content).map_err(|e| format!("写入文件失败: {}", e))
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("读取文件失败: {}", e))
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -66,7 +76,9 @@ pub fn run() {
             kernel::generate_vless_encryption,
             kernel::generate_uuid,
             sysproxy::set_system_proxy,
-            sysproxy::get_system_proxy_status
+            sysproxy::get_system_proxy_status,
+            write_text_file,
+            read_text_file
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
