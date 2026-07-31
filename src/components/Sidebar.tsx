@@ -5,10 +5,8 @@ import {
   Settings,
   Zap,
   Loader2,
-  Power,
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
-import { useKernelStore } from '../stores/useKernelStore';
 
 const NAV_ITEMS = [
   { id: 'json-config', label: '高级配置', icon: FileCode2 },
@@ -25,7 +23,6 @@ export const Sidebar: React.FC = () => {
     isTogglingSystemProxy,
     toggleKernel,
   } = useAppStore();
-  const { activeKernel } = useKernelStore();
 
   return (
     <aside className="w-64 h-screen glass-nav flex flex-col justify-between p-4 z-20">
@@ -67,10 +64,6 @@ export const Sidebar: React.FC = () => {
               <span className="text-slate-300 font-medium group-hover:text-white transition-colors">
                 {isTogglingSystemProxy ? '内核切换中...' : coreState.isRunning ? '内核运行中' : '内核已停止'}
               </span>
-            </div>
-            <div className="flex items-center gap-1 text-[10px] text-slate-500 group-hover:text-slate-300">
-              <Power className={`w-3 h-3 transition-colors ${coreState.isRunning ? 'text-emerald-400' : 'text-slate-500'}`} />
-              <span>{activeKernel.version}</span>
             </div>
           </button>
         </div>

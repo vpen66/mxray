@@ -33,7 +33,7 @@ interface KernelStore {
 
 const DEFAULT_BUNDLED_KERNEL: KernelInfo = {
   name: 'Xray-core (内置)',
-  version: '检测中...',
+  version: 'Xray',
   path: 'bundled',
   kernel_type: 'bundled',
   is_valid: true,
