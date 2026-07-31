@@ -11,7 +11,7 @@ const METHOD_OPTIONS = [
   { value: 'grpc', label: 'gRPC HTTP/2 复用' },
   { value: 'websocket', label: 'WebSocket 伪装传输' },
   { value: 'httpupgrade', label: 'HTTPUpgrade 轻量升级' },
-  { value: 'hysteria2', label: 'Hysteria2 QUIC 传输' },
+  { value: 'hysteria', label: 'Hysteria2 QUIC 传输' },
 ];
 
 const SECURITY_OPTIONS = [
@@ -70,6 +70,18 @@ const DOMAIN_STRATEGY_OPTIONS = [
   { value: 'ForceIP', label: 'ForceIP 强制解析' },
   { value: 'ForceIPv4', label: 'ForceIPv4 强制 IPv4' },
   { value: 'ForceIPv6', label: 'ForceIPv6 强制 IPv6' },
+  { value: 'ForceIPv4v6', label: 'ForceIPv4v6 强制 IPv4 优先' },
+  { value: 'ForceIPv6v4', label: 'ForceIPv6v4 强制 IPv6 优先' },
+];
+
+const ADDRESS_PORT_STRATEGY_OPTIONS = [
+  { value: '', label: 'none 关闭' },
+  { value: 'SrvPortOnly', label: 'SrvPortOnly SRV 端口' },
+  { value: 'SrvAddressOnly', label: 'SrvAddressOnly SRV 地址' },
+  { value: 'SrvPortAndAddress', label: 'SrvPortAndAddress SRV 全部' },
+  { value: 'TxtPortOnly', label: 'TxtPortOnly TXT 端口' },
+  { value: 'TxtAddressOnly', label: 'TxtAddressOnly TXT 地址' },
+  { value: 'TxtPortAndAddress', label: 'TxtPortAndAddress TXT 全部' },
 ];
 
 const TCP_CONGESTION_OPTIONS = [
@@ -240,6 +252,37 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
   const [sockoptTcpKeepAliveIdle, setSockoptTcpKeepAliveIdle] = useState(0);
   const [sockoptTcpKeepAliveInterval, setSockoptTcpKeepAliveInterval] = useState(0);
   const [sockoptTcpMptcp, setSockoptTcpMptcp] = useState(false);
+  const [sockoptTcpMaxSeg, setSockoptTcpMaxSeg] = useState(0);
+  const [sockoptTcpUserTimeout, setSockoptTcpUserTimeout] = useState(0);
+  const [sockoptV6Only, setSockoptV6Only] = useState(false);
+  const [sockoptTcpWindowClamp, setSockoptTcpWindowClamp] = useState(0);
+  const [sockoptAddressPortStrategy, setSockoptAddressPortStrategy] = useState('');
+  const [sockoptAcceptProxy, setSockoptAcceptProxy] = useState(false);
+  const [sockoptTrustedXFF, setSockoptTrustedXFF] = useState('');
+  const [sockoptCustomJson, setSockoptCustomJson] = useState('');
+  // HappyEyeballs
+  const [happyEyeballsEnabled, setHappyEyeballsEnabled] = useState(false);
+  const [heTryDelay, setHeTryDelay] = useState(250);
+  const [hePrioritizeIPv6, setHePrioritizeIPv6] = useState(false);
+  const [heInterleave, setHeInterleave] = useState(1);
+  const [heMaxConcurrent, setHeMaxConcurrent] = useState(4);
+
+  // Hysteria settings (hysteriaSettings)
+  const [hysteriaVersion, setHysteriaVersion] = useState(2);
+  const [hysteriaAuth, setHysteriaAuth] = useState('');
+  const [hysteriaUdpIdle, setHysteriaUdpIdle] = useState(60);
+  const [hysteriaMasqType, setHysteriaMasqType] = useState('');
+  const [hysteriaMasqDir, setHysteriaMasqDir] = useState('');
+  const [hysteriaMasqUrl, setHysteriaMasqUrl] = useState('');
+  const [hysteriaMasqRewriteHost, setHysteriaMasqRewriteHost] = useState(false);
+  const [hysteriaMasqInsecure, setHysteriaMasqInsecure] = useState(false);
+  const [hysteriaMasqContent, setHysteriaMasqContent] = useState('');
+  const [hysteriaMasqHeaders, setHysteriaMasqHeaders] = useState('');
+  const [hysteriaMasqStatusCode, setHysteriaMasqStatusCode] = useState(0);
+
+  // Raw HTTP header sub-objects
+  const [rawHttpRequest, setRawHttpRequest] = useState('');
+  const [rawHttpResponse, setRawHttpResponse] = useState('');
 
   // FinalMask enabled toggles
   const [finalmaskEnabled, setFinalmaskEnabled] = useState(false);
@@ -341,6 +384,28 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
       setTlsKeyFile(tls.certificates[0].keyFile || '');
     }
 
+    // Hysteria settings
+    const hs = s.hysteriaSettings || {};
+    setHysteriaVersion(hs.version ?? 2);
+    setHysteriaAuth(hs.auth || '');
+    setHysteriaUdpIdle(hs.udpIdleTimeout ?? 60);
+    const mq = hs.masquerade || {};
+    setHysteriaMasqType(mq.type || '');
+    setHysteriaMasqDir(mq.dir || '');
+    setHysteriaMasqUrl(mq.url || '');
+    setHysteriaMasqRewriteHost(mq.rewriteHost === true);
+    setHysteriaMasqInsecure(mq.insecure === true);
+    setHysteriaMasqContent(mq.content || '');
+    setHysteriaMasqHeaders(mq.headers && typeof mq.headers === 'object' ? JSON.stringify(mq.headers, null, 2) : '');
+    setHysteriaMasqStatusCode(mq.statusCode ?? 0);
+
+    // Raw HTTP header
+    const rawH = raw?.header || {};
+    if (rawH.type === 'http') {
+      setRawHttpRequest(rawH.request ? JSON.stringify(rawH.request, null, 2) : '');
+      setRawHttpResponse(rawH.response ? JSON.stringify(rawH.response, null, 2) : '');
+    }
+
     // FinalMask
     const fm = s.finalmask;
     if (fm) {
@@ -372,6 +437,24 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
       setSockoptTcpKeepAliveIdle(so.tcpKeepAliveIdle ?? 0);
       setSockoptTcpKeepAliveInterval(so.tcpKeepAliveInterval ?? 0);
       setSockoptTcpMptcp(so.tcpMptcp === true);
+      setSockoptTcpMaxSeg(so.tcpMaxSeg ?? 0);
+      setSockoptTcpUserTimeout(so.tcpUserTimeout ?? 0);
+      setSockoptV6Only(so.V6Only === true);
+      setSockoptTcpWindowClamp(so.tcpWindowClamp ?? 0);
+      setSockoptAddressPortStrategy(so.addressPortStrategy || '');
+      setSockoptAcceptProxy(so.acceptProxyProtocol === true);
+      setSockoptTrustedXFF(Array.isArray(so.trustedXForwardedFor) ? so.trustedXForwardedFor.join(', ') : '');
+      if (Array.isArray(so.customSockopt) && so.customSockopt.length > 0) {
+        setSockoptCustomJson(JSON.stringify(so.customSockopt, null, 2));
+      }
+      const he = so.happyEyeballs;
+      if (he) {
+        setHappyEyeballsEnabled(true);
+        setHeTryDelay(he.tryDelayMs ?? 250);
+        setHePrioritizeIPv6(he.prioritizeIPv6 === true);
+        setHeInterleave(he.interleave ?? 1);
+        setHeMaxConcurrent(he.maxConcurrentTry ?? 4);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -386,7 +469,16 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
         const rawSettings: any = {};
         if (isInbound) rawSettings.acceptProxyProtocol = rawAcceptProxy;
         if (rawHeaderType !== 'none') {
-          rawSettings.header = { type: rawHeaderType };
+          const header: any = { type: rawHeaderType };
+          if (rawHeaderType === 'http') {
+            if (rawHttpRequest.trim()) {
+              try { header.request = JSON.parse(rawHttpRequest); } catch { /* skip */ }
+            }
+            if (rawHttpResponse.trim()) {
+              try { header.response = JSON.parse(rawHttpResponse); } catch { /* skip */ }
+            }
+          }
+          rawSettings.header = header;
         }
         if (Object.keys(rawSettings).length > 0) result.rawSettings = rawSettings;
         break;
@@ -456,8 +548,28 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
         if (Object.keys(hupSettings).length > 0) result.httpupgradeSettings = hupSettings;
         break;
       }
-      case 'hysteria2': {
-        // Hysteria2 transport uses no additional settings at streamSettings level
+      case 'hysteria': {
+        const hysteriaSettings: any = { version: hysteriaVersion };
+        if (hysteriaAuth) hysteriaSettings.auth = hysteriaAuth;
+        if (hysteriaUdpIdle !== 60) hysteriaSettings.udpIdleTimeout = hysteriaUdpIdle;
+        if (hysteriaMasqType) {
+          const masq: any = { type: hysteriaMasqType };
+          if (hysteriaMasqType === 'file' && hysteriaMasqDir) masq.dir = hysteriaMasqDir;
+          if (hysteriaMasqType === 'proxy') {
+            if (hysteriaMasqUrl) masq.url = hysteriaMasqUrl;
+            if (hysteriaMasqRewriteHost) masq.rewriteHost = true;
+            if (hysteriaMasqInsecure) masq.insecure = true;
+          }
+          if (hysteriaMasqType === 'string') {
+            if (hysteriaMasqContent) masq.content = hysteriaMasqContent;
+            if (hysteriaMasqHeaders.trim()) {
+              try { masq.headers = JSON.parse(hysteriaMasqHeaders); } catch { /* skip */ }
+            }
+            if (hysteriaMasqStatusCode > 0) masq.statusCode = hysteriaMasqStatusCode;
+          }
+          hysteriaSettings.masquerade = masq;
+        }
+        result.hysteriaSettings = hysteriaSettings;
         break;
       }
     }
@@ -504,7 +616,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
     if (finalmaskEnabled) {
       const fm: any = {};
       // QUIC params (for xhttp h3 / hysteria)
-      if (method === 'xhttp' || method === 'hysteria2') {
+      if (method === 'xhttp' || method === 'hysteria') {
         const qp: any = {
           congestion: quicCongestion,
           bbrProfile: quicBbrProfile,
@@ -531,15 +643,34 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
     if (sockoptEnabled) {
       const so: any = {};
       if (sockoptMark > 0) so.mark = sockoptMark;
+      if (sockoptTcpMaxSeg > 0) so.tcpMaxSeg = sockoptTcpMaxSeg;
       if (sockoptTfo) so.tcpFastOpen = true;
       if (sockoptTproxy !== 'off') so.tproxy = sockoptTproxy;
       if (sockoptDomainStrategy !== 'AsIs') so.domainStrategy = sockoptDomainStrategy;
+      if (happyEyeballsEnabled) {
+        so.happyEyeballs = {
+          tryDelayMs: heTryDelay,
+          prioritizeIPv6: hePrioritizeIPv6,
+          interleave: heInterleave,
+          maxConcurrentTry: heMaxConcurrent,
+        };
+      }
       if (sockoptDialerProxy) so.dialerProxy = sockoptDialerProxy;
-      if (sockoptInterface) so.interface = sockoptInterface;
-      if (sockoptTcpCongestion) so.tcpcongestion = sockoptTcpCongestion;
+      if (isInbound && sockoptAcceptProxy) so.acceptProxyProtocol = true;
+      const xffArr = sockoptTrustedXFF.split(',').map(s => s.trim()).filter(Boolean);
+      if (xffArr.length > 0) so.trustedXForwardedFor = xffArr;
       if (sockoptTcpKeepAliveIdle > 0) so.tcpKeepAliveIdle = sockoptTcpKeepAliveIdle;
       if (sockoptTcpKeepAliveInterval > 0) so.tcpKeepAliveInterval = sockoptTcpKeepAliveInterval;
+      if (sockoptTcpUserTimeout > 0) so.tcpUserTimeout = sockoptTcpUserTimeout;
+      if (sockoptTcpCongestion) so.tcpcongestion = sockoptTcpCongestion;
+      if (sockoptInterface) so.interface = sockoptInterface;
+      if (sockoptV6Only) so.V6Only = true;
+      if (sockoptTcpWindowClamp > 0) so.tcpWindowClamp = sockoptTcpWindowClamp;
       if (sockoptTcpMptcp) so.tcpMptcp = true;
+      if (sockoptAddressPortStrategy) so.addressPortStrategy = sockoptAddressPortStrategy;
+      if (sockoptCustomJson.trim()) {
+        try { so.customSockopt = JSON.parse(sockoptCustomJson); } catch { /* skip */ }
+      }
       if (Object.keys(so).length > 0) result.sockopt = so;
     }
 
@@ -547,6 +678,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
   }, [
     method, security, isInbound,
     rawAcceptProxy, rawHeaderType,
+    rawHttpRequest, rawHttpResponse,
     xhttpMode, xhttpPath, xhttpHost, xhttpNoSSEHeader, xhttpExtra,
     kcpMtu, kcpTti, kcpUplink, kcpDownlink, kcpCongestion, kcpReadBuf, kcpWriteBuf,
     grpcAuthority, grpcServiceName, grpcMultiMode, grpcUserAgent, grpcIdleTimeout,
@@ -562,6 +694,12 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
     sockoptEnabled, sockoptMark, sockoptTfo, sockoptTproxy, sockoptDomainStrategy,
     sockoptDialerProxy, sockoptInterface, sockoptTcpCongestion,
     sockoptTcpKeepAliveIdle, sockoptTcpKeepAliveInterval, sockoptTcpMptcp,
+    sockoptTcpMaxSeg, sockoptTcpUserTimeout, sockoptV6Only, sockoptTcpWindowClamp,
+    sockoptAddressPortStrategy, sockoptAcceptProxy, sockoptTrustedXFF, sockoptCustomJson,
+    happyEyeballsEnabled, heTryDelay, hePrioritizeIPv6, heInterleave, heMaxConcurrent,
+    hysteriaVersion, hysteriaAuth, hysteriaUdpIdle, hysteriaMasqType, hysteriaMasqDir,
+    hysteriaMasqUrl, hysteriaMasqRewriteHost, hysteriaMasqInsecure, hysteriaMasqContent,
+    hysteriaMasqHeaders, hysteriaMasqStatusCode,
     kcpMaskHeader, kcpMaskValue,
   ]);
 
@@ -605,7 +743,17 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
               <CustomSelect options={RAW_HEADER_OPTIONS} value={rawHeaderType} onChange={setRawHeaderType} size="sm" accentColor="blue" />
             </div>
             {rawHeaderType === 'http' && (
-              <p className="text-[10px] text-amber-400/80">HTTP 伪装需在入站出站同时配置且内容一致，可通过 VLESS fallbacks path 分流</p>
+              <div className="space-y-3">
+                <p className="text-[10px] text-amber-400/80">HTTP 伪装需在入站出站同时配置且内容一致，可通过 VLESS fallbacks path 分流</p>
+                <div>
+                  <label className={labelCls}>HTTP 请求 JSON</label>
+                  <textarea value={rawHttpRequest} onChange={e => setRawHttpRequest(e.target.value)} rows={4} placeholder='{"version":"1.1","method":"GET","path":["/"],"headers":{"Host":["www.baidu.com"]}}' className={`${inputSmall} resize-none font-mono`} />
+                </div>
+                <div>
+                  <label className={labelCls}>HTTP 响应 JSON</label>
+                  <textarea value={rawHttpResponse} onChange={e => setRawHttpResponse(e.target.value)} rows={4} placeholder='{"version":"1.1","status":"200","reason":"OK","headers":{"Content-Type":["application/octet-stream"]}}' className={`${inputSmall} resize-none font-mono`} />
+                </div>
+              </div>
             )}
           </div>
         );
@@ -824,9 +972,79 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
           </div>
         );
 
-      case 'hysteria2':
+      case 'hysteria':
         return (
-          <p className="text-[10px] text-slate-500">Hysteria2 使用 QUIC 协议传输，无额外传输层设置。可在 FinalMask 中配置 QUIC 参数。</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+              <div>
+                <label className={labelCls}>版本</label>
+                <input type="number" value={hysteriaVersion} onChange={e => setHysteriaVersion(Number(e.target.value) || 2)} className={inputSmall} readOnly />
+              </div>
+              <div>
+                <label className={labelCls}>UDP 空闲超时 秒</label>
+                <input type="number" value={hysteriaUdpIdle} onChange={e => setHysteriaUdpIdle(Number(e.target.value) || 60)} className={inputSmall} />
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>认证密码</label>
+              <input type="text" value={hysteriaAuth} onChange={e => setHysteriaAuth(e.target.value)} placeholder="服务端与客户端保持一致" className={inputSmall} />
+            </div>
+            <div>
+              <label className={labelCls}>HTTP3 伪装类型</label>
+              <CustomSelect
+                options={[
+                  { value: '', label: '无 默认 404' },
+                  { value: 'file', label: 'file 文件服务' },
+                  { value: 'proxy', label: 'proxy 反代目标' },
+                  { value: 'string', label: 'string 自定义内容' },
+                ]}
+                value={hysteriaMasqType}
+                onChange={setHysteriaMasqType}
+                size="sm"
+                accentColor="blue"
+              />
+            </div>
+            {hysteriaMasqType === 'file' && (
+              <div>
+                <label className={labelCls}>文件目录路径</label>
+                <input type="text" value={hysteriaMasqDir} onChange={e => setHysteriaMasqDir(e.target.value)} placeholder="/var/www/html" className={inputSmall} />
+              </div>
+            )}
+            {hysteriaMasqType === 'proxy' && (
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>反代目标 URL</label>
+                  <input type="text" value={hysteriaMasqUrl} onChange={e => setHysteriaMasqUrl(e.target.value)} placeholder="https://example.com" className={inputSmall} />
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <div className="flex items-center justify-between flex-1 min-w-[200px] p-2.5 bg-slate-950/30 border border-white/5 rounded-lg">
+                    <span className="text-xs text-slate-300">重写 Host</span>
+                    <ToggleSwitch checked={hysteriaMasqRewriteHost} onChange={() => setHysteriaMasqRewriteHost(p => !p)} size="sm" activeColor="blue" />
+                  </div>
+                  <div className="flex items-center justify-between flex-1 min-w-[200px] p-2.5 bg-slate-950/30 border border-white/5 rounded-lg">
+                    <span className="text-xs text-slate-300">允许不安全证书</span>
+                    <ToggleSwitch checked={hysteriaMasqInsecure} onChange={() => setHysteriaMasqInsecure(p => !p)} size="sm" activeColor="blue" />
+                  </div>
+                </div>
+              </div>
+            )}
+            {hysteriaMasqType === 'string' && (
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>自定义内容</label>
+                  <textarea value={hysteriaMasqContent} onChange={e => setHysteriaMasqContent(e.target.value)} rows={2} placeholder="Hello World" className={`${inputSmall} resize-none`} />
+                </div>
+                <div>
+                  <label className={labelCls}>HTTP 头 JSON</label>
+                  <textarea value={hysteriaMasqHeaders} onChange={e => setHysteriaMasqHeaders(e.target.value)} rows={2} placeholder='{"Content-Type": "text/plain"}' className={`${inputSmall} resize-none`} />
+                </div>
+                <div>
+                  <label className={labelCls}>状态码</label>
+                  <input type="number" value={hysteriaMasqStatusCode} onChange={e => setHysteriaMasqStatusCode(Number(e.target.value) || 0)} className={inputSmall} />
+                </div>
+              </div>
+            )}
+          </div>
         );
 
       default:
@@ -995,7 +1213,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
       )}
 
       {/* FinalMask */}
-      {(method === 'xhttp' || method === 'hysteria2' || method === 'mkcp') && (
+      {(method === 'xhttp' || method === 'hysteria' || method === 'mkcp') && (
         <CollapsibleSection title="FinalMask 流量伪装" titleColor="text-amber-300">
           <div className="flex items-center justify-between p-2.5 bg-slate-950/30 border border-white/5 rounded-lg">
             <div>
@@ -1004,7 +1222,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
             </div>
             <ToggleSwitch checked={finalmaskEnabled} onChange={() => setFinalmaskEnabled(p => !p)} size="sm" activeColor="blue" />
           </div>
-          {finalmaskEnabled && (method === 'xhttp' || method === 'hysteria2') && (
+          {finalmaskEnabled && (method === 'xhttp' || method === 'hysteria') && (
             <div className="space-y-3">
               <span className="text-[11px] font-semibold text-amber-300">QUIC 参数</span>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
@@ -1108,6 +1326,14 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
                 <label className={labelCls}>出站接口绑定</label>
                 <input type="text" value={sockoptInterface} onChange={e => setSockoptInterface(e.target.value)} placeholder="wg0" className={inputSmall} />
               </div>
+              <div>
+                <label className={labelCls}>TCP 最大分段</label>
+                <input type="number" value={sockoptTcpMaxSeg} onChange={e => setSockoptTcpMaxSeg(Number(e.target.value) || 0)} className={inputSmall} />
+              </div>
+              <div>
+                <label className={labelCls}>TCP 窗口限制</label>
+                <input type="number" value={sockoptTcpWindowClamp} onChange={e => setSockoptTcpWindowClamp(Number(e.target.value) || 0)} className={inputSmall} />
+              </div>
             </div>
             {!isInbound && (
               <div>
@@ -1115,6 +1341,20 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
                 <input type="text" value={sockoptDialerProxy} onChange={e => setSockoptDialerProxy(e.target.value)} placeholder="outbound tag" className={inputSmall} />
               </div>
             )}
+            {isInbound && (
+              <div className="flex items-center justify-between p-2.5 bg-slate-950/30 border border-white/5 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-slate-200">接收 PROXY protocol</span>
+                  <p className="text-[10px] text-slate-500">底层连接接收 PROXY protocol v1/v2</p>
+                </div>
+                <ToggleSwitch checked={sockoptAcceptProxy} onChange={() => setSockoptAcceptProxy(p => !p)} size="sm" activeColor="blue" />
+              </div>
+            )}
+            <div>
+              <label className={labelCls}>可信 XFF 头来源 (逗号分隔)</label>
+              <input type="text" value={sockoptTrustedXFF} onChange={e => setSockoptTrustedXFF(e.target.value)} placeholder="X-Forwarded-For, X-Real-IP" className={inputSmall} />
+              <p className="text-[10px] text-slate-500 mt-1">XHTTP/WebSocket/HTTPUpgrade/gRPC 可信反向代理标识</p>
+            </div>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
               <div>
                 <label className={labelCls}>KeepAlive 空闲 秒</label>
@@ -1124,6 +1364,14 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
                 <label className={labelCls}>KeepAlive 间隔 秒</label>
                 <input type="number" value={sockoptTcpKeepAliveInterval} onChange={e => setSockoptTcpKeepAliveInterval(Number(e.target.value) || 0)} className={inputSmall} />
               </div>
+              <div>
+                <label className={labelCls}>TCP 用户超时 ms</label>
+                <input type="number" value={sockoptTcpUserTimeout} onChange={e => setSockoptTcpUserTimeout(Number(e.target.value) || 0)} className={inputSmall} />
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>地址端口策略 (SRV/TXT)</label>
+              <CustomSelect options={ADDRESS_PORT_STRATEGY_OPTIONS} value={sockoptAddressPortStrategy} onChange={setSockoptAddressPortStrategy} size="sm" accentColor="emerald" />
             </div>
             <div className="flex flex-wrap gap-3">
               <div className="flex items-center justify-between flex-1 min-w-[200px] p-2.5 bg-slate-950/30 border border-white/5 rounded-lg">
@@ -1136,6 +1384,49 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
                   <ToggleSwitch checked={sockoptTcpMptcp} onChange={() => setSockoptTcpMptcp(p => !p)} size="sm" activeColor="blue" />
                 </div>
               )}
+              <div className="flex items-center justify-between flex-1 min-w-[200px] p-2.5 bg-slate-950/30 border border-white/5 rounded-lg">
+                <div>
+                  <span className="text-xs text-slate-300">IPv6 Only (Linux)</span>
+                  <p className="text-[10px] text-slate-500">:: 地址仅接受 IPv6</p>
+                </div>
+                <ToggleSwitch checked={sockoptV6Only} onChange={() => setSockoptV6Only(p => !p)} size="sm" activeColor="blue" />
+              </div>
+            </div>
+            {/* HappyEyeballs */}
+            <div className="p-3 bg-slate-950/40 border border-white/5 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-emerald-300">Happy Eyeballs 竞速连接</span>
+                  <p className="text-[10px] text-slate-500">RFC-8305 实现，仅域名 + 非 AsIs 时生效</p>
+                </div>
+                <ToggleSwitch checked={happyEyeballsEnabled} onChange={() => setHappyEyeballsEnabled(p => !p)} size="sm" activeColor="emerald" />
+              </div>
+              {happyEyeballsEnabled && (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+                  <div>
+                    <label className={labelCls}>尝试延迟 ms</label>
+                    <input type="number" value={heTryDelay} onChange={e => setHeTryDelay(Number(e.target.value) || 0)} className={inputSmall} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>交错数量</label>
+                    <input type="number" value={heInterleave} onChange={e => setHeInterleave(Number(e.target.value) || 1)} min={1} className={inputSmall} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>最大并发</label>
+                    <input type="number" value={heMaxConcurrent} onChange={e => setHeMaxConcurrent(Number(e.target.value) || 4)} min={0} className={inputSmall} />
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-slate-950/30 border border-white/5 rounded-lg">
+                    <span className="text-xs text-slate-300">IPv6 优先</span>
+                    <ToggleSwitch checked={hePrioritizeIPv6} onChange={() => setHePrioritizeIPv6(p => !p)} size="sm" activeColor="emerald" />
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* customSockopt JSON */}
+            <div>
+              <label className={labelCls}>自定义 Sockopt (JSON 数组)</label>
+              <textarea value={sockoptCustomJson} onChange={e => setSockoptCustomJson(e.target.value)} rows={3} placeholder='[{"system":"linux","network":"tcp","type":"str","level":"6","opt":"13","value":"bbr"}]' className={`${inputSmall} resize-none`} />
+              <p className="text-[10px] text-slate-500 mt-1">高级用户自定义 Socket 选项，留空则不生效</p>
             </div>
           </div>
         )}

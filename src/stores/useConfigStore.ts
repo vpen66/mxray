@@ -427,11 +427,8 @@ export const useConfigStore = create<ConfigStore>()(
       updatePorts: (socks, http) => {
         set({ socksPort: socks, httpPort: http });
         const appState = useAppStore.getState();
-        if (appState.coreState.isRunning) {
-          if (appState.coreState.systemProxy) {
-            invoke('set_system_proxy', { enable: true, httpPort: http, socksPort: socks }).catch(() => {});
-          }
-          get().startActiveKernel();
+        if (appState.coreState.isRunning && appState.coreState.systemProxy) {
+          invoke('set_system_proxy', { enable: true, httpPort: http, socksPort: socks }).catch(() => {});
         }
       },
       setDnsStrategy: (strategy) => set({ dnsStrategy: strategy }),
@@ -444,183 +441,15 @@ export const useConfigStore = create<ConfigStore>()(
         if (activeProfile && activeProfile.content) {
           try {
             const config = JSON.parse(activeProfile.content);
-            // Validate outbounds and routing rules before starting kernel
-            const validOutboundTags = new Set(
-              (Array.isArray(config.outbounds) ? config.outbounds : [])
-                .map((ob: any) => ob.tag)
-                .filter(Boolean)
-            );
-            const validBalancerTags = new Set(
-              (Array.isArray(config.routing?.balancers) ? config.routing.balancers : [])
-                .map((b: any) => b.tag)
-                .filter(Boolean)
-            );
 
-            // Find primary proxy node outbound tag, defaulting to first node tag, or 'direct'
-            const nodeOutbound = (config.outbounds || []).find(
-              (ob: any) => ob.tag !== 'direct' && ob.tag !== 'block' && ob.tag !== 'proxy'
-            );
-            const primaryProxyTag = nodeOutbound?.tag || 'direct';
-
-            if (config.routing?.rules && Array.isArray(config.routing.rules)) {
-              config.routing.rules = config.routing.rules
-                .filter((r: any) => r.enabled !== false)
-                .map((r: any) => {
-                  const updated = { ...r };
-
-                  if (updated.balancerTag && !validBalancerTags.has(updated.balancerTag)) {
-                    delete updated.balancerTag;
-                    updated.outboundTag = primaryProxyTag;
-                  }
-
-                  if (updated.outboundTag) {
-                    if (updated.outboundTag === 'proxy') {
-                      updated.outboundTag = primaryProxyTag;
-                    } else if (
-                      !validOutboundTags.has(updated.outboundTag) &&
-                      !validBalancerTags.has(updated.outboundTag)
-                    ) {
-                      updated.outboundTag = primaryProxyTag;
-                    }
-                  } else if (!updated.balancerTag) {
-                    updated.outboundTag = primaryProxyTag;
-                  }
-
-                  return updated;
-                });
-            }
-
-            const tunModeEnabled = useAppStore.getState().coreState.tunMode;
-
-            if (!Array.isArray(config.inbounds)) {
-              config.inbounds = [];
-            }
-
-            // Sync user settings ports with socks-in and http-in inbounds
-            const socksIdx = config.inbounds.findIndex(
-              (ib: any) => ib.tag === 'socks-in' || ib.protocol === 'socks'
-            );
-            if (socksIdx >= 0) {
-              config.inbounds[socksIdx].port = state.socksPort;
-              config.inbounds[socksIdx].listen = '127.0.0.1';
-            } else {
-              config.inbounds.unshift({
-                tag: 'socks-in',
-                port: state.socksPort,
-                listen: '127.0.0.1',
-                protocol: 'socks',
-                settings: { auth: 'noauth', udp: true },
-                sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic', 'fakedns'], routeOnly: true },
-              });
-            }
-
-            const httpIdx = config.inbounds.findIndex(
-              (ib: any) => ib.tag === 'http-in' || ib.protocol === 'http'
-            );
-            if (httpIdx >= 0) {
-              config.inbounds[httpIdx].port = state.httpPort;
-              config.inbounds[httpIdx].listen = '127.0.0.1';
-            } else {
-              const insertIdx = socksIdx >= 0 ? socksIdx + 1 : 1;
-              config.inbounds.splice(insertIdx, 0, {
-                tag: 'http-in',
-                port: state.httpPort,
-                listen: '127.0.0.1',
-                protocol: 'http',
-                settings: { timeout: 0 },
-                sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic', 'fakedns'], routeOnly: true },
-              });
-            }
-
-            const existingTunIdx = config.inbounds.findIndex(
-              (ib: any) => ib.tag === 'tun-in' || ib.protocol === 'tun'
-            );
-
-            const isMac =
-              typeof navigator !== 'undefined' &&
-              /Mac|iPhone|iPod|iPad/.test(navigator.userAgent || navigator.platform);
-            const isWin =
-              typeof navigator !== 'undefined' &&
-              /Win/.test(navigator.userAgent || navigator.platform);
-            const defaultTunName = isMac ? 'utun20' : isWin ? 'wintun' : 'tun0';
-
-            // Preserve or initialize user tun-in settings in active profile
-            if (existingTunIdx >= 0) {
-              const existingTun = config.inbounds[existingTunIdx];
-              let nameVal = existingTun.settings?.name || '';
-              if (!nameVal || (isMac && !/^utun\d+$/i.test(nameVal))) {
-                nameVal = defaultTunName;
-              }
-              const existingGw = existingTun.settings?.gateway;
-              const hasLegacyGw = Array.isArray(existingGw) && existingGw.some((g: string) => g.includes('10.0.0.1/16'));
-              const gatewayVal = (!existingGw || hasLegacyGw)
-                ? ['172.18.0.1/30', 'fdfe:dcba:9876::1/126']
-                : existingGw;
-
-              config.inbounds[existingTunIdx] = {
-                ...existingTun,
-                tag: 'tun-in',
-                protocol: 'tun',
-                settings: {
-                  ...existingTun.settings,
-                  name: nameVal,
-                  gateway: gatewayVal,
-                },
-                sniffing: {
-                  enabled: true,
-                  destOverride: ['http', 'tls', 'quic', 'fakedns'],
-                  ...existingTun.sniffing,
-                  routeOnly: true,
-                },
+            // Build runtime config: only filter out disabled routing rules
+            // (Xray doesn't understand the `enabled` field, so we must strip disabled rules)
+            const runtimeConfig = { ...config };
+            if (runtimeConfig.routing?.rules && Array.isArray(runtimeConfig.routing.rules)) {
+              runtimeConfig.routing = {
+                ...runtimeConfig.routing,
+                rules: runtimeConfig.routing.rules.filter((r: any) => r.enabled !== false),
               };
-            } else {
-              config.inbounds.push({
-                tag: 'tun-in',
-                protocol: 'tun',
-                settings: {
-                  name: defaultTunName,
-                  desc: 'MXray TUN Adapter',
-                  mtu: 1500,
-                  gateway: ['172.18.0.1/30', 'fdfe:dcba:9876::1/126'],
-                  dns: ['1.1.1.1', '8.8.8.8'],
-                  userLevel: 0,
-                  autoSystemRoutingTable: ['0.0.0.0/0', '::/0'],
-                  autoOutboundsInterface: 'auto',
-                },
-                sniffing: {
-                  enabled: true,
-                  destOverride: ['http', 'tls', 'quic', 'fakedns'],
-                  routeOnly: true,
-                },
-              });
-            }
-
-            // Save updated config to profile, retaining user custom TUN settings
-            const updatedProfileJson = JSON.stringify(config, null, 2);
-            set((prevState) => ({
-              profiles: prevState.profiles.map((p) =>
-                p.id === activeProfile.id ? { ...p, content: updatedProfileJson } : p
-              ),
-            }));
-
-            // Build runtime config for Xray kernel execution
-            const runtimeConfig = JSON.parse(updatedProfileJson);
-            if (!tunModeEnabled) {
-              runtimeConfig.inbounds = (runtimeConfig.inbounds || []).filter(
-                (ib: any) => ib.tag !== 'tun-in' && ib.protocol !== 'tun'
-              );
-            }
-
-            if (Array.isArray(runtimeConfig.inbounds)) {
-              runtimeConfig.inbounds = runtimeConfig.inbounds.map((ib: any) => ({
-                ...ib,
-                sniffing: {
-                  enabled: true,
-                  destOverride: ['http', 'tls', 'quic', 'fakedns'],
-                  ...(ib.sniffing || {}),
-                  routeOnly: true,
-                },
-              }));
             }
 
             await invoke('start_kernel', { configJson: JSON.stringify(runtimeConfig, null, 2) });

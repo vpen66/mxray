@@ -321,13 +321,18 @@ export const InboundModal: React.FC<InboundModalProps> = ({
       }
       case 'trojan': {
         return {
-          users: trojanUsers.filter(u => u.password).map(u => ({ password: u.password, email: u.email, level: u.level })),
+          users: trojanUsers.filter(u => u.password).map(u => {
+            const user: any = { password: u.password, level: u.level };
+            if (u.email) user.email = u.email;
+            return user;
+          }),
         };
       }
       case 'vless': {
         const settings: any = {
           users: vlessUsers.filter(u => u.id).map(u => {
-            const user: any = { id: u.id, level: u.level, email: u.email };
+            const user: any = { id: u.id, level: u.level };
+            if (u.email) user.email = u.email;
             if (u.flow) user.flow = u.flow;
             if (u.reverseTag) user.reverse = { tag: u.reverseTag };
             return user;
@@ -341,7 +346,11 @@ export const InboundModal: React.FC<InboundModalProps> = ({
       }
       case 'vmess': {
         return {
-          users: vmessUsers.filter(u => u.id).map(u => ({ id: u.id, level: u.level, email: u.email })),
+          users: vmessUsers.filter(u => u.id).map(u => {
+            const user: any = { id: u.id, level: u.level };
+            if (u.email) user.email = u.email;
+            return user;
+          }),
         };
       }
       case 'wireguard': {
@@ -357,7 +366,11 @@ export const InboundModal: React.FC<InboundModalProps> = ({
       case 'hysteria': {
         return {
           version: 2,
-          users: hysteriaUsers.filter(u => u.auth).map(u => ({ auth: u.auth, level: u.level, email: u.email })),
+          users: hysteriaUsers.filter(u => u.auth).map(u => {
+            const user: any = { auth: u.auth, level: u.level };
+            if (u.email) user.email = u.email;
+            return user;
+          }),
         };
       }
       case 'tun': {
@@ -392,12 +405,20 @@ export const InboundModal: React.FC<InboundModalProps> = ({
       tag: tag.trim() || 'inbound',
       protocol,
     };
-    if (protocol !== 'tun') {
-      result.listen = listen.trim() || '127.0.0.1';
-      result.port = typeof port === 'number' ? port : Number(port) || 7890;
+    const trimmedListen = listen.trim();
+    if (trimmedListen) {
+      result.listen = trimmedListen;
+    } else if (protocol !== 'tun') {
+      result.listen = '127.0.0.1';
+    }
+    const numPort = typeof port === 'number' ? port : Number(port) || 0;
+    if (numPort > 0) {
+      result.port = numPort;
+    } else if (protocol !== 'tun') {
+      result.port = 7890;
     }
     result.settings = buildSettings();
-    if (sniffing && protocol !== 'tun') {
+    if (sniffing) {
       const sniffingObj: any = { enabled: true };
       if (sniffDestOverride.length > 0) sniffingObj.destOverride = sniffDestOverride;
       if (sniffMetadataOnly) sniffingObj.metadataOnly = true;
@@ -1018,31 +1039,29 @@ export const InboundModal: React.FC<InboundModalProps> = ({
                 </div>
               </div>
 
-              {protocol !== 'tun' && (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-                  <div>
-                    <label className={labelCls}>监听地址</label>
-                    <input
-                      type="text"
-                      value={listen}
-                      onChange={(e) => setListen(e.target.value)}
-                      placeholder="127.0.0.1"
-                      className={inputCls}
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelCls}>监听端口</label>
-                    <input
-                      type="number"
-                      value={port}
-                      onChange={(e) => setPort(e.target.value)}
-                      placeholder="7890"
-                      className={inputCls}
-                    />
-                  </div>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
+                <div>
+                  <label className={labelCls}>监听地址{protocol === 'tun' ? '（可选）' : ''}</label>
+                  <input
+                    type="text"
+                    value={listen}
+                    onChange={(e) => setListen(e.target.value)}
+                    placeholder={protocol === 'tun' ? '留空则不设置' : '127.0.0.1'}
+                    className={inputCls}
+                  />
                 </div>
-              )}
+
+                <div>
+                  <label className={labelCls}>监听端口{protocol === 'tun' ? '（可选）' : ''}</label>
+                  <input
+                    type="number"
+                    value={port}
+                    onChange={(e) => setPort(e.target.value)}
+                    placeholder={protocol === 'tun' ? '留空则不设置' : '7890'}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
 
               {/* Protocol-specific settings */}
               {renderProtocolSettings()}
@@ -1059,8 +1078,7 @@ export const InboundModal: React.FC<InboundModalProps> = ({
                 </div>
               )}
 
-              {protocol !== 'tun' && (
-                <div className="space-y-3">
+              <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 bg-slate-950/40 border border-white/5 rounded-xl">
                     <div>
                       <span className="text-sm font-medium text-slate-200">启用流量嗅探</span>
@@ -1142,7 +1160,6 @@ export const InboundModal: React.FC<InboundModalProps> = ({
                     </div>
                   )}
                 </div>
-              )}
             </div>
           ) : (
             <div className="h-80 border border-white/10 rounded-xl overflow-hidden">

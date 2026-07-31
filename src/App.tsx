@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { TunSettingsModal } from './components/TunSettingsModal';
 import { useAppStore } from './stores/useAppStore';
 import { useLogStore } from './stores/useLogStore';
 import { LogsPage } from './pages/Logs';
@@ -38,7 +37,6 @@ export function App() {
       <main className="flex-1 h-screen overflow-y-auto p-6 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative">
         {renderActivePage()}
       </main>
-      <TunSettingsModal />
     </div>
   );
 }

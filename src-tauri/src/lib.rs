@@ -4,7 +4,8 @@ pub mod sysproxy;
 
 #[tauri::command]
 fn get_core_version() -> String {
-    "Xray-core v26.3.27 (MXray)".into()
+    let info = kernel::detect_bundled_kernel_version_pub();
+    info.version
 }
 
 #[tauri::command]

@@ -3,16 +3,12 @@ import {
   Terminal,
   FileCode2,
   Settings,
-  Shield,
   Zap,
-  Activity,
   Loader2,
   Power,
-  Sliders,
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
 import { useKernelStore } from '../stores/useKernelStore';
-import { ToggleSwitch } from './ToggleSwitch';
 
 const NAV_ITEMS = [
   { id: 'json-config', label: '高级配置', icon: FileCode2 },
@@ -26,12 +22,8 @@ export const Sidebar: React.FC = () => {
     setActiveTab,
     toggleLeftPanel,
     coreState,
-    toggleSystemProxy,
-    toggleTunMode,
     isTogglingSystemProxy,
-    isTogglingTunMode,
     toggleKernel,
-    openTunModal,
   } = useAppStore();
   const { activeKernel } = useKernelStore();
 
@@ -113,79 +105,6 @@ export const Sidebar: React.FC = () => {
         </nav>
       </div>
 
-      {/* Toggles Footer */}
-      <div className="space-y-2 pt-4 border-t border-white/10">
-        <div
-          onClick={() => !isTogglingSystemProxy && toggleSystemProxy()}
-          className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-medium border transition-all duration-300 select-none ${
-            isTogglingSystemProxy ? 'bg-emerald-500/10 border-emerald-500/30 cursor-wait' : 'cursor-pointer'
-          } ${
-            coreState.systemProxy
-              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-lg shadow-emerald-500/10'
-              : 'bg-slate-900/40 border-white/5 text-slate-400 hover:bg-white/5'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Shield className={`w-4 h-4 transition-colors ${coreState.systemProxy ? 'text-emerald-400' : 'text-slate-400'}`} />
-            <div className="flex flex-col">
-              <span>系统代理</span>
-              <span className="text-[10px] text-slate-500 font-normal">
-                {isTogglingSystemProxy ? '切换中...' : coreState.systemProxy ? '开启' : '关闭'}
-              </span>
-            </div>
-          </div>
-          <ToggleSwitch
-            checked={coreState.systemProxy}
-            onChange={toggleSystemProxy}
-            loading={isTogglingSystemProxy}
-            activeColor="emerald"
-            size="sm"
-            ariaLabel="系统代理开关"
-          />
-        </div>
-
-        <div
-          onClick={() => !isTogglingTunMode && toggleTunMode()}
-          className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-medium border transition-all duration-300 select-none ${
-            isTogglingTunMode ? 'bg-indigo-500/10 border-indigo-500/30 cursor-wait' : 'cursor-pointer'
-          } ${
-            coreState.tunMode
-              ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300 shadow-lg shadow-indigo-500/10'
-              : 'bg-slate-900/40 border-white/5 text-slate-400 hover:bg-white/5'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Activity className={`w-4 h-4 transition-colors ${coreState.tunMode ? 'text-indigo-400' : 'text-slate-400'}`} />
-            <div className="flex flex-col">
-              <span>原生 TUN 模式</span>
-              <span className="text-[10px] text-slate-500 font-normal">
-                {isTogglingTunMode ? '切换中...' : coreState.tunMode ? '开启' : '关闭'}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              title="配置 TUN 模式参数"
-              onClick={(e) => {
-                e.stopPropagation();
-                openTunModal();
-              }}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              <Sliders className="w-3.5 h-3.5" />
-            </button>
-            <ToggleSwitch
-              checked={coreState.tunMode}
-              onChange={toggleTunMode}
-              loading={isTogglingTunMode}
-              activeColor="indigo"
-              size="sm"
-              ariaLabel="原生 TUN 模式开关"
-            />
-          </div>
-        </div>
-      </div>
     </aside>
   );
 };

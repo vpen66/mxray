@@ -428,10 +428,11 @@ export const JsonConfigPage: React.FC = () => {
             {/* Start Kernel / Apply Profile Button */}
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 if (selectedProfile) {
                   setActiveProfileId(selectedProfile.id);
-                  startActiveKernel();
+                  await startActiveKernel();
+                  useAppStore.getState().setCoreRunning(true);
                 }
               }}
               className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/20 cursor-pointer"

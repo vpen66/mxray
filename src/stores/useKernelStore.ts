@@ -33,7 +33,7 @@ interface KernelStore {
 
 const DEFAULT_BUNDLED_KERNEL: KernelInfo = {
   name: 'Xray-core (内置)',
-  version: 'v26.7.28',
+  version: '检测中...',
   path: 'bundled',
   kernel_type: 'bundled',
   is_valid: true,
@@ -41,7 +41,7 @@ const DEFAULT_BUNDLED_KERNEL: KernelInfo = {
 
 export const useKernelStore = create<KernelStore>((set, get) => ({
   activeKernel: DEFAULT_BUNDLED_KERNEL,
-  installedKernels: [DEFAULT_BUNDLED_KERNEL],
+  installedKernels: [],
   remoteReleases: [],
   isLoadingReleases: false,
   isInstalling: false,
@@ -57,10 +57,13 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
   loadInstalledKernels: async () => {
     try {
       const kernels = await invoke<KernelInfo[]>('list_installed_kernels');
-      set({ installedKernels: kernels });
+      // 将 activeKernel 同步为列表中第一个有效内核（获取真实版本号）
+      const currentActive = get().activeKernel;
+      const matched = kernels.find((k) => k.path === currentActive.path) || kernels[0];
+      set({ installedKernels: kernels, activeKernel: matched || currentActive });
     } catch {
       // Fallback in web / dev environment
-      set({ installedKernels: [DEFAULT_BUNDLED_KERNEL] });
+      set({ installedKernels: [DEFAULT_BUNDLED_KERNEL], activeKernel: DEFAULT_BUNDLED_KERNEL });
     }
   },
 

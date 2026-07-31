@@ -20,9 +20,11 @@ const LOGLEVEL_OPTIONS = [
 ];
 
 const MASK_ADDRESS_OPTIONS = [
-  { value: 'none', label: '不脱敏 (保留完整 IP 与地址)' },
-  { value: 'half', label: '半脱敏 (掩码后半段地址)' },
-  { value: 'full', label: '完全脱敏 (隐藏全部网络地址)' },
+  { value: '', label: '不启用' },
+  { value: 'quarter', label: 'quarter' },
+  { value: 'half', label: 'half' },
+  { value: 'full', label: 'full' },
+  { value: 'custom', label: '自定义格式' },
 ];
 
 export const LogModal: React.FC<LogModalProps> = ({
@@ -36,18 +38,26 @@ export const LogModal: React.FC<LogModalProps> = ({
   const [access, setAccess] = useState('');
   const [errorPath, setErrorPath] = useState('');
   const [dnsLog, setDnsLog] = useState(false);
-  const [maskAddress, setMaskAddress] = useState('half');
+  const [maskAddress, setMaskAddress] = useState('');
+  const [maskAddressCustom, setMaskAddressCustom] = useState('');
   const [rawJsonText, setRawJsonText] = useState('{}');
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      const val = initialValue || { loglevel: 'warning', dnsLog: false, maskAddress: 'half' };
+      const val = initialValue || { loglevel: 'warning', dnsLog: false };
       setLoglevel(val.loglevel || 'warning');
       setAccess(val.access || '');
       setErrorPath(val.error || '');
       setDnsLog(!!val.dnsLog);
-      setMaskAddress(val.maskAddress || 'half');
+      const ma = val.maskAddress || '';
+      if (ma && !['quarter', 'half', 'full'].includes(ma)) {
+        setMaskAddress('custom');
+        setMaskAddressCustom(ma);
+      } else {
+        setMaskAddress(ma);
+        setMaskAddressCustom('');
+      }
       setRawJsonText(JSON.stringify(val, null, 2));
       setJsonError(null);
       setViewMode('visual');
@@ -70,7 +80,8 @@ export const LogModal: React.FC<LogModalProps> = ({
       if (access.trim()) result.access = access.trim();
       if (errorPath.trim()) result.error = errorPath.trim();
       if (dnsLog) result.dnsLog = true;
-      if (maskAddress) result.maskAddress = maskAddress;
+      const maVal = maskAddress === 'custom' ? maskAddressCustom.trim() : maskAddress;
+      if (maVal) result.maskAddress = maVal;
       onSave(result);
       onClose();
     }
@@ -83,7 +94,7 @@ export const LogModal: React.FC<LogModalProps> = ({
         ...(access ? { access } : {}),
         ...(errorPath ? { error: errorPath } : {}),
         ...(dnsLog ? { dnsLog: true } : {}),
-        maskAddress,
+        ...((maskAddress === 'custom' ? maskAddressCustom.trim() : maskAddress) ? { maskAddress: maskAddress === 'custom' ? maskAddressCustom.trim() : maskAddress } : {}),
       };
       setRawJsonText(JSON.stringify(currentVisual, null, 2));
       setJsonError(null);
@@ -94,7 +105,14 @@ export const LogModal: React.FC<LogModalProps> = ({
         setAccess(parsed.access || '');
         setErrorPath(parsed.error || '');
         setDnsLog(!!parsed.dnsLog);
-        setMaskAddress(parsed.maskAddress || 'half');
+        const pma = parsed.maskAddress || '';
+        if (pma && !['quarter', 'half', 'full'].includes(pma)) {
+          setMaskAddress('custom');
+          setMaskAddressCustom(pma);
+        } else {
+          setMaskAddress(pma);
+          setMaskAddressCustom('');
+        }
         setJsonError(null);
       } catch (err: any) {
         setJsonError(`无法切换为可视化：JSON 解析错误 (${err.message})`);
@@ -203,6 +221,16 @@ export const LogModal: React.FC<LogModalProps> = ({
                   value={maskAddress}
                   onChange={setMaskAddress}
                 />
+                {maskAddress === 'custom' && (
+                  <input
+                    type="text"
+                    value={maskAddressCustom}
+                    onChange={(e) => setMaskAddressCustom(e.target.value)}
+                    placeholder="如 /16+/32（前为 IPv4 后为 IPv6）"
+                    className="mt-2 w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono"
+                  />
+                )}
+                <p className="mt-1.5 text-[10px] text-slate-500">quarter: 1.2.*.* / half: 1.*.*.* / full: [Masked] / 自定义: /16+/32</p>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-slate-950/40 border border-white/5 rounded-xl">

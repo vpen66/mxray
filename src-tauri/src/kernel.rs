@@ -2,177 +2,20 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
-use std::process::{Command, Child, Stdio};
+use std::process::{Command, Child};
+#[cfg(not(target_os = "macos"))]
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
 use tauri::{Emitter, Manager};
 
 struct KernelProcess {
     child: Child,
-    stop_file: Option<std::path::PathBuf>,
 }
 
 static XRAY_PROCESS: LazyLock<Mutex<Option<KernelProcess>>> = LazyLock::new(|| Mutex::new(None));
 static KERNEL_GENERATION: AtomicU64 = AtomicU64::new(0);
-
-#[cfg(target_os = "macos")]
-const MACOS_TUN_SUPERVISOR: &str = r#"#!/bin/sh
-set -u
-
-XRAY_BIN=$1
-CONFIG_FILE=$2
-TUN_NAME=$3
-ENDPOINTS_FILE=$4
-STOP_FILE=$5
-LOG_FILE=$6
-MANAGED_ROUTES_FILE=$7
-XRAY_PID=""
-NODE_IPS=""
-DIRECT_IPS=""
-NEW_DIRECT_IPS=""
-LOG_SCAN_LINE=0
-DIRECT_ROUTE_CHECK_TICK=0
-PHYSICAL_GATEWAY=""
-PHYSICAL_INTERFACE=""
-
-refresh_physical_route() {
-    PHYSICAL_GATEWAY=$(/sbin/route -n get default 2>/dev/null | /usr/bin/awk '/gateway:/{print $2; exit}')
-    PHYSICAL_INTERFACE=$(/sbin/route -n get default 2>/dev/null | /usr/bin/awk '/interface:/{print $2; exit}')
-}
-
-resolve_endpoints() {
-    while IFS= read -r HOST || [ -n "$HOST" ]; do
-        case "$HOST" in
-            ""|*:* ) continue ;;
-            *[!0-9.]* )
-                IPS=$(/usr/bin/dscacheutil -q host -a name "$HOST" 2>/dev/null | /usr/bin/awk '/ip_address:/{print $2}' | /usr/bin/grep -v ':')
-                ;;
-            * ) IPS=$HOST ;;
-        esac
-        for IP in $IPS; do
-            case " $NODE_IPS " in
-                *" $IP "*) ;;
-                *) NODE_IPS="$NODE_IPS $IP" ;;
-            esac
-        done
-    done < "$ENDPOINTS_FILE"
-}
-
-ensure_physical_routes() {
-    [ -n "$PHYSICAL_GATEWAY" ] || return
-    [ -n "$PHYSICAL_INTERFACE" ] || return
-    for IP in "$@"; do
-        DEST=$(/sbin/route -n get "$IP" 2>/dev/null | /usr/bin/awk '/destination:/{print $2; exit}')
-        GATEWAY=$(/sbin/route -n get "$IP" 2>/dev/null | /usr/bin/awk '/gateway:/{print $2; exit}')
-        INTERFACE=$(/sbin/route -n get "$IP" 2>/dev/null | /usr/bin/awk '/interface:/{print $2; exit}')
-        if [ "$DEST" != "$IP" ] || [ "$GATEWAY" != "$PHYSICAL_GATEWAY" ] || [ "$INTERFACE" != "$PHYSICAL_INTERFACE" ]; then
-            [ "$DEST" = "$IP" ] && /sbin/route -n delete -host "$IP" >/dev/null 2>&1 || true
-            if /sbin/route -n add -host "$IP" "$PHYSICAL_GATEWAY" >/dev/null 2>&1; then
-                /usr/bin/grep -qxF "$IP" "$MANAGED_ROUTES_FILE" 2>/dev/null || echo "$IP" >> "$MANAGED_ROUTES_FILE"
-            fi
-        fi
-    done
-}
-
-discover_direct_routes() {
-    NEW_DIRECT_IPS=""
-    CURRENT_LINES=$(/usr/bin/wc -l < "$LOG_FILE" 2>/dev/null | /usr/bin/tr -d ' ')
-    case "$CURRENT_LINES" in ""|*[!0-9]*) return ;; esac
-    [ "$CURRENT_LINES" -lt "$LOG_SCAN_LINE" ] && LOG_SCAN_LINE=0
-    [ "$CURRENT_LINES" -le "$LOG_SCAN_LINE" ] && return
-    START_LINE=$((LOG_SCAN_LINE + 1))
-    NEW_IPS=$(/usr/bin/sed -n "${START_LINE},${CURRENT_LINES}p" "$LOG_FILE" 2>/dev/null | /usr/bin/awk '
-        /proxy\/freedom/ && (/network is unreachable/ || /no route to host/) {
-            line = $0
-            while (match(line, /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)) {
-                print substr(line, RSTART, RLENGTH)
-                line = substr(line, RSTART + RLENGTH)
-            }
-        }
-    ' | /usr/bin/sort -u)
-    LOG_SCAN_LINE=$CURRENT_LINES
-    for IP in $NEW_IPS; do
-        case "$IP" in
-            0.*|127.*|169.254.*|172.18.*|192.168.*|22[4-9].*|23[0-9].*|24[0-9].*|25[0-5].*) continue ;;
-        esac
-        case " $NODE_IPS $DIRECT_IPS " in
-            *" $IP "*) ;;
-            *)
-                DIRECT_IPS="$DIRECT_IPS $IP"
-                NEW_DIRECT_IPS="$NEW_DIRECT_IPS $IP"
-                echo "[Info] MXray discovered direct route target $IP" >> "$LOG_FILE"
-                ;;
-        esac
-    done
-}
-
-ensure_tun_route() {
-    NETWORK=$1
-    PROBE=$2
-    INTERFACE=$(/sbin/route -n get "$PROBE" 2>/dev/null | /usr/bin/awk '/interface:/{print $2; exit}')
-    [ "$INTERFACE" = "$TUN_NAME" ] && return
-    DEST=$(/sbin/route -n get "$PROBE" 2>/dev/null | /usr/bin/awk '/destination:/{print $2; exit}')
-    [ "$DEST" = "$PROBE" ] && /sbin/route -n delete -host "$PROBE" >/dev/null 2>&1 || true
-    /sbin/route -n delete -net "$NETWORK" >/dev/null 2>&1 || true
-    if /sbin/route -n add -net "$NETWORK" -interface "$TUN_NAME" >/dev/null 2>&1; then
-        echo "[Info] MXray restored route $NETWORK via $TUN_NAME" >> "$LOG_FILE"
-    fi
-}
-
-cleanup() {
-    trap - EXIT INT TERM
-    if [ -n "$XRAY_PID" ] && kill -0 "$XRAY_PID" 2>/dev/null; then
-        kill -TERM "$XRAY_PID" 2>/dev/null || true
-        wait "$XRAY_PID" 2>/dev/null || true
-    fi
-    for NETWORK in 0.0.0.0/1 128.0.0.0/1; do
-        PROBE=8.8.8.8
-        [ "$NETWORK" = "128.0.0.0/1" ] && PROBE=200.1.1.1
-        INTERFACE=$(/sbin/route -n get "$PROBE" 2>/dev/null | /usr/bin/awk '/interface:/{print $2; exit}')
-        [ "$INTERFACE" = "$TUN_NAME" ] && /sbin/route -n delete -net "$NETWORK" >/dev/null 2>&1 || true
-    done
-    if [ -f "$MANAGED_ROUTES_FILE" ]; then
-        while IFS= read -r IP || [ -n "$IP" ]; do
-            [ -n "$IP" ] && /sbin/route -n delete -host "$IP" >/dev/null 2>&1 || true
-        done < "$MANAGED_ROUTES_FILE"
-    fi
-    rm -f "$STOP_FILE" "$MANAGED_ROUTES_FILE"
-}
-
-trap cleanup EXIT INT TERM
-rm -f "$STOP_FILE"
-: > "$LOG_FILE"
-: > "$MANAGED_ROUTES_FILE"
-refresh_physical_route
-resolve_endpoints
-ensure_physical_routes $NODE_IPS
-
-"$XRAY_BIN" run -config "$CONFIG_FILE" >> "$LOG_FILE" 2>&1 &
-XRAY_PID=$!
-
-while kill -0 "$XRAY_PID" 2>/dev/null && [ ! -e "$STOP_FILE" ]; do
-    if /sbin/ifconfig "$TUN_NAME" >/dev/null 2>&1; then
-        refresh_physical_route
-        discover_direct_routes
-        ensure_physical_routes $NODE_IPS $NEW_DIRECT_IPS
-        DIRECT_ROUTE_CHECK_TICK=$((DIRECT_ROUTE_CHECK_TICK + 1))
-        if [ "$DIRECT_ROUTE_CHECK_TICK" -ge 10 ]; then
-            ensure_physical_routes $DIRECT_IPS
-            DIRECT_ROUTE_CHECK_TICK=0
-        fi
-        ensure_tun_route 0.0.0.0/1 8.8.8.8
-        ensure_tun_route 128.0.0.0/1 200.1.1.1
-    fi
-    LOG_SIZE=$(/usr/bin/stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)
-    if [ "$LOG_SIZE" -gt 5242880 ]; then
-        : > "$LOG_FILE"
-        echo "[Error] MXray stopped Xray after detecting a TUN outbound loop" >> "$LOG_FILE"
-        kill -TERM "$XRAY_PID" 2>/dev/null || true
-        break
-    fi
-    sleep 1
-done
-"#;
+static KERNEL_RUNNING: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogPayload {
@@ -274,19 +117,81 @@ pub fn detect_kernel_version(path_str: &str) -> KernelInfo {
     }
 }
 
+/// 通过查找系统 PATH 或常见安装路径中的 xray 二进制，动态检测内置内核版本
+pub fn detect_bundled_kernel_version_pub() -> KernelInfo {
+    #[cfg(target_os = "windows")]
+    let bin_name = "xray.exe";
+    #[cfg(not(target_os = "windows"))]
+    let bin_name = "xray";
+
+    #[cfg(target_os = "windows")]
+    let common_paths = [
+        r"C:\Program Files\Xray\xray.exe",
+        r"C:\xray\xray.exe",
+    ];
+    #[cfg(target_os = "macos")]
+    let common_paths = [
+        "/opt/homebrew/bin/xray",
+        "/usr/local/bin/xray",
+        "/usr/bin/xray",
+    ];
+    #[cfg(target_os = "linux")]
+    let common_paths = [
+        "/usr/bin/xray",
+        "/usr/local/bin/xray",
+        "/snap/bin/xray",
+    ];
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    let common_paths = ["/usr/bin/xray"];
+
+    // 优先检查常见路径
+    for p in common_paths {
+        if Path::new(p).exists() {
+            let mut info = detect_kernel_version(p);
+            info.name = "Xray-core (内置)".to_string();
+            info.path = "bundled".to_string();
+            info.kernel_type = "bundled".to_string();
+            return info;
+        }
+    }
+
+    // 尝试通过 which/where 在 PATH 中查找
+    #[cfg(target_os = "windows")]
+    let which_cmd = "where";
+    #[cfg(not(target_os = "windows"))]
+    let which_cmd = "which";
+
+    if let Ok(out) = Command::new(which_cmd).arg(bin_name).output() {
+        if out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let path_str = stdout.lines().next().unwrap_or("").trim().to_string();
+            if !path_str.is_empty() && Path::new(&path_str).exists() {
+                let mut info = detect_kernel_version(&path_str);
+                info.name = "Xray-core (内置)".to_string();
+                info.path = "bundled".to_string();
+                info.kernel_type = "bundled".to_string();
+                return info;
+            }
+        }
+    }
+
+    // 完全找不到 xray，返回未知版本占位
+    KernelInfo {
+        name: "Xray-core (内置)".to_string(),
+        version: "未检测到".to_string(),
+        path: "bundled".to_string(),
+        kernel_type: "bundled".to_string(),
+        is_valid: false,
+        error: Some("未在系统中找到 xray 可执行文件".to_string()),
+    }
+}
+
 #[tauri::command]
 pub fn list_installed_kernels(app_handle: tauri::AppHandle) -> Result<Vec<KernelInfo>, String> {
     let mut kernels = Vec::new();
 
-    // 1. Add Bundled / Default kernel info
-    kernels.push(KernelInfo {
-        name: "Xray-core (内置)".to_string(),
-        version: "v26.7.28".to_string(),
-        path: "bundled".to_string(),
-        kernel_type: "bundled".to_string(),
-        is_valid: true,
-        error: None,
-    });
+    // 1. 动态检测内置/系统 xray 版本（不再写死版本号）
+    kernels.push(detect_bundled_kernel_version_pub());
 
     // 2. Scan $APP_DATA/cores/ directory
     if let Ok(app_dir) = app_handle.path().app_data_dir() {
@@ -661,6 +566,7 @@ pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle
     Err("未在系统中或应用目录中找到有效的 Xray 可执行程序".to_string())
 }
 
+
 #[cfg(target_os = "macos")]
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
@@ -671,177 +577,11 @@ fn apple_script_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-#[cfg(target_os = "macos")]
-fn prepare_macos_tun_config(config_json: &str) -> Result<String, String> {
-    let output = Command::new("route")
-        .args(["-n", "get", "default"])
-        .output()
-        .map_err(|e| format!("读取默认物理网卡失败: {}", e))?;
-    let route_output = String::from_utf8_lossy(&output.stdout);
-    let interface = route_output
-        .lines()
-        .find_map(|line| line.trim().strip_prefix("interface:"))
-        .map(str::trim)
-        .filter(|name| !name.is_empty() && !name.starts_with("utun"))
-        .ok_or_else(|| "未找到可用的物理出站网卡".to_string())?;
-    let mut config = serde_json::from_str::<serde_json::Value>(config_json)
-        .map_err(|e| format!("解析 TUN 运行时配置失败: {}", e))?;
-
-    if let Some(inbounds) = config.get_mut("inbounds").and_then(|value| value.as_array_mut()) {
-        for inbound in inbounds {
-            let is_tun = inbound.get("protocol").and_then(|value| value.as_str()) == Some("tun")
-                || inbound.get("tag").and_then(|value| value.as_str()) == Some("tun-in");
-            if is_tun {
-                if let Some(settings) = inbound.get_mut("settings").and_then(|value| value.as_object_mut()) {
-                    settings.remove("autoSystemRoutingTable");
-                    settings.insert(
-                        "autoOutboundsInterface".to_string(),
-                        serde_json::json!(interface),
-                    );
-                }
-            }
-        }
-    }
-
-    if let Some(outbounds) = config.get_mut("outbounds").and_then(|value| value.as_array_mut()) {
-        for outbound in outbounds {
-            if outbound.get("protocol").and_then(|value| value.as_str()) == Some("blackhole") {
-                continue;
-            }
-            if let Some(outbound) = outbound.as_object_mut() {
-                outbound.remove("sendThrough");
-                let stream_settings = outbound
-                    .entry("streamSettings".to_string())
-                    .or_insert_with(|| serde_json::json!({}));
-                if !stream_settings.is_object() {
-                    *stream_settings = serde_json::json!({});
-                }
-                let stream_settings = stream_settings.as_object_mut().unwrap();
-                let sockopt = stream_settings
-                    .entry("sockopt".to_string())
-                    .or_insert_with(|| serde_json::json!({}));
-                if !sockopt.is_object() {
-                    *sockopt = serde_json::json!({});
-                }
-                sockopt
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("interface".to_string(), serde_json::json!(interface));
-            }
-        }
-    }
-
-    if let Some(rules) = config
-        .pointer_mut("/routing/rules")
-        .and_then(|value| value.as_array_mut())
-    {
-        let has_china_ip_rule = rules.iter().any(|rule| {
-            rule.get("outboundTag").and_then(|value| value.as_str()) == Some("direct")
-                && rule
-                    .get("ip")
-                    .and_then(|value| value.as_array())
-                    .is_some_and(|ips| ips.iter().any(|ip| ip.as_str() == Some("geoip:cn")))
-        });
-        let china_domain_rule = rules.iter().position(|rule| {
-            rule.get("outboundTag").and_then(|value| value.as_str()) == Some("direct")
-                && rule
-                .get("domain")
-                .and_then(|value| value.as_array())
-                .is_some_and(|domains| {
-                    domains
-                        .iter()
-                        .any(|domain| domain.as_str() == Some("geosite:cn"))
-                })
-        });
-        if !has_china_ip_rule {
-            if let Some(index) = china_domain_rule {
-                rules.insert(index + 1, serde_json::json!({
-                    "type": "field",
-                    "outboundTag": "direct",
-                    "ip": ["geoip:cn", "geoip:private"]
-                }));
-            }
-        }
-    }
-
-    serde_json::to_string_pretty(&config)
-        .map_err(|e| format!("生成 TUN 运行时配置失败: {}", e))
-}
-
-#[cfg(target_os = "macos")]
-fn tun_runtime_details(config_json: &str) -> (String, Vec<String>) {
-    let Ok(config) = serde_json::from_str::<serde_json::Value>(config_json) else {
-        return ("utun20".to_string(), Vec::new());
-    };
-
-    let tun_name = config
-        .get("inbounds")
-        .and_then(|value| value.as_array())
-        .and_then(|inbounds| {
-            inbounds.iter().find(|inbound| {
-                inbound.get("protocol").and_then(|value| value.as_str()) == Some("tun")
-                    || inbound.get("tag").and_then(|value| value.as_str()) == Some("tun-in")
-            })
-        })
-        .and_then(|inbound| inbound.pointer("/settings/name"))
-        .and_then(|value| value.as_str())
-        .filter(|name| name.starts_with("utun") && name[4..].chars().all(|c| c.is_ascii_digit()))
-        .unwrap_or("utun20")
-        .to_string();
-
-    fn collect_addresses(value: &serde_json::Value, addresses: &mut Vec<String>) {
-        match value {
-            serde_json::Value::Object(object) => {
-                for (key, child) in object {
-                    if key == "address" {
-                        if let Some(address) = child.as_str() {
-                            let valid = !address.is_empty()
-                                && address.chars().all(|c| {
-                                    c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':')
-                                });
-                            if valid && !addresses.iter().any(|item| item == address) {
-                                addresses.push(address.to_string());
-                            }
-                        }
-                    }
-                    collect_addresses(child, addresses);
-                }
-            }
-            serde_json::Value::Array(values) => {
-                for child in values {
-                    collect_addresses(child, addresses);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mut addresses = Vec::new();
-    if let Some(outbounds) = config.get("outbounds").and_then(|value| value.as_array()) {
-        for outbound in outbounds {
-            let protocol = outbound.get("protocol").and_then(|value| value.as_str());
-            if !matches!(protocol, Some("freedom" | "blackhole" | "dns")) {
-                if let Some(settings) = outbound.get("settings") {
-                    collect_addresses(settings, &mut addresses);
-                }
-            }
-        }
-    }
-
-    (tun_name, addresses)
-}
-
-#[cfg(target_os = "macos")]
-fn tail_tun_log(path: std::path::PathBuf, app_handle: tauri::AppHandle, generation: u64) {
+fn tail_log_file(path: std::path::PathBuf, app_handle: tauri::AppHandle, generation: u64) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(300));
-        let Ok(file) = std::fs::File::open(&path) else {
-            return;
-        };
+        let Ok(file) = std::fs::File::open(&path) else { return; };
         let mut reader = BufReader::new(file);
-        let mut window_started = std::time::Instant::now();
-        let mut emitted = 0_u32;
-        let mut dropped = 0_u64;
         while KERNEL_GENERATION.load(Ordering::Relaxed) == generation {
             let mut line = String::new();
             match reader.read_line(&mut line) {
@@ -854,28 +594,13 @@ fn tail_tun_log(path: std::path::PathBuf, app_handle: tauri::AppHandle, generati
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
                 Ok(_) => {
-                    if window_started.elapsed() >= std::time::Duration::from_secs(1) {
-                        if dropped > 0 {
-                            let _ = app_handle.emit("xray-log", LogPayload {
-                                level: "warning".to_string(),
-                                message: format!("MXray suppressed {} excessive TUN log lines", dropped),
-                                timestamp: "".to_string(),
-                            });
-                        }
-                        window_started = std::time::Instant::now();
-                        emitted = 0;
-                        dropped = 0;
-                    }
                     let trimmed = line.trim_end();
-                    if !trimmed.is_empty() && emitted < 50 {
+                    if !trimmed.is_empty() {
                         let _ = app_handle.emit("xray-log", LogPayload {
                             level: parse_log_level(trimmed),
                             message: trimmed.to_string(),
                             timestamp: "".to_string(),
                         });
-                        emitted += 1;
-                    } else if !trimmed.is_empty() {
-                        dropped += 1;
                     }
                 }
                 Err(_) => break,
@@ -887,30 +612,38 @@ fn tail_tun_log(path: std::path::PathBuf, app_handle: tauri::AppHandle, generati
 #[tauri::command]
 pub fn stop_kernel() -> Result<(), String> {
     KERNEL_GENERATION.fetch_add(1, Ordering::Relaxed);
+    KERNEL_RUNNING.store(0, Ordering::Relaxed);
     let process = {
         let mut lock = XRAY_PROCESS.lock().map_err(|e| e.to_string())?;
         lock.take()
     };
     if let Some(mut process) = process {
-        if let Some(stop_file) = &process.stop_file {
-            let _ = fs::write(stop_file, "stop");
-            for _ in 0..30 {
-                if matches!(process.child.try_wait(), Ok(Some(_))) {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-        }
-        if !matches!(process.child.try_wait(), Ok(Some(_))) {
-            let _ = process.child.kill();
-        }
+        let _ = process.child.kill();
         let _ = process.child.wait();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: 先尝试无需管理员权限终止（普通代理模式 xray 以当前用户运行）
+        let _ = Command::new("pkill").arg("-x").arg("xray").output();
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        // 若进程仍在运行（TUN 模式以 root 运行），则通过 osascript 管理员权限终止
+        let still_alive = Command::new("pgrep").arg("-x").arg("xray").output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if still_alive {
+            let kill_script = "do shell script \"pkill -x xray || true\" with administrator privileges";
+            let _ = Command::new("osascript").arg("-e").arg(kill_script).output();
+        }
     }
     #[cfg(target_os = "windows")]
     {
         let _ = Command::new("taskkill")
             .args(["/F", "/IM", "xray.exe"])
             .output();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = Command::new("pkill").arg("-x").arg("xray").output();
     }
     Ok(())
 }
@@ -938,122 +671,111 @@ pub fn start_kernel(
     fs::create_dir_all(&app_dir).map_err(|e| format!("创建应用数据目录失败: {}", e))?;
     let config_file_path = app_dir.join("runtime_config.json");
 
-    #[cfg(target_os = "macos")]
-    let config_json = if is_tun_enabled {
-        prepare_macos_tun_config(&config_json)?
-    } else {
-        config_json
-    };
-
     fs::write(&config_file_path, &config_json)
         .map_err(|e| format!("写入运行时配置文件失败: {}", e))?;
     let generation = KERNEL_GENERATION.load(Ordering::Relaxed);
 
     #[cfg(target_os = "macos")]
-    let (mut child, stop_file) = if is_tun_enabled {
-        let (tun_name, endpoint_addresses) = tun_runtime_details(&config_json);
-        let supervisor_path = app_dir.join("tun_supervisor.sh");
-        let endpoints_path = app_dir.join("tun_endpoints.txt");
-        let stop_file_path = app_dir.join("tun.stop");
-        let log_path = app_dir.join("tun_runtime.log");
-        let managed_routes_path = app_dir.join("tun_managed_routes.txt");
+    {
+        if is_tun_enabled {
+            // TUN 模式：需要 root 权限创建虚拟网卡，使用 osascript 弹出系统密码框
+            let log_path = app_dir.join("xray_runtime.log");
+            fs::write(&log_path, "").ok();
 
-        fs::write(&supervisor_path, MACOS_TUN_SUPERVISOR)
-            .map_err(|e| format!("写入 TUN 路由守护脚本失败: {}", e))?;
-        fs::write(&endpoints_path, endpoint_addresses.join("\n"))
-            .map_err(|e| format!("写入代理节点地址失败: {}", e))?;
-        fs::write(&log_path, "").map_err(|e| format!("创建 TUN 日志失败: {}", e))?;
-        let _ = fs::remove_file(&stop_file_path);
+            let shell_cmd = format!(
+                "{} run -config {} >> {} 2>&1 &",
+                shell_quote(&bin_path),
+                shell_quote(config_file_path.to_str().unwrap_or_default()),
+                shell_quote(log_path.to_str().unwrap_or_default()),
+            );
+            let script = format!(
+                "do shell script \"{}\" with administrator privileges",
+                apple_script_escape(&shell_cmd)
+            );
 
-        let command = [
-            "/bin/sh".to_string(),
-            shell_quote(supervisor_path.to_str().unwrap_or_default()),
-            shell_quote(&bin_path),
-            shell_quote(config_file_path.to_str().unwrap_or_default()),
-            shell_quote(&tun_name),
-            shell_quote(endpoints_path.to_str().unwrap_or_default()),
-            shell_quote(stop_file_path.to_str().unwrap_or_default()),
-            shell_quote(log_path.to_str().unwrap_or_default()),
-            shell_quote(managed_routes_path.to_str().unwrap_or_default()),
-        ]
-        .join(" ");
-        let script = format!(
-            "tell application \"System Events\" to activate\n\
-             do shell script \"{}\" with administrator privileges",
-            apple_script_escape(&command)
-        );
+            Command::new("osascript")
+                .arg("-e")
+                .arg(&script)
+                .output()
+                .map_err(|e| format!("管理员授权启动内核失败: {}", e))?;
 
-        let child = Command::new("osascript")
-            .arg("-e")
-            .arg(&script)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("TUN 模式管理员授权启动失败: {}", e))?;
-        tail_tun_log(log_path, app_handle.clone(), generation);
-        (child, Some(stop_file_path))
-    } else {
-        let child = Command::new(&bin_path)
-            .args(["run", "-config", config_file_path.to_str().unwrap_or_default()])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("无法启动 Xray 进程 ({}): {}", bin_path, e))?;
-        (child, None)
-    };
+            tail_log_file(log_path, app_handle.clone(), generation);
+        } else {
+            // 普通代理模式：以当前用户身份运行，无需管理员密码
+            let log_path = app_dir.join("xray_runtime.log");
+            fs::write(&log_path, "").ok();
 
-    #[cfg(not(target_os = "macos"))]
-    let (mut child, stop_file) = (
-        Command::new(&bin_path)
-            .args(["run", "-config", config_file_path.to_str().unwrap_or_default()])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("无法启动 Xray 进程 ({}): {}", bin_path, e))?,
-        None,
-    );
+            let shell_cmd = format!(
+                "nohup {} run -config {} >> {} 2>&1 &",
+                shell_quote(&bin_path),
+                shell_quote(config_file_path.to_str().unwrap_or_default()),
+                shell_quote(log_path.to_str().unwrap_or_default()),
+            );
 
-    // 1. Stream stdout
-    if let Some(stdout) = child.stdout.take() {
-        let app_handle_stdout = app_handle.clone();
-        std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().flatten() {
-                let level = parse_log_level(&line);
-                let _ = app_handle_stdout.emit("xray-log", LogPayload {
-                    level,
-                    message: line,
-                    timestamp: "".to_string(),
-                });
-            }
-        });
+            Command::new("sh")
+                .args(["-c", &shell_cmd])
+                .output()
+                .map_err(|e| format!("无法启动 Xray 进程: {}", e))?;
+
+            tail_log_file(log_path, app_handle.clone(), generation);
+        }
     }
 
-    // 2. Stream stderr
-    if let Some(stderr) = child.stderr.take() {
-        let app_handle_stderr = app_handle.clone();
-        let bin_path_log = bin_path.clone();
-        std::thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines().flatten() {
-                let level = parse_log_level(&line);
-                if line.to_lowercase().contains("operation not permitted") {
-                    let _ = app_handle_stderr.emit("xray-log", LogPayload {
-                        level: "error".to_string(),
-                        message: format!("[提示] TUN 模式需要管理员权限创建虚拟网卡。请在终端运行: sudo chown root:wheel \"{}\" && sudo chmod +s \"{}\"", bin_path_log, bin_path_log),
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut child = if cfg!(target_os = "windows") {
+            Command::new(&bin_path)
+                .args(["run", "-config", config_file_path.to_str().unwrap_or_default()])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("无法启动 Xray 进程 ({}): {}", bin_path, e))?
+        } else {
+            Command::new("sudo")
+                .args([&bin_path, "run", "-config", config_file_path.to_str().unwrap_or_default()])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("无法以 sudo 启动 Xray 进程 ({}): {}", bin_path, e))?
+        };
+
+        // Stream stdout
+        if let Some(stdout) = child.stdout.take() {
+            let app_handle_stdout = app_handle.clone();
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines().flatten() {
+                    let level = parse_log_level(&line);
+                    let _ = app_handle_stdout.emit("xray-log", LogPayload {
+                        level,
+                        message: line,
                         timestamp: "".to_string(),
                     });
                 }
-                let _ = app_handle_stderr.emit("xray-log", LogPayload {
-                    level,
-                    message: line,
-                    timestamp: "".to_string(),
-                });
-            }
-        });
+            });
+        }
+
+        // Stream stderr
+        if let Some(stderr) = child.stderr.take() {
+            let app_handle_stderr = app_handle.clone();
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().flatten() {
+                    let level = parse_log_level(&line);
+                    let _ = app_handle_stderr.emit("xray-log", LogPayload {
+                        level,
+                        message: line,
+                        timestamp: "".to_string(),
+                    });
+                }
+            });
+        }
+
+        let mut lock = XRAY_PROCESS.lock().map_err(|e| e.to_string())?;
+        *lock = Some(KernelProcess { child });
     }
 
-    // 3. Optional: Tail custom access / error log files if specified in config
+    // Tail custom access / error log files if specified in config
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&config_json) {
         if let Some(log_obj) = parsed.get("log") {
             for key in ["access", "error"] {
@@ -1065,7 +787,8 @@ pub fn start_kernel(
                         std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_millis(600));
                             if let Ok(mut file) = std::fs::File::open(&path_buf) {
-                                let _ = file.seek(SeekFrom::End(0));
+                                use std::io::Seek;
+                                let _ = file.seek(std::io::SeekFrom::End(0));
                                 let mut reader = BufReader::new(file);
                                 loop {
                                     let mut line = String::new();
@@ -1095,27 +818,47 @@ pub fn start_kernel(
         }
     }
 
-    let mut lock = XRAY_PROCESS.lock().map_err(|e| e.to_string())?;
-    *lock = Some(KernelProcess { child, stop_file });
+    KERNEL_RUNNING.store(1, Ordering::Relaxed);
 
     Ok(())
 }
 
 #[tauri::command]
 pub fn get_kernel_status() -> Result<bool, String> {
-    let mut lock = XRAY_PROCESS.lock().map_err(|e| e.to_string())?;
-    if let Some(ref mut process) = *lock {
-        match process.child.try_wait() {
-            Ok(Some(_status)) => {
-                *lock = None;
-                KERNEL_GENERATION.fetch_add(1, Ordering::Relaxed);
-                Ok(false)
+    if KERNEL_RUNNING.load(Ordering::Relaxed) == 0 {
+        return Ok(false);
+    }
+    // 通过检测 xray 进程是否存在来判断运行状态
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(out) = Command::new("pgrep").arg("-x").arg("xray").output() {
+            if out.status.success() {
+                return Ok(true);
             }
-            Ok(None) => Ok(true),
-            Err(_) => Ok(false),
         }
-    } else {
-        Ok(false)
+        KERNEL_RUNNING.store(0, Ordering::Relaxed);
+        return Ok(false);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut lock = XRAY_PROCESS.lock().map_err(|e| e.to_string())?;
+        if let Some(ref mut process) = *lock {
+            match process.child.try_wait() {
+                Ok(Some(_)) => {
+                    *lock = None;
+                    KERNEL_RUNNING.store(0, Ordering::Relaxed);
+                    Ok(false)
+                }
+                Ok(None) => Ok(true),
+                Err(_) => {
+                    KERNEL_RUNNING.store(0, Ordering::Relaxed);
+                    Ok(false)
+                }
+            }
+        } else {
+            KERNEL_RUNNING.store(0, Ordering::Relaxed);
+            Ok(false)
+        }
     }
 }
 
@@ -1165,7 +908,7 @@ pub fn get_cli_command(
     if cfg!(target_os = "windows") {
         Ok(format!("cmd /c start /b \"\" {} run -config {}", bin_formatted, cfg_formatted))
     } else {
-        Ok(format!("nohup {} run -config {} > /dev/null 2>&1 &", bin_formatted, cfg_formatted))
+        Ok(format!("sudo {} run -config {}", bin_formatted, cfg_formatted))
     }
 }
 

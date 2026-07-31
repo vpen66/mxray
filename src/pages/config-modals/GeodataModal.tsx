@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Eye, Code2, AlertCircle } from 'lucide-react';
+import { X, Save, Eye, Code2, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
-import { ToggleSwitch } from '../../components/ToggleSwitch';
 
 interface GeodataModalProps {
   isOpen: boolean;
@@ -10,6 +9,14 @@ interface GeodataModalProps {
   onSave: (val: any) => void;
 }
 
+interface AssetEntry {
+  url: string;
+  file: string;
+}
+
+const inputCls = 'w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono';
+const labelCls = 'block text-xs font-medium text-slate-300 mb-1.5';
+
 export const GeodataModal: React.FC<GeodataModalProps> = ({
   isOpen,
   onClose,
@@ -17,25 +24,28 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
   onSave,
 }) => {
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
-  const [geoipUrl, setGeoipUrl] = useState('');
-  const [geositeUrl, setGeositeUrl] = useState('');
-  const [autoUpdate, setAutoUpdate] = useState(true);
-  const [interval, setInterval] = useState('24h');
+  const [cron, setCron] = useState('');
+  const [outbound, setOutbound] = useState('');
+  const [assets, setAssets] = useState<AssetEntry[]>([
+    { url: 'https://github.com/v2fly/geoip/releases/latest/download/geoip.dat', file: 'geoip.dat' },
+    { url: 'https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat', file: 'geosite.dat' },
+  ]);
   const [rawJsonText, setRawJsonText] = useState('{}');
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      const val = initialValue || {
-        geoipUrl: 'https://github.com/v2fly/geoip/releases/latest/download/geoip.dat',
-        geositeUrl: 'https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat',
-        autoUpdate: true,
-        interval: '24h',
-      };
-      setGeoipUrl(val.geoipUrl || '');
-      setGeositeUrl(val.geositeUrl || '');
-      setAutoUpdate(val.autoUpdate !== false);
-      setInterval(val.interval || '24h');
+      const val = initialValue || {};
+      setCron(val.cron || '');
+      setOutbound(val.outbound || '');
+      if (Array.isArray(val.assets) && val.assets.length > 0) {
+        setAssets(val.assets.map((a: any) => ({ url: a.url || '', file: a.file || '' })));
+      } else {
+        setAssets([
+          { url: 'https://github.com/v2fly/geoip/releases/latest/download/geoip.dat', file: 'geoip.dat' },
+          { url: 'https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat', file: 'geosite.dat' },
+        ]);
+      }
       setRawJsonText(JSON.stringify(val, null, 2));
       setJsonError(null);
       setViewMode('visual');
@@ -43,6 +53,17 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
   }, [isOpen, initialValue]);
 
   if (!isOpen) return null;
+
+  const buildObject = (): any => {
+    const result: any = {};
+    if (cron.trim()) result.cron = cron.trim();
+    if (outbound.trim()) result.outbound = outbound.trim();
+    const validAssets = assets.filter(a => a.url.trim() && a.file.trim());
+    if (validAssets.length > 0) {
+      result.assets = validAssets.map(a => ({ url: a.url.trim(), file: a.file.trim() }));
+    }
+    return result;
+  };
 
   const handleSave = () => {
     if (viewMode === 'json') {
@@ -54,14 +75,40 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
         setJsonError(`JSON 语法解析错误: ${err.message}`);
       }
     } else {
-      onSave({
-        ...(geoipUrl ? { geoipUrl: geoipUrl.trim() } : {}),
-        ...(geositeUrl ? { geositeUrl: geositeUrl.trim() } : {}),
-        autoUpdate,
-        interval: interval.trim() || '24h',
-      });
+      onSave(buildObject());
       onClose();
     }
+  };
+
+  const switchToJson = () => {
+    if (viewMode === 'visual') {
+      setRawJsonText(JSON.stringify(buildObject(), null, 2));
+    }
+    setViewMode('json');
+  };
+
+  const switchToVisual = () => {
+    try {
+      const parsed = JSON.parse(rawJsonText);
+      setCron(parsed.cron || '');
+      setOutbound(parsed.outbound || '');
+      if (Array.isArray(parsed.assets) && parsed.assets.length > 0) {
+        setAssets(parsed.assets.map((a: any) => ({ url: a.url || '', file: a.file || '' })));
+      }
+      setJsonError(null);
+    } catch (err: any) {
+      setJsonError(`无法切换为可视化：JSON 解析错误 (${err.message})`);
+      return;
+    }
+    setViewMode('visual');
+  };
+
+  const addAsset = () => setAssets([...assets, { url: '', file: '' }]);
+  const removeAsset = (i: number) => setAssets(assets.filter((_, idx) => idx !== i));
+  const updateAsset = (i: number, field: keyof AssetEntry, val: string) => {
+    const next = [...assets];
+    next[i] = { ...next[i], [field]: val };
+    setAssets(next);
   };
 
   return (
@@ -69,38 +116,29 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
       <div className="bg-slate-900/98 border border-white/10 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-950/40">
-          <h3 className="font-semibold text-lg text-white">配置地理数据 (Geodata)</h3>
+          <h3 className="font-semibold text-lg text-white">配置地理数据</h3>
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-slate-800/80 border border-white/10 rounded-lg p-0.5">
               <button
                 type="button"
-                onClick={() => setViewMode('visual')}
+                onClick={switchToVisual}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  viewMode === 'visual'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                  viewMode === 'visual' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Eye className="w-3.5 h-3.5" />
-                可视化结构
+                <Eye className="w-3.5 h-3.5" />可视化结构
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode('json')}
+                onClick={switchToJson}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  viewMode === 'json'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                  viewMode === 'json' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Code2 className="w-3.5 h-3.5" />
-                JSON 源码
+                <Code2 className="w-3.5 h-3.5" />JSON 源码
               </button>
             </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            >
+            <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -118,56 +156,83 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
           {viewMode === 'visual' ? (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  GeoIP 下载更新 URL
-                </label>
+                <label className={labelCls}>定时任务 (cron)</label>
                 <input
                   type="text"
-                  value={geoipUrl}
-                  onChange={(e) => setGeoipUrl(e.target.value)}
-                  placeholder="https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
-                  className="w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono"
+                  value={cron}
+                  onChange={(e) => setCron(e.target.value)}
+                  placeholder="如 0 4 * * *（每天 04:00 执行）"
+                  className={inputCls}
                 />
+                <p className="mt-1.5 text-[10px] text-slate-500">标准 5 段 cron 表达式，按运行环境本地时区执行</p>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  GeoSite 下载更新 URL
-                </label>
+                <label className={labelCls}>下载出站代理</label>
                 <input
                   type="text"
-                  value={geositeUrl}
-                  onChange={(e) => setGeositeUrl(e.target.value)}
-                  placeholder="https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
-                  className="w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono"
+                  value={outbound}
+                  onChange={(e) => setOutbound(e.target.value)}
+                  placeholder="留空则走路由模块"
+                  className={inputCls}
                 />
+                <p className="mt-1.5 text-[10px] text-slate-500">下载 geodata 文件时使用的出站代理标识</p>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  自动检查与下载更新周期
-                </label>
-                <input
-                  type="text"
-                  value={interval}
-                  onChange={(e) => setInterval(e.target.value)}
-                  placeholder="24h"
-                  className="w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono"
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-950/40 border border-white/5 rounded-xl">
-                <div>
-                  <span className="text-sm font-medium text-slate-200">启用自动更新</span>
-                  <p className="text-xs text-slate-400">自动在后台定时拉取最新的 GeoIP / GeoSite 数据文件</p>
+              {/* Assets */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200">资源文件列表</span>
+                  <button
+                    type="button"
+                    onClick={addAsset}
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-medium"
+                  >
+                    <Plus className="w-3.5 h-3.5" />添加资源
+                  </button>
                 </div>
-                <ToggleSwitch
-                  checked={autoUpdate}
-                  onChange={() => setAutoUpdate((prev) => !prev)}
-                  activeColor="blue"
-                  size="sm"
-                  ariaLabel="启用地理数据自动更新"
-                />
+
+                {assets.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic py-2">未配置资源文件，定时任务只会重载现有文件</p>
+                ) : (
+                  <div className="space-y-2">
+                    {assets.map((asset, idx) => (
+                      <div key={idx} className="bg-slate-800/30 border border-white/5 rounded-xl p-3 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 space-y-2">
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5">下载地址 (HTTPS)</label>
+                              <input
+                                type="text"
+                                value={asset.url}
+                                onChange={(e) => updateAsset(idx, 'url', e.target.value)}
+                                placeholder="https://example.com/geoip.dat"
+                                className={`${inputCls} text-xs`}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5">写入文件名</label>
+                              <input
+                                type="text"
+                                value={asset.file}
+                                onChange={(e) => updateAsset(idx, 'file', e.target.value)}
+                                placeholder="geoip.dat"
+                                className={`${inputCls} text-xs`}
+                              />
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeAsset(idx)}
+                            className="p-2 mt-4 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

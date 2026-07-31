@@ -10,9 +10,11 @@ interface ApiModalProps {
 }
 
 const AVAILABLE_SERVICES = [
-  { id: 'HandlerService', label: 'HandlerService (出入站句柄管理)' },
-  { id: 'LoggerService', label: 'LoggerService (远程日志级别控制)' },
-  { id: 'StatsService', label: 'StatsService (内核数据统计服务)' },
+  { id: 'HandlerService', label: 'HandlerService' },
+  { id: 'LoggerService', label: 'LoggerService' },
+  { id: 'StatsService', label: 'StatsService' },
+  { id: 'RoutingService', label: 'RoutingService' },
+  { id: 'ReflectionService', label: 'ReflectionService' },
 ];
 
 export const ApiModal: React.FC<ApiModalProps> = ({
@@ -23,6 +25,7 @@ export const ApiModal: React.FC<ApiModalProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
   const [tag, setTag] = useState('api');
+  const [listen, setListen] = useState('');
   const [services, setServices] = useState<string[]>(['HandlerService', 'LoggerService', 'StatsService']);
   const [rawJsonText, setRawJsonText] = useState('{}');
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -31,6 +34,7 @@ export const ApiModal: React.FC<ApiModalProps> = ({
     if (isOpen) {
       const val = initialValue || { tag: 'api', services: ['HandlerService', 'LoggerService', 'StatsService'] };
       setTag(val.tag || 'api');
+      setListen(val.listen || '');
       setServices(Array.isArray(val.services) ? val.services : []);
       setRawJsonText(JSON.stringify(val, null, 2));
       setJsonError(null);
@@ -56,22 +60,27 @@ export const ApiModal: React.FC<ApiModalProps> = ({
         setJsonError(`JSON 语法解析错误: ${err.message}`);
       }
     } else {
-      onSave({
+      const result: any = {
         tag: tag.trim() || 'api',
         services,
-      });
+      };
+      if (listen.trim()) result.listen = listen.trim();
+      onSave(result);
       onClose();
     }
   };
 
   const handleSwitchMode = (mode: 'visual' | 'json') => {
     if (mode === 'json') {
-      setRawJsonText(JSON.stringify({ tag: tag.trim() || 'api', services }, null, 2));
+      const obj: any = { tag: tag.trim() || 'api', services };
+      if (listen.trim()) obj.listen = listen.trim();
+      setRawJsonText(JSON.stringify(obj, null, 2));
       setJsonError(null);
     } else {
       try {
         const parsed = JSON.parse(rawJsonText);
         setTag(parsed.tag || 'api');
+        setListen(parsed.listen || '');
         setServices(Array.isArray(parsed.services) ? parsed.services : []);
         setJsonError(null);
       } catch (err: any) {
@@ -137,7 +146,7 @@ export const ApiModal: React.FC<ApiModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  API 服务标识 (Tag)
+                  API 服务标识
                 </label>
                 <input
                   type="text"
@@ -146,6 +155,20 @@ export const ApiModal: React.FC<ApiModalProps> = ({
                   placeholder="api"
                   className="w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  监听地址与端口
+                </label>
+                <input
+                  type="text"
+                  value={listen}
+                  onChange={(e) => setListen(e.target.value)}
+                  placeholder="如 127.0.0.1:8080（留空则需手动配置 inbounds 和 routing）"
+                  className="w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono"
+                />
+                <p className="mt-1.5 text-[10px] text-slate-500">设置后无需额外配置 inbounds 和 routing，但流量统计不统计 API 入站连接</p>
               </div>
 
               <div>
