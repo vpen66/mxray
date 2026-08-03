@@ -9,9 +9,9 @@ import {
 import { useAppStore } from '../stores/useAppStore';
 
 const NAV_ITEMS = [
-  { id: 'json-config', label: '高级配置', icon: FileCode2 },
-  { id: 'logs', label: '实时日志', icon: Terminal },
-  { id: 'settings', label: '系统设置', icon: Settings },
+  { id: 'json-config', label: '配置', icon: FileCode2 },
+  { id: 'logs', label: '日志', icon: Terminal },
+  { id: 'settings', label: '设置', icon: Settings },
 ];
 
 export const Sidebar: React.FC = () => {

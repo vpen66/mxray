@@ -26,6 +26,10 @@ interface ConfigStore {
   startActiveKernel: () => Promise<void>;
 }
 
+// 配置修改后自动重启内核的防抖定时器（避免 Monaco 编辑器逐字输入时频繁重启）
+let autoRestartTimer: ReturnType<typeof setTimeout> | null = null;
+const AUTO_RESTART_DEBOUNCE_MS = 1500;
+
 
 export const TEMPLATE_DEFAULT = `{
   "log": {
@@ -247,6 +251,35 @@ export const useConfigStore = create<ConfigStore>()(
             p.id === id ? { ...p, ...updates, updatedAt: nowStr } : p
           ),
         }));
+
+        // 若修改的是当前活动配置且内核正在运行，防抖后自动重启内核以重新加载配置
+        if (updates.content !== undefined && id === get().activeProfileId) {
+          if (autoRestartTimer) {
+            clearTimeout(autoRestartTimer);
+            autoRestartTimer = null;
+          }
+          const appState = useAppStore.getState();
+          if (appState.coreState.isRunning) {
+            autoRestartTimer = setTimeout(async () => {
+              autoRestartTimer = null;
+              const latest = get().profiles.find((p) => p.id === id);
+              // JSON 非法（如编辑器输入中间态）时跳过重启，保留内核继续运行
+              if (!latest?.content) return;
+              try {
+                JSON.parse(latest.content);
+              } catch {
+                return;
+              }
+              if (!useAppStore.getState().coreState.isRunning) return;
+              try {
+                await get().startActiveKernel();
+              } catch (err) {
+                console.error('配置变更后自动重启内核失败:', err);
+                useAppStore.getState().setCoreRunning(false);
+              }
+            }, AUTO_RESTART_DEBOUNCE_MS);
+          }
+        }
       },
 
       deleteProfile: (id) => {
@@ -310,6 +343,11 @@ export const useConfigStore = create<ConfigStore>()(
       setDnsStrategy: (strategy) => set({ dnsStrategy: strategy }),
 
       startActiveKernel: async () => {
+        // 显式启动/重启时取消待执行的防抖自动重启，避免双重重启
+        if (autoRestartTimer) {
+          clearTimeout(autoRestartTimer);
+          autoRestartTimer = null;
+        }
         const state = get();
         const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0];
         if (activeProfile && activeProfile.content) {

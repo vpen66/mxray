@@ -17,6 +17,62 @@ static XRAY_PROCESS: LazyLock<Mutex<Option<KernelProcess>>> = LazyLock::new(|| M
 static KERNEL_GENERATION: AtomicU64 = AtomicU64::new(0);
 static KERNEL_RUNNING: AtomicU64 = AtomicU64::new(0);
 
+/// 退出主界面时是否保持 Xray 内核后台运行（持久化于 App 数据目录）
+static KEEP_ALIVE_FLAG: LazyLock<std::sync::atomic::AtomicBool> = LazyLock::new(|| std::sync::atomic::AtomicBool::new(false));
+const KEEP_ALIVE_FILE_NAME: &str = "keep_kernel_alive.json";
+
+fn keep_alive_file_path(app_dir: &Path) -> std::path::PathBuf {
+    app_dir.join(KEEP_ALIVE_FILE_NAME)
+}
+
+/// 从磁盘读取保活开关（文件不存在或内容非法时默认关闭）
+pub fn read_keep_alive_pref(app_dir: &Path) -> bool {
+    fs::read_to_string(keep_alive_file_path(app_dir))
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get("enabled").and_then(|b| b.as_bool()))
+        .unwrap_or(false)
+}
+
+/// 同步内存标志并持久化到磁盘
+pub fn apply_keep_alive_pref(app_dir: &Path, enabled: bool) {
+    KEEP_ALIVE_FLAG.store(enabled, Ordering::Relaxed);
+    let _ = fs::create_dir_all(app_dir);
+    let _ = fs::write(
+        keep_alive_file_path(app_dir),
+        format!("{{\"enabled\":{}}}", enabled),
+    );
+}
+
+/// 退出时是否跳过停止内核（供 lib.rs 退出事件读取）
+pub fn keep_kernel_alive_on_exit() -> bool {
+    KEEP_ALIVE_FLAG.load(Ordering::Relaxed)
+}
+
+/// 应用启动时从磁盘恢复保活开关到内存
+pub fn init_keep_alive_pref(app_dir: &Path) {
+    KEEP_ALIVE_FLAG.store(read_keep_alive_pref(app_dir), Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn set_keep_kernel_alive(app_handle: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
+    apply_keep_alive_pref(&app_dir, enabled);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_keep_kernel_alive(app_handle: tauri::AppHandle) -> Result<bool, String> {
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
+    Ok(read_keep_alive_pref(&app_dir))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogPayload {
     pub level: String,
@@ -64,6 +120,24 @@ pub fn detect_kernel(path: String) -> KernelInfo {
     info
 }
 
+/// 从 `xray version` 输出行中提取纯数字版本号（如 "Xray 26.7.28, Penetrates Everything." → "26.7.28"）
+fn extract_numeric_version(line: &str) -> String {
+    for token in line.split_whitespace() {
+        let candidate: String = token
+            .trim_start_matches(|c: char| c == 'v' || c == 'V' || c == '(')
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        if candidate.contains('.') && candidate.starts_with(|c: char| c.is_ascii_digit()) {
+            let trimmed = candidate.trim_matches('.');
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    line.trim().to_string()
+}
+
 pub fn detect_kernel_version(path_str: &str) -> KernelInfo {
     let path = Path::new(path_str);
     if path_str.is_empty() || !path.exists() {
@@ -95,7 +169,7 @@ pub fn detect_kernel_version(path_str: &str) -> KernelInfo {
 
             KernelInfo {
                 name: "Xray-core".to_string(),
-                version: version_line.trim().to_string(),
+                version: extract_numeric_version(version_line),
                 path: path_str.to_string(),
                 kernel_type: "custom".to_string(),
                 is_valid: out.status.success() || !stdout.is_empty(),
@@ -276,7 +350,7 @@ pub async fn fetch_remote_releases() -> Result<Vec<RemoteRelease>, String> {
                         .unwrap_or_else(|| format!("https://github.com/XTLS/Xray-core/releases/download/{}/{}", gh.tag_name, asset_name_hint));
 
                     list.push(RemoteRelease {
-                        version: gh.tag_name.clone(),
+                        version: gh.tag_name.trim_start_matches('v').to_string(),
                         tag_name: gh.tag_name.clone(),
                         name: gh.name.unwrap_or_else(|| format!("Xray-core {}", gh.tag_name)),
                         published_at: gh.published_at.map(|s| s.chars().take(10).collect()).unwrap_or_default(),
@@ -293,21 +367,21 @@ pub async fn fetch_remote_releases() -> Result<Vec<RemoteRelease>, String> {
     // Fallback modern releases
     Ok(vec![
         RemoteRelease {
-            version: "v26.3.27".to_string(),
+            version: "26.3.27".to_string(),
             tag_name: "v26.3.27".to_string(),
             name: "Xray-core v26.3.27".to_string(),
             published_at: "2026-03-27".to_string(),
             download_url: format!("https://github.com/XTLS/Xray-core/releases/download/v26.3.27/{}", asset_name_hint),
         },
         RemoteRelease {
-            version: "v26.3.0".to_string(),
+            version: "26.3.0".to_string(),
             tag_name: "v26.3.0".to_string(),
             name: "Xray-core v26.3.0".to_string(),
             published_at: "2026-03-01".to_string(),
             download_url: format!("https://github.com/XTLS/Xray-core/releases/download/v26.3.0/{}", asset_name_hint),
         },
         RemoteRelease {
-            version: "v25.1.0".to_string(),
+            version: "25.1.0".to_string(),
             tag_name: "v25.1.0".to_string(),
             name: "Xray-core v25.1.0".to_string(),
             published_at: "2025-01-15".to_string(),
@@ -674,7 +748,8 @@ fn tail_log_file(path: std::path::PathBuf, app_handle: tauri::AppHandle, generat
 }
 
 #[tauri::command]
-pub fn stop_kernel() -> Result<(), String> {
+pub fn stop_kernel(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::set_tray_kernel_state(&app_handle, false);
     KERNEL_GENERATION.fetch_add(1, Ordering::Relaxed);
     KERNEL_RUNNING.store(0, Ordering::Relaxed);
     let process = {
@@ -717,7 +792,7 @@ pub fn start_kernel(
     config_json: String,
     binary_path: Option<String>,
 ) -> Result<(), String> {
-    let _ = stop_kernel();
+    let _ = stop_kernel(app_handle.clone());
 
     let bin_path = find_xray_binary(binary_path.as_deref(), &app_handle)?;
 
@@ -878,13 +953,83 @@ pub fn start_kernel(
     }
 
     KERNEL_RUNNING.store(1, Ordering::Relaxed);
+    crate::set_tray_kernel_state(&app_handle, true);
 
     Ok(())
 }
 
+/// 接管已在后台运行的内核的运行时日志（应用重启后本进程未启动过内核，
+/// 需主动附着日志文件，否则日志页无任何输出）
+pub fn attach_runtime_log_tail(app_handle: tauri::AppHandle) {
+    let Ok(app_dir) = app_handle.path().app_data_dir() else { return; };
+    let log_path = app_dir.join("xray_runtime.log");
+    if !log_path.exists() {
+        return;
+    }
+    let generation = KERNEL_GENERATION.load(Ordering::Relaxed);
+    tail_log_file(log_path, app_handle, generation);
+}
+
+/// 读取运行时日志文件的最近记录（供前端启动时回填历史日志）。
+/// GUI setup 阶段的日志附着 emit 可能早于前端事件监听注册，
+/// 历史日志会丢失，因此前端挂载后需主动拉取一次
 #[tauri::command]
-pub fn get_kernel_status() -> Result<bool, String> {
+pub fn get_recent_runtime_logs(app_handle: tauri::AppHandle) -> Result<Vec<LogPayload>, String> {
+    let Ok(app_dir) = app_handle.path().app_data_dir() else {
+        return Ok(Vec::new());
+    };
+    let log_path = app_dir.join("xray_runtime.log");
+    let Ok(content) = fs::read_to_string(&log_path) else {
+        return Ok(Vec::new());
+    };
+    let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
+    let start = lines.len().saturating_sub(300);
+    Ok(lines[start..]
+        .iter()
+        .map(|line| LogPayload {
+            level: parse_log_level(line),
+            message: line.to_string(),
+            timestamp: String::new(),
+        })
+        .collect())
+}
+
+/// 探测系统中是否存在 xray 进程（供托盘代理等外部模块使用）
+pub fn xray_process_alive() -> bool {
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("pgrep")
+            .args(["-x", "xray"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        false
+    }
+}
+
+#[tauri::command]
+pub fn get_kernel_status(app_handle: tauri::AppHandle) -> Result<bool, String> {
+    let running = detect_kernel_running()?;
+    // 同步托盘图标状态（兼顾内核崩溃或外部终止后的图标回退）
+    crate::set_tray_kernel_state(&app_handle, running);
+    Ok(running)
+}
+
+fn detect_kernel_running() -> Result<bool, String> {
+    #[cfg(not(target_os = "windows"))]
     if KERNEL_RUNNING.load(Ordering::Relaxed) == 0 {
+        // 接管保活模式下上次退出后残留的后台内核（如 macOS nohup 脱离启动的进程）
+        if keep_kernel_alive_on_exit() {
+            if let Ok(out) = Command::new("pgrep").arg("-x").arg("xray").output() {
+                if out.status.success() {
+                    KERNEL_RUNNING.store(1, Ordering::Relaxed);
+                    return Ok(true);
+                }
+            }
+        }
         return Ok(false);
     }
     // 通过检测 xray 进程是否存在来判断运行状态

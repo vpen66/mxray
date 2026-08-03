@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { useAppStore } from './stores/useAppStore';
+import { useKernelStore } from './stores/useKernelStore';
 import { useLogStore } from './stores/useLogStore';
 import { LogsPage } from './pages/Logs';
 import { JsonConfigPage } from './pages/JsonConfig';
@@ -8,15 +9,22 @@ import { SettingsPage } from './pages/Settings';
 
 export function App() {
   const { activeTab, checkSystemProxyStatus } = useAppStore();
-  const { initLogListener } = useLogStore();
+  const { syncKeepKernelAliveOnExit } = useKernelStore();
+  const { initLogListener, loadHistoricalLogs } = useLogStore();
 
   useEffect(() => {
     checkSystemProxyStatus();
+    syncKeepKernelAliveOnExit();
     const cleanup = initLogListener();
+    // 延迟回填历史日志：若实时事件已到达则内部自动跳过
+    const backfillTimer = window.setTimeout(() => {
+      loadHistoricalLogs();
+    }, 800);
     return () => {
+      window.clearTimeout(backfillTimer);
       cleanup();
     };
-  }, [checkSystemProxyStatus, initLogListener]);
+  }, [checkSystemProxyStatus, initLogListener, loadHistoricalLogs, syncKeepKernelAliveOnExit]);
 
   const renderActivePage = () => {
     switch (activeTab) {

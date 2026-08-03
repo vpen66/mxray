@@ -23,6 +23,7 @@ export interface LogEntry {
   message: string;
   category?: LogCategory;
   source?: string;
+  destination?: string;
   protocol?: string;
   target?: string;
   domain?: string;
@@ -32,6 +33,12 @@ export interface LogEntry {
   rule?: string;
   action?: string;
   shortSummary?: string;
+  module?: string;
+  sessionId?: string;
+  resolvedIps?: string[];
+  rtt?: string;
+  queryType?: string;
+  dnsServer?: string;
 }
 
 export interface XrayConfigProfile {

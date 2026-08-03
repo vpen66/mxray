@@ -28,7 +28,7 @@ import {
 import { useLogStore } from '../stores/useLogStore';
 import type { LogEntry } from '../types';
 import { CustomSelect, type SelectOption } from '../components/CustomSelect';
-import { parseXrayLog, stripLeadingTimestamp } from '../utils/logParser';
+import { parseXrayLog } from '../utils/logParser';
 import { useConfigStore } from '../stores/useConfigStore';
 
 function getRootDomain(domain: string): string {
@@ -59,8 +59,7 @@ function aggregateLogEntries(logsList: LogEntry[], enabled: boolean): Aggregated
   const map = new Map<string, AggregatedLogEntry>();
 
   for (const log of logsList) {
-    const cleanMsg = stripLeadingTimestamp(log.message);
-    const domainKey = log.domain || log.target || log.shortSummary || cleanMsg;
+    const domainKey = log.domain || log.target || log.shortSummary || log.message;
     const outboundKey = log.outbound || (log.chain ? log.chain.join('>') : 'default');
     const categoryKey = log.category || 'general';
     const levelKey = log.level || 'info';
@@ -76,7 +75,6 @@ function aggregateLogEntries(logsList: LogEntry[], enabled: boolean): Aggregated
     } else {
       const entry: AggregatedLogEntry = {
         ...log,
-        shortSummary: log.domain ? log.shortSummary : cleanMsg,
         repeatCount: 1,
         lastTimestamp: log.timestamp,
       };
@@ -146,6 +144,11 @@ export const LogsPage: React.FC = () => {
       (log.domain && log.domain.toLowerCase().includes(q)) ||
       (log.outbound && log.outbound.toLowerCase().includes(q)) ||
       (log.source && log.source.toLowerCase().includes(q)) ||
+      (log.destination && log.destination.toLowerCase().includes(q)) ||
+      (log.module && log.module.toLowerCase().includes(q)) ||
+      (log.sessionId && log.sessionId.includes(q)) ||
+      (log.dnsServer && log.dnsServer.toLowerCase().includes(q)) ||
+      (log.resolvedIps && log.resolvedIps.some((ip) => ip.toLowerCase().includes(q))) ||
       (log.chain && log.chain.some((c) => c.toLowerCase().includes(q))) ||
       (log.shortSummary && log.shortSummary.toLowerCase().includes(q));
 
@@ -595,6 +598,17 @@ export const LogsPage: React.FC = () => {
                           规则: {log.rule}
                         </span>
                       )}
+
+                      {/* Module & Session Badge */}
+                      {log.module && (
+                        <span
+                          className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-white/10"
+                          title={log.sessionId ? `会话 ID: ${log.sessionId}` : '来源模块'}
+                        >
+                          {log.module}
+                          {log.sessionId ? ` · ${log.sessionId}` : ''}
+                        </span>
+                      )}
                     </div>
 
                     {/* Action Buttons Right */}
@@ -953,7 +967,71 @@ export const LogsPage: React.FC = () => {
                 </div>
               )}
 
-              {selectedLog.source && (
+              {/* DNS Answer Detail Block */}
+              {selectedLog.resolvedIps && selectedLog.resolvedIps.length > 0 && (
+                <div className="bg-slate-900/80 p-3 rounded-xl border border-blue-500/20 space-y-2">
+                  <div className="text-[10px] text-blue-400 font-semibold flex items-center gap-1">
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>DNS 应答详情</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {selectedLog.queryType && (
+                      <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold">
+                        {selectedLog.queryType}
+                      </span>
+                    )}
+                    {selectedLog.resolvedIps.map((ip) => (
+                      <span key={ip} className="px-2 py-0.5 rounded bg-blue-950 text-blue-200 border border-blue-500/30 text-[11px] font-bold">
+                        {ip}
+                      </span>
+                    ))}
+                    {selectedLog.rtt && (
+                      <span className="text-[10px] text-slate-400">耗时: <span className="text-emerald-300 font-bold">{selectedLog.rtt}</span></span>
+                    )}
+                  </div>
+                  {selectedLog.dnsServer && (
+                    <div className="text-[10px] text-slate-400">应答服务器: <span className="text-slate-200 font-bold">{selectedLog.dnsServer}</span></div>
+                  )}
+                </div>
+              )}
+
+              {/* Source & Destination Block */}
+              {(selectedLog.source || selectedLog.destination) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedLog.source && (
+                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-white/5">
+                      <div className="text-[10px] text-slate-400">源地址</div>
+                      <div className="font-bold text-slate-200 mt-0.5 break-all">{selectedLog.source}</div>
+                    </div>
+                  )}
+                  {selectedLog.destination && (
+                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-white/5">
+                      <div className="text-[10px] text-slate-400">目标地址</div>
+                      <div className="font-bold text-slate-200 mt-0.5 break-all">{selectedLog.destination}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Module & Session ID Block */}
+              {(selectedLog.module || selectedLog.sessionId) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedLog.module && (
+                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-white/5">
+                      <div className="text-[10px] text-slate-400">来源模块</div>
+                      <div className="font-bold text-slate-200 mt-0.5">{selectedLog.module}</div>
+                    </div>
+                  )}
+                  {selectedLog.sessionId && (
+                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-white/5">
+                      <div className="text-[10px] text-slate-400">连接会话 ID</div>
+                      <div className="font-bold text-slate-200 mt-0.5">{selectedLog.sessionId}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedLog.source && !selectedLog.destination && (
                 <div className="bg-slate-900/60 p-2.5 rounded-xl border border-white/5">
                   <div className="text-[10px] text-slate-400">客户端源地址</div>
                   <div className="font-bold text-slate-200 mt-0.5">{selectedLog.source}</div>

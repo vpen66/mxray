@@ -400,6 +400,10 @@ export const SettingsPage: React.FC = () => {
           <div className="space-y-2">
             {remoteReleases.map((rel) => {
               const isAlreadyInstalled = installedKernels.some((k) => k.version === rel.version);
+              const isCurrentVersion =
+                activeKernel.version === rel.version &&
+                rel.version !== 'Unknown' &&
+                rel.version !== '未检测到';
               const isBeingInstalled = isInstalling && installingVersion === rel.version;
 
               return (
@@ -415,7 +419,12 @@ export const SettingsPage: React.FC = () => {
                   </div>
 
                   <div>
-                    {isAlreadyInstalled ? (
+                    {isCurrentVersion ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[11px] font-medium">
+                        <CheckCircle className="w-3 h-3" />
+                        当前使用
+                      </span>
+                    ) : isAlreadyInstalled ? (
                       <span className="px-2.5 py-1 rounded bg-slate-800/80 text-slate-400 text-[11px] font-medium">
                         已安装
                       </span>
@@ -451,7 +460,7 @@ export const SettingsPage: React.FC = () => {
         <div className="flex items-center justify-between border-b border-white/10 pb-3">
           <div className="flex items-center gap-2">
             <Server className="w-5 h-5 text-purple-400" />
-            <h3 className="text-base font-bold text-white">Xray 内核独立后台运行 (免 GUI 客户端模式)</h3>
+            <h3 className="text-base font-bold text-white">Xray 内核独立后台运行</h3>
           </div>
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${

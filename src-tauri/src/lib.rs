@@ -4,6 +4,109 @@ pub mod helper;
 pub mod kernel;
 pub mod sysproxy;
 
+use std::net::ToSocketAddrs;
+use tauri::Manager;
+
+/// 根据内核运行状态切换菜单栏托盘图标：
+/// 运行中为正常不透明图标，已停止为降低透明度的置灰图标
+pub fn set_tray_kernel_state(app_handle: &tauri::AppHandle, running: bool) {
+    let Some(tray) = app_handle.tray_by_id(TRAY_ID) else { return; };
+    let Some(base) = app_handle.default_window_icon().cloned() else { return; };
+    let image = if running {
+        base
+    } else {
+        // 停止态：将图标整体不透明度降至约三分之一，呈现置灰效果
+        // 注意：必须提升到 u32 运算，否则 debug 构建下 u8 乘法会溢出 panic
+        let mut rgba = base.rgba().to_vec();
+        for px in rgba.chunks_exact_mut(4) {
+            px[3] = ((px[3] as u32) * 85 / 255) as u8;
+        }
+        tauri::image::Image::new_owned(rgba, base.width(), base.height())
+    };
+    let _ = tray.set_icon(Some(image));
+}
+
+const TRAY_ID: &str = "main-tray";
+const TRAY_AGENT_PID_FILE: &str = "tray_agent.pid";
+pub const GUI_PID_FILE_NAME: &str = "gui.pid";
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn tray_agent_pid_path(app_handle: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app_handle
+        .path()
+        .app_data_dir()
+        .ok()
+        .map(|dir| dir.join(TRAY_AGENT_PID_FILE))
+}
+
+#[cfg(unix)]
+fn pid_alive(pid: i32) -> bool {
+    // 信号 0 仅探测进程存在性，不会实际发送信号
+    unsafe { libc::kill(pid, 0) == 0 }
+}
+
+/// 脱离启动托盘代理进程（GUI 启动时确保其在运行）：
+/// 托盘图标由代理全程独占持有，GUI 退出时图标不消失不闪烁
+#[cfg(unix)]
+fn spawn_tray_agent(app_handle: &tauri::AppHandle) {
+    let Ok(exe) = std::env::current_exe() else { return; };
+    let Some(exe_str) = exe.to_str() else { return; };
+
+    // 已有存活代理时不重复启动
+    if let Some(pid_path) = tray_agent_pid_path(app_handle) {
+        if let Ok(content) = std::fs::read_to_string(&pid_path) {
+            if let Ok(pid) = content.trim().parse::<i32>() {
+                if pid > 0 && pid_alive(pid) {
+                    return;
+                }
+            }
+        }
+        // PID 文件缺失：清理可能残留的旧版本代理进程（旧二进制会自建托盘，
+        // 与新代理并存会出现重复图标），再重新拉起。
+        // 按进程名枚举同名进程，逐个校验 MXRAY_TRAY_MODE 环境变量，
+        // 避免误杀 GUI 自身与特权 helper
+        let exe_name = exe.file_name().and_then(|n| n.to_str()).unwrap_or("mxray");
+        let self_pid = std::process::id() as i32;
+        let gui_pid = app_handle
+            .path()
+            .app_data_dir()
+            .ok()
+            .and_then(|dir| std::fs::read_to_string(dir.join(GUI_PID_FILE_NAME)).ok())
+            .and_then(|c| c.trim().parse::<i32>().ok());
+        if let Ok(out) = std::process::Command::new("pgrep")
+            .args(["-x", exe_name])
+            .output()
+        {
+            for token in String::from_utf8_lossy(&out.stdout).split_whitespace() {
+                if let Ok(pid) = token.parse::<i32>() {
+                    if pid == self_pid || Some(pid) == gui_pid {
+                        continue;
+                    }
+                    // macOS 的 ps eww 会输出进程环境变量
+                    if let Ok(ps) = std::process::Command::new("ps")
+                        .args(["eww", "-p", token])
+                        .output()
+                    {
+                        if String::from_utf8_lossy(&ps.stdout).contains("MXRAY_TRAY_MODE=") {
+                            unsafe { libc::kill(pid, libc::SIGTERM); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 前置变量赋值使代理进程进入 MXRAY_TRAY_MODE；GUI 自身环境不含该变量，无需 env -u
+    let cmd = format!(
+        "MXRAY_TRAY_MODE=1 nohup {} >/dev/null 2>&1 &",
+        shell_quote(exe_str)
+    );
+    let _ = std::process::Command::new("sh").args(["-c", &cmd]).output();
+}
+
 #[tauri::command]
 fn get_core_version() -> String {
     let info = kernel::detect_bundled_kernel_version_pub();
@@ -62,6 +165,66 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::AppleScript, None))
+        .setup(|app| {
+            // dev 模式：前端页面由 vite 开发服务器提供。关闭窗口会使
+            // pnpm tauri dev 会话连同 vite 一起终止，此后托盘再拉起 GUI
+            // 将白屏——启动时探测服务可达性，不可达则提示并退出
+            if let Some(tauri::utils::config::FrontendDist::Url(url)) =
+                &app.config().build.frontend_dist
+            {
+                let reachable = url.host_str().map(|host| {
+                    let port = url.port_or_known_default().unwrap_or(80);
+                    format!("{}:{}", host, port)
+                        .to_socket_addrs()
+                        .ok()
+                        .and_then(|mut addrs| addrs.next())
+                        .and_then(|addr| {
+                            std::net::TcpStream::connect_timeout(
+                                &addr,
+                                std::time::Duration::from_secs(2),
+                            )
+                            .ok()
+                        })
+                        .is_some()
+                });
+                if !reachable.unwrap_or(false) {
+                    use tauri_plugin_dialog::DialogExt;
+                    app.dialog()
+                        .message(
+                            "无法连接前端开发服务器，界面将无法渲染。\
+                             关闭窗口后 pnpm tauri dev 会话会随之终止，\
+                             请重新执行 pnpm tauri dev，\
+                             或使用 pnpm tauri build 打包后测试托盘流程。",
+                        )
+                        .title("MXray 开发模式")
+                        .blocking_show();
+                    std::process::exit(1);
+                }
+            }
+
+            // 从磁盘恢复“退出时保持内核后台运行”开关到内存，并写入 GUI PID
+            if let Ok(app_dir) = app.path().app_data_dir() {
+                kernel::init_keep_alive_pref(&app_dir);
+                let _ = std::fs::create_dir_all(&app_dir);
+                let _ = std::fs::write(
+                    app_dir.join(GUI_PID_FILE_NAME),
+                    std::process::id().to_string(),
+                );
+            }
+
+            // 托盘图标由托盘代理进程全程独占持有：GUI 启动时确保代理在运行，
+            // 关闭窗口（GUI 退出）时图标不会消失或闪烁
+            #[cfg(unix)]
+            spawn_tray_agent(app.handle());
+
+            // 接管已在后台运行的内核（保活模式残留）：附着运行时日志，
+            // 否则本进程未启动过内核，日志页将无任何输出
+            if kernel::xray_process_alive() {
+                kernel::attach_runtime_log_tail(app.handle().clone());
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_core_version,
             parse_subscription_link,
@@ -79,6 +242,9 @@ pub fn run() {
             kernel::test_node_latency,
             kernel::generate_vless_encryption,
             kernel::generate_uuid,
+            kernel::set_keep_kernel_alive,
+            kernel::get_keep_kernel_alive,
+            kernel::get_recent_runtime_logs,
             sysproxy::set_system_proxy,
             sysproxy::get_system_proxy_status,
             write_text_file,
@@ -87,12 +253,23 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|_app_handle, event| match event {
-        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-            let _ = kernel::stop_kernel();
+    app.run(|_app_handle, event| {
+        // 退出时清理 GUI PID 文件（托盘代理据此判断是否需要拉起新 GUI）
+        if matches!(event, tauri::RunEvent::Exit) {
+            if let Ok(app_dir) = _app_handle.path().app_data_dir() {
+                let _ = std::fs::remove_file(app_dir.join(GUI_PID_FILE_NAME));
+            }
+        }
+        if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+            // 保活开关开启时：不停止内核、不关闭系统代理，
+            // Xray 以脱离/托管进程形态继续后台运行（macOS 为 nohup 脱离启动或
+            // 特权 helper 托管，Windows 子进程随主程序退出后继续存活）
+            if kernel::keep_kernel_alive_on_exit() {
+                return;
+            }
+            let _ = kernel::stop_kernel(_app_handle.clone());
             let _ = sysproxy::set_system_proxy(_app_handle.clone(), false, None, None);
         }
-        _ => {}
     });
 }
 

@@ -23,7 +23,8 @@ interface KernelStore {
   selectCustomPath: (path: string) => Promise<boolean>;
   installRelease: (release: RemoteRelease) => Promise<void>;
   toggleStandaloneKernel: () => void;
-  toggleKeepKernelAliveOnExit: () => void;
+  toggleKeepKernelAliveOnExit: () => Promise<void>;
+  syncKeepKernelAliveOnExit: () => Promise<void>;
   toggleAutoStartKernelDaemon: () => void;
 }
 
@@ -34,6 +35,8 @@ const DEFAULT_BUNDLED_KERNEL: KernelInfo = {
   kernel_type: 'bundled',
   is_valid: true,
 };
+
+const KEEP_ALIVE_STORAGE_KEY = 'mxray.keepKernelAliveOnExit';
 
 export const useKernelStore = create<KernelStore>((set, get) => ({
   activeKernel: DEFAULT_BUNDLED_KERNEL,
@@ -125,8 +128,42 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
 
   toggleStandaloneKernel: () =>
     set((state) => ({ standaloneKernel: !state.standaloneKernel })),
-  toggleKeepKernelAliveOnExit: () =>
-    set((state) => ({ keepKernelAliveOnExit: !state.keepKernelAliveOnExit })),
+
+  // 切换“退出时保持内核后台运行”：同时写入 localStorage 与 Rust 后端持久化
+  toggleKeepKernelAliveOnExit: async () => {
+    const next = !get().keepKernelAliveOnExit;
+    set({ keepKernelAliveOnExit: next });
+    try {
+      localStorage.setItem(KEEP_ALIVE_STORAGE_KEY, next ? 'true' : 'false');
+    } catch {
+      // localStorage 不可用时忽略（Web 环境）
+    }
+    try {
+      await invoke('set_keep_kernel_alive', { enabled: next });
+    } catch (e) {
+      console.warn('同步保活开关到后端失败:', e);
+    }
+  },
+
+  // 应用启动时以后端持久化状态为准恢复开关（Web 环境回退 localStorage）
+  syncKeepKernelAliveOnExit: async () => {
+    try {
+      const enabled = await invoke<boolean>('get_keep_kernel_alive');
+      set({ keepKernelAliveOnExit: enabled });
+      try {
+        localStorage.setItem(KEEP_ALIVE_STORAGE_KEY, enabled ? 'true' : 'false');
+      } catch {
+        // ignore
+      }
+    } catch {
+      try {
+        set({ keepKernelAliveOnExit: localStorage.getItem(KEEP_ALIVE_STORAGE_KEY) === 'true' });
+      } catch {
+        // ignore
+      }
+    }
+  },
+
   toggleAutoStartKernelDaemon: () =>
     set((state) => ({ autoStartKernelDaemon: !state.autoStartKernelDaemon })),
 }));
