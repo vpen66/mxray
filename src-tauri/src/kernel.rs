@@ -362,140 +362,6 @@ pub async fn install_kernel(
     Ok(info)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeoDataFileInfo {
-    pub name: String,
-    pub exists: bool,
-    pub size_bytes: u64,
-    pub updated_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeoDataStatus {
-    pub geoip: GeoDataFileInfo,
-    pub geosite: GeoDataFileInfo,
-    pub asset_dir: String,
-}
-
-fn inspect_file_info(name: &str, path: &Path) -> GeoDataFileInfo {
-    if path.exists() {
-        let metadata = fs::metadata(path).ok();
-        let size_bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
-        let updated_at = metadata
-            .and_then(|m| m.modified().ok())
-            .map(|t| {
-                if let Ok(duration) = t.duration_since(std::time::UNIX_EPOCH) {
-                    let secs = duration.as_secs();
-                    format!("Epoch {}", secs)
-                } else {
-                    "已更新".to_string()
-                }
-            });
-
-        GeoDataFileInfo {
-            name: name.to_string(),
-            exists: true,
-            size_bytes,
-            updated_at,
-        }
-    } else {
-        GeoDataFileInfo {
-            name: name.to_string(),
-            exists: false,
-            size_bytes: 0,
-            updated_at: None,
-        }
-    }
-}
-
-#[tauri::command]
-pub fn get_geodata_info(app_handle: tauri::AppHandle) -> Result<GeoDataStatus, String> {
-    let app_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
-
-    let geo_dir = app_dir.join("geodata");
-    let geoip_path = geo_dir.join("geoip.dat");
-    let geosite_path = geo_dir.join("geosite.dat");
-
-    Ok(GeoDataStatus {
-        geoip: inspect_file_info("geoip.dat", &geoip_path),
-        geosite: inspect_file_info("geosite.dat", &geosite_path),
-        asset_dir: geo_dir.to_str().unwrap_or_default().to_string(),
-    })
-}
-
-#[tauri::command]
-pub async fn update_geodata(
-    app_handle: tauri::AppHandle,
-    source: Option<String>,
-) -> Result<GeoDataStatus, String> {
-    let app_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
-
-    let geo_dir = app_dir.join("geodata");
-    fs::create_dir_all(&geo_dir).map_err(|e| format!("创建 GeoData 目录失败: {}", e))?;
-
-    let base_url = match source.as_deref() {
-        Some("v2fly") => "https://github.com/v2fly/geoip/releases/latest/download",
-        _ => "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
-    };
-
-    let geoip_url = if source.as_deref() == Some("v2fly") {
-        "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat".to_string()
-    } else {
-        format!("{}/geoip.dat", base_url)
-    };
-
-    let geosite_url = if source.as_deref() == Some("v2fly") {
-        "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat".to_string()
-    } else {
-        format!("{}/geosite.dat", base_url)
-    };
-
-    let client = reqwest::Client::builder()
-        .user_agent("MXray-Desktop/1.0")
-        .build()
-        .map_err(|e| format!("HTTP 客户端初始化失败: {}", e))?;
-
-    // Download geoip.dat
-    if let Ok(resp) = client.get(&geoip_url).send().await {
-        if resp.status().is_success() {
-            if let Ok(bytes) = resp.bytes().await {
-                let _ = fs::write(geo_dir.join("geoip.dat"), &bytes);
-            }
-        }
-    }
-
-    // Download geosite.dat
-    if let Ok(resp) = client.get(&geosite_url).send().await {
-        if resp.status().is_success() {
-            if let Ok(bytes) = resp.bytes().await {
-                let _ = fs::write(geo_dir.join("geosite.dat"), &bytes);
-            }
-        }
-    }
-
-    // Sync to active core directories if available
-    let cores_dir = app_dir.join("cores");
-    if cores_dir.exists() && cores_dir.is_dir() {
-        if let Ok(entries) = fs::read_dir(&cores_dir) {
-            for entry in entries.flatten() {
-                let sub_path = entry.path();
-                if sub_path.is_dir() {
-                    let _ = fs::copy(geo_dir.join("geoip.dat"), sub_path.join("geoip.dat"));
-                    let _ = fs::copy(geo_dir.join("geosite.dat"), sub_path.join("geosite.dat"));
-                }
-            }
-        }
-    }
-
-    get_geodata_info(app_handle)
-}
-
 pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle) -> Result<String, String> {
     if let Some(p) = custom_path {
         if !p.is_empty() && p != "bundled" && Path::new(p).exists() {
@@ -577,6 +443,159 @@ fn apple_script_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+#[cfg(target_os = "macos")]
+const TUN_HELPER_LABEL: &str = "net.mxray.app.helper";
+#[cfg(target_os = "macos")]
+const TUN_HELPER_INSTALL_PATH: &str = "/Library/Application Support/MXray/mxray-helper";
+#[cfg(target_os = "macos")]
+const TUN_HELPER_SOCKET: &str = "/var/run/mxray-helper.sock";
+#[cfg(target_os = "macos")]
+const TUN_MANIFEST_PATH: &str = "/Users/Shared/mxray-tun.json";
+
+#[cfg(target_os = "macos")]
+fn macos_xray_running() -> bool {
+    Command::new("pgrep")
+        .arg("-x")
+        .arg("xray")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// 定位应用附带的 mxray-helper 可执行文件（开发目录或 .app 包内）
+#[cfg(target_os = "macos")]
+fn locate_helper_binary() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    // 开发环境：与主程序同目录（target/debug 或 target/release）
+    let candidates = [
+        exe.parent()?.join("mxray-helper"),
+        // .app 包内：Contents/Resources 与 Contents/MacOS
+        exe.parent()?.join("../Resources/mxray-helper"),
+        exe.parent()?.join("../MacOS/mxray-helper"),
+    ];
+    candidates
+        .iter()
+        .find(|p| p.exists())
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+/// 向特权 helper 守护进程发送指令（start / stop / status）并读取响应。
+/// helper 以 root 常驻运行，因此启停内核无需任何密码。
+#[cfg(target_os = "macos")]
+fn tun_helper_command(cmd: &str) -> Result<String, String> {
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
+
+    let mut stream = UnixStream::connect(TUN_HELPER_SOCKET)
+        .map_err(|e| format!("无法连接特权守护进程: {}", e))?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .ok();
+    stream
+        .write_all(cmd.as_bytes())
+        .map_err(|e| format!("发送指令失败: {}", e))?;
+    let mut resp = String::new();
+    stream
+        .read_to_string(&mut resp)
+        .map_err(|e| format!("读取响应失败: {}", e))?;
+    Ok(resp)
+}
+
+/// 确保特权 helper 守护进程已安装并加载。
+/// 首次安装需要一次管理员密码，此后每次启停内核均不再需要密码。
+#[cfg(target_os = "macos")]
+fn ensure_tun_helper(app_dir: &Path) -> Result<(), String> {
+    let already_loaded = Command::new("launchctl")
+        .args(["print", &format!("system/{}", TUN_HELPER_LABEL)])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if already_loaded && Path::new(TUN_HELPER_INSTALL_PATH).exists() {
+        return Ok(());
+    }
+
+    let helper_src = locate_helper_binary()
+        .ok_or_else(|| "未找到 mxray-helper 特权助手程序".to_string())?;
+
+    // 生成 launchd 守护配置（应用数据目录内，无需特权）
+    let plist_local = app_dir.join("mxray_helper.plist");
+    let plist_content = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{bin}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+"#,
+        label = TUN_HELPER_LABEL,
+        bin = TUN_HELPER_INSTALL_PATH,
+    );
+    fs::write(&plist_local, &plist_content)
+        .map_err(|e| format!("写入守护进程配置失败: {}", e))?;
+
+    // 一次管理员授权：安装 helper 二进制与 launchd 服务
+    let install_cmd = format!(
+        "mkdir -p '/Library/Application Support/MXray' && cp {} {} && chmod 755 {} && cp {} /Library/LaunchDaemons/{label}.plist && launchctl bootout system/{label} 2>/dev/null || true; launchctl bootstrap system /Library/LaunchDaemons/{label}.plist",
+        shell_quote(&helper_src),
+        TUN_HELPER_INSTALL_PATH,
+        TUN_HELPER_INSTALL_PATH,
+        shell_quote(plist_local.to_str().unwrap_or_default()),
+        label = TUN_HELPER_LABEL,
+    );
+    let script = format!(
+        "do shell script \"{}\" with administrator privileges",
+        apple_script_escape(&install_cmd)
+    );
+
+    let out = Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .output()
+        .map_err(|e| format!("安装特权守护进程失败: {}", e))?;
+
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("安装特权守护进程被取消或失败: {}", stderr.trim()));
+    }
+
+    // 等待 helper 启动并监听 socket
+    for _ in 0..20 {
+        if std::path::Path::new(TUN_HELPER_SOCKET).exists() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+    Ok(())
+}
+
+/// 将本次启动所需的内核信息写入共享清单，供 root 权限的 helper 读取并启动 xray。
+#[cfg(target_os = "macos")]
+fn write_tun_manifest(bin_path: &str, config_path: &str, log_path: &str) -> Result<(), String> {
+    let manifest = serde_json::json!({
+        "bin": bin_path,
+        "config": config_path,
+        "log": log_path,
+    });
+    std::fs::write(TUN_MANIFEST_PATH, manifest.to_string())
+        .map_err(|e| format!("写入内核清单失败: {}", e))
+}
+
+/// 停止 TUN 内核：由常驻的 root 权限 helper 终止 xray 进程，无需密码。
+#[cfg(target_os = "macos")]
+fn stop_kernel_via_helper() -> bool {
+    tun_helper_command("stop").map(|r| r.starts_with("ok")).unwrap_or(false)
+}
+
 fn tail_log_file(path: std::path::PathBuf, app_handle: tauri::AppHandle, generation: u64) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(300));
@@ -625,12 +644,11 @@ pub fn stop_kernel() -> Result<(), String> {
     {
         // macOS: 先尝试无需管理员权限终止（普通代理模式 xray 以当前用户运行）
         let _ = Command::new("pkill").arg("-x").arg("xray").output();
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        // 若进程仍在运行（TUN 模式以 root 运行），则通过 osascript 管理员权限终止
-        let still_alive = Command::new("pgrep").arg("-x").arg("xray").output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-        if still_alive {
+        // 通过常驻的 root 权限 helper 终止 TUN 内核，无需密码
+        let _ = stop_kernel_via_helper();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        // 兜底：仅当存在不受 helper 管理的残留进程（如旧版本遗留）时才请求管理员权限
+        if macos_xray_running() {
             let kill_script = "do shell script \"pkill -x xray || true\" with administrator privileges";
             let _ = Command::new("osascript").arg("-e").arg(kill_script).output();
         }
@@ -678,26 +696,22 @@ pub fn start_kernel(
     #[cfg(target_os = "macos")]
     {
         if is_tun_enabled {
-            // TUN 模式：需要 root 权限创建虚拟网卡，使用 osascript 弹出系统密码框
+            // TUN 模式：通过常驻的 root 权限 helper 守护进程启动内核。
+            // 首次安装 helper 需要一次管理员密码，之后每次启停内核均无需密码。
             let log_path = app_dir.join("xray_runtime.log");
             fs::write(&log_path, "").ok();
 
-            let shell_cmd = format!(
-                "{} run -config {} >> {} 2>&1 &",
-                shell_quote(&bin_path),
-                shell_quote(config_file_path.to_str().unwrap_or_default()),
-                shell_quote(log_path.to_str().unwrap_or_default()),
-            );
-            let script = format!(
-                "do shell script \"{}\" with administrator privileges",
-                apple_script_escape(&shell_cmd)
-            );
-
-            Command::new("osascript")
-                .arg("-e")
-                .arg(&script)
-                .output()
-                .map_err(|e| format!("管理员授权启动内核失败: {}", e))?;
+            write_tun_manifest(
+                &bin_path,
+                config_file_path.to_str().unwrap_or_default(),
+                log_path.to_str().unwrap_or_default(),
+            )?;
+            ensure_tun_helper(&app_dir)?;
+            let resp = tun_helper_command("start")
+                .map_err(|e| format!("启动内核失败: {}", e))?;
+            if !resp.starts_with("ok") {
+                return Err(format!("启动内核失败: {}", resp.trim()));
+            }
 
             tail_log_file(log_path, app_handle.clone(), generation);
         } else {

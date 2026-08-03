@@ -12,8 +12,6 @@ interface ConfigStore {
   socksPort: number;
   httpPort: number;
   dnsStrategy: string;
-  enableFakeDns: boolean;
-  sniffingEnabled: boolean;
   
   // Actions
   addProfile: (data: { name: string; description: string; content: string }) => string;
@@ -24,25 +22,206 @@ interface ConfigStore {
   setSelectedProfileId: (id: string) => void;
   updatePorts: (socks: number, http: number) => void;
   setDnsStrategy: (strategy: string) => void;
-  toggleFakeDns: () => void;
-  toggleSniffing: () => void;
   startActiveKernel: () => Promise<void>;
 }
 
 
-const INITIAL_PROFILES: XrayConfigProfile[] = [];
+export const TEMPLATE_DEFAULT = `{
+  "log": {
+    "loglevel": "info"
+  },
+  "dns": {
+    "hosts": {
+      "domain:googleapis.cn": "googleapis.com",
+      "full:localhost.weixin.qq.com": "127.0.0.1"
+    },
+    "servers": [
+      {
+        "address": "223.5.5.5",
+        "port": 53,
+        "domains": [
+          "geosite:cn"
+        ],
+        "expectIPs": [
+          "geoip:cn",
+          "geoip:private"
+        ],
+        "skipFallback": true,
+        "tag": "dns-direct"
+      },
+      {
+        "address": "https://1.1.1.1/dns-query",
+        "domains": [
+          "geosite:geolocation-!cn"
+        ],
+        "tag": "dns-proxy"
+      }
+    ],
+    "queryStrategy": "UseIPv4",
+    "disableCache": false,
+    "disableFallback": false,
+    "disableFallbackIfMatch": true,
+    "enableParallelQuery": false,
+    "useSystemHosts": true
+  },
+  "inbounds": [
+    {
+      "tag": "tun-in",
+      "protocol": "tun",
+      "settings": {
+        "name": "utun20",
+        "mtu": 1500,
+        "gateway": [
+          "169.254.10.1/30"
+        ],
+        "userLevel": 0,
+        "autoSystemRoutingTable": [
+          "0.0.0.0/0"
+        ],
+        "autoOutboundsInterface": "auto"
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": false
+      }
+    },
+    {
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "port": 7890,
+      "protocol": "mixed",
+      "settings": {
+        "auth": "noauth",
+        "udp": true
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {
+        "domainStrategy": "UseIP"
+      }
+    },
+    {
+      "tag": "dns-out",
+      "protocol": "dns",
+      "settings": {}
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole",
+      "settings": {
+        "response": {
+          "type": "http"
+        }
+      }
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "domainMatcher": "mph",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "dns-direct"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "tun-in"
+        ],
+        "network": "tcp,udp",
+        "port": "53",
+        "outboundTag": "dns-out"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:category-ads-all"
+        ],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:private",
+          "geosite:cn"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "geoip:cn"
+        ],
+        "outboundTag": "direct"
+      }
+    ]
+  },
+  "policy": {
+    "levels": {
+      "0": {
+        "handshake": 4,
+        "connIdle": 300,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5
+      }
+    },
+    "system": {
+      "statsInboundUplink": false,
+      "statsInboundDownlink": false,
+      "statsOutboundUplink": false,
+      "statsOutboundDownlink": false
+    }
+  }
+}`;
+
+const INITIAL_PROFILES: XrayConfigProfile[] = [
+  {
+    id: 'cfg-default',
+    name: '默认配置',
+    description: 'TUN 透明代理 + Mixed 混合入站，国内外分流',
+    content: TEMPLATE_DEFAULT,
+    updatedAt: '2026-07-31 00:00',
+    isDefault: true,
+  },
+];
 
 export const useConfigStore = create<ConfigStore>()(
   persist(
     (set, get) => ({
       profiles: INITIAL_PROFILES,
-      activeProfileId: '',
-      selectedProfileId: '',
+      activeProfileId: 'cfg-default',
+      selectedProfileId: 'cfg-default',
       socksPort: 7890,
       httpPort: 7891,
       dnsStrategy: 'IPIfNonMatch',
-      enableFakeDns: true,
-      sniffingEnabled: true,
 
       addProfile: ({ name, description, content }) => {
         const newId = `cfg-${Date.now()}`;
@@ -128,8 +307,6 @@ export const useConfigStore = create<ConfigStore>()(
         }
       },
       setDnsStrategy: (strategy) => set({ dnsStrategy: strategy }),
-      toggleFakeDns: () => set((state) => ({ enableFakeDns: !state.enableFakeDns })),
-      toggleSniffing: () => set((state) => ({ sniffingEnabled: !state.sniffingEnabled })),
 
       startActiveKernel: async () => {
         const state = get();

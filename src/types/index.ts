@@ -62,19 +62,3 @@ export interface RemoteRelease {
   download_url: string;
 }
 
-export interface GeoDataFileInfo {
-  name: string;
-  exists: boolean;
-  size_bytes: number;
-  updated_at?: string;
-}
-
-export interface GeoDataStatus {
-  geoip: GeoDataFileInfo;
-  geosite: GeoDataFileInfo;
-  asset_dir: string;
-}
-
-
-
-

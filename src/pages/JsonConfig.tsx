@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { useConfigStore } from '../stores/useConfigStore';
+import { useConfigStore, TEMPLATE_DEFAULT } from '../stores/useConfigStore';
 import { useAppStore } from '../stores/useAppStore';
 import { ConfirmModal } from '../components/ConfirmModal';
 
@@ -117,7 +117,7 @@ export const JsonConfigPage: React.FC = () => {
 
   const [tocCollapsed, setTocCollapsed] = useState(false);
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
-  const [editorContent, setEditorContent] = useState<string>(selectedProfile?.content || '{}');
+  const [editorContent, setEditorContent] = useState<string>(selectedProfile?.content || TEMPLATE_DEFAULT);
   const setIsSaved = useState(true)[1];
   const [jsonError, setJsonError] = useState<string | null>(null);
 
@@ -188,6 +188,7 @@ export const JsonConfigPage: React.FC = () => {
   const [isNewProfileModalOpen, setIsNewProfileModalOpen] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileDesc, setNewProfileDesc] = useState('');
+  const [newProfileTemplate, setNewProfileTemplate] = useState<'default' | 'empty'>('default');
 
   // Confirm delete profile modal
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -261,15 +262,17 @@ export const JsonConfigPage: React.FC = () => {
 
   // Profile management handlers
   const handleCreateProfile = () => {
+    const content = newProfileTemplate === 'default' ? TEMPLATE_DEFAULT : '{}';
     const createdId = addProfile({
       name: newProfileName,
       description: newProfileDesc,
-      content: '{}',
+      content,
     });
     setSelectedProfileId(createdId);
     setIsNewProfileModalOpen(false);
     setNewProfileName('');
     setNewProfileDesc('');
+    setNewProfileTemplate('default');
   };
 
   // Available outbound options for routing rules
@@ -1006,6 +1009,34 @@ export const JsonConfigPage: React.FC = () => {
                 placeholder="描述此配置文件的应用场景..."
                 className="w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">初始模板</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'default' as const, name: '默认配置', desc: 'TUN + Mixed 入站，国内外分流' },
+                  { id: 'empty' as const, name: '空白配置', desc: '从零开始自定义' },
+                ].map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => setNewProfileTemplate(tpl.id)}
+                    className={`py-2.5 px-3 rounded-xl border text-left transition-all ${
+                      newProfileTemplate === tpl.id
+                        ? 'bg-blue-600/20 border-blue-500/40'
+                        : 'bg-slate-950/40 border-white/10 hover:bg-white/5'
+                    }`}
+                  >
+                    <div className={`text-xs font-medium ${
+                      newProfileTemplate === tpl.id ? 'text-blue-300' : 'text-slate-300'
+                    }`}>{tpl.name}</div>
+                    <div className={`text-[10px] mt-0.5 ${
+                      newProfileTemplate === tpl.id ? 'text-blue-400/70' : 'text-slate-500'
+                    }`}>{tpl.desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

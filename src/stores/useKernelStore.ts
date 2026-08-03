@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GeoDataStatus, KernelInfo, RemoteRelease } from '../types';
+import type { KernelInfo, RemoteRelease } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 
 interface KernelStore {
@@ -7,12 +7,10 @@ interface KernelStore {
   installedKernels: KernelInfo[];
   remoteReleases: RemoteRelease[];
   isLoadingReleases: boolean;
+  isLoadingKernels: boolean;
   isInstalling: boolean;
   installingVersion: string | null;
   error: string | null;
-
-  geoDataStatus: GeoDataStatus | null;
-  isUpdatingGeoData: boolean;
 
   // Standalone No-GUI Kernel Mode Settings
   standaloneKernel: boolean;
@@ -24,8 +22,6 @@ interface KernelStore {
   switchKernel: (kernel: KernelInfo) => void;
   selectCustomPath: (path: string) => Promise<boolean>;
   installRelease: (release: RemoteRelease) => Promise<void>;
-  fetchGeoDataInfo: () => Promise<void>;
-  updateGeoData: (source?: string) => Promise<void>;
   toggleStandaloneKernel: () => void;
   toggleKeepKernelAliveOnExit: () => void;
   toggleAutoStartKernelDaemon: () => void;
@@ -44,26 +40,26 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
   installedKernels: [],
   remoteReleases: [],
   isLoadingReleases: false,
+  isLoadingKernels: false,
   isInstalling: false,
   installingVersion: null,
   error: null,
-  geoDataStatus: null,
-  isUpdatingGeoData: false,
 
   standaloneKernel: false,
   keepKernelAliveOnExit: false,
   autoStartKernelDaemon: false,
 
   loadInstalledKernels: async () => {
+    set({ isLoadingKernels: true });
     try {
       const kernels = await invoke<KernelInfo[]>('list_installed_kernels');
       // 将 activeKernel 同步为列表中第一个有效内核（获取真实版本号）
       const currentActive = get().activeKernel;
       const matched = kernels.find((k) => k.path === currentActive.path) || kernels[0];
-      set({ installedKernels: kernels, activeKernel: matched || currentActive });
+      set({ installedKernels: kernels, activeKernel: matched || currentActive, isLoadingKernels: false });
     } catch {
       // Fallback in web / dev environment
-      set({ installedKernels: [DEFAULT_BUNDLED_KERNEL], activeKernel: DEFAULT_BUNDLED_KERNEL });
+      set({ installedKernels: [DEFAULT_BUNDLED_KERNEL], activeKernel: DEFAULT_BUNDLED_KERNEL, isLoadingKernels: false });
     }
   },
 
@@ -124,25 +120,6 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
       });
     } catch (err: any) {
       set({ isInstalling: false, installingVersion: null, error: err?.toString() || '安装内核失败' });
-    }
-  },
-
-  fetchGeoDataInfo: async () => {
-    try {
-      const status = await invoke<GeoDataStatus>('get_geodata_info');
-      set({ geoDataStatus: status });
-    } catch (err: any) {
-      set({ geoDataStatus: null, error: err?.toString() || '无法获取 GeoData 信息' });
-    }
-  },
-
-  updateGeoData: async (source?: string) => {
-    set({ isUpdatingGeoData: true, error: null });
-    try {
-      const status = await invoke<GeoDataStatus>('update_geodata', { source });
-      set({ geoDataStatus: status, isUpdatingGeoData: false });
-    } catch (err: any) {
-      set({ isUpdatingGeoData: false, error: err?.toString() || '更新 GeoData 失败' });
     }
   },
 

@@ -69,8 +69,6 @@ pub fn run() {
             kernel::list_installed_kernels,
             kernel::fetch_remote_releases,
             kernel::install_kernel,
-            kernel::get_geodata_info,
-            kernel::update_geodata,
             kernel::start_kernel,
             kernel::stop_kernel,
             kernel::get_kernel_status,

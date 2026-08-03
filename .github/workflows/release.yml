@@ -78,3 +78,16 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Bundle privileged helper into app bundle (macOS only)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          for app in src-tauri/target/*/release/bundle/macos/*.app; do
+            [ -d "$app" ] || continue
+            triple=$(echo "$app" | sed -E 's|src-tauri/target/([^/]+)/.*|\1|')
+            helper="src-tauri/target/$triple/release/mxray-helper"
+            if [ -f "$helper" ]; then
+              cp "$helper" "$app/Contents/Resources/mxray-helper"
+              chmod 755 "$app/Contents/Resources/mxray-helper"
+            fi
+          done

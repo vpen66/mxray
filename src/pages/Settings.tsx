@@ -1,22 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Shield, Cpu, HardDrive, Download, FolderOpen, CheckCircle, AlertCircle, RefreshCw, Globe, Database, Terminal, Copy, Check, Server, Zap, Sparkles } from 'lucide-react';
-import { useConfigStore } from '../stores/useConfigStore';
+import { Shield, HardDrive, Download, FolderOpen, CheckCircle, AlertCircle, RefreshCw, Terminal, Copy, Check, Server, Zap, Sparkles } from 'lucide-react';
 import { useKernelStore } from '../stores/useKernelStore';
 import { useUpdateStore } from '../stores/useUpdateStore';
 import { useAppStore } from '../stores/useAppStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { formatShanghaiTime } from '../utils/date';
 import { ToggleSwitch } from '../components/ToggleSwitch';
 
 export const SettingsPage: React.FC = () => {
   const { autoStartApp, isTogglingAutoStart, toggleAutoStartApp, checkAutoStartStatus } = useAppStore();
-  const { enableFakeDns, sniffingEnabled, toggleFakeDns, toggleSniffing } = useConfigStore();
   const {
     activeKernel,
     installedKernels,
     remoteReleases,
     isLoadingReleases,
+    isLoadingKernels,
     isInstalling,
     installingVersion,
     error,
@@ -25,10 +23,6 @@ export const SettingsPage: React.FC = () => {
     switchKernel,
     selectCustomPath,
     installRelease,
-    geoDataStatus,
-    isUpdatingGeoData,
-    fetchGeoDataInfo,
-    updateGeoData,
     standaloneKernel,
     keepKernelAliveOnExit,
     autoStartKernelDaemon,
@@ -55,15 +49,12 @@ export const SettingsPage: React.FC = () => {
   const [customPathInput, setCustomPathInput] = useState('');
   const [isDetecting, setIsDetecting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [geoSource, setGeoSource] = useState('Loyalsoldier');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadInstalledKernels();
-    fetchRemoteReleases();
-    fetchGeoDataInfo();
     checkAutoStartStatus();
-  }, [loadInstalledKernels, fetchRemoteReleases, fetchGeoDataInfo, checkAutoStartStatus]);
+  }, [loadInstalledKernels, checkAutoStartStatus]);
 
   useEffect(() => {
     const fetchCliInfo = async () => {
@@ -281,39 +272,52 @@ export const SettingsPage: React.FC = () => {
         {/* 1. Installed Kernel Switcher */}
         <div className="space-y-2">
           <label className="block text-xs font-semibold text-slate-300">选择已安装的内核</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {installedKernels.map((k, index) => {
-              const isSelected = activeKernel.path === k.path && activeKernel.version === k.version;
-              return (
-                <div
-                  key={index}
-                  onClick={() => switchKernel(k)}
-                  className={`cursor-pointer p-3 rounded-xl border text-xs transition-all flex items-center justify-between ${
-                    isSelected
-                      ? 'bg-blue-600/15 border-blue-500 text-white shadow-lg shadow-blue-500/10'
-                      : 'bg-slate-900/60 border-white/5 text-slate-300 hover:border-white/20'
-                  }`}
-                >
-                  <div className="space-y-0.5">
-                    <div className="font-semibold flex items-center gap-1.5">
-                      <span>{k.name}</span>
-                      <span className="text-[10px] px-1.5 py-0.2 bg-slate-800 border border-white/10 rounded text-slate-400">
-                        {k.kernel_type}
-                      </span>
+
+          {isLoadingKernels ? (
+            <div className="flex items-center justify-center py-6 text-xs text-slate-400 gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-slate-500" />
+              <span>正在检测系统中已安装的内核...</span>
+            </div>
+          ) : installedKernels.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 text-xs text-slate-500 gap-2">
+              <AlertCircle className="w-5 h-5 text-slate-600" />
+              <span>未检测到任何已安装的内核，请先在下方下载安装或指定本地路径</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {installedKernels.map((k, index) => {
+                const isSelected = activeKernel.path === k.path && activeKernel.version === k.version;
+                return (
+                  <div
+                    key={index}
+                    onClick={() => switchKernel(k)}
+                    className={`cursor-pointer p-3 rounded-xl border text-xs transition-all flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-blue-600/15 border-blue-500 text-white shadow-lg shadow-blue-500/10'
+                        : 'bg-slate-900/60 border-white/5 text-slate-300 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <span>{k.name}</span>
+                        <span className="text-[10px] px-1.5 py-0.2 bg-slate-800 border border-white/10 rounded text-slate-400">
+                          {k.kernel_type}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-mono text-slate-400 truncate max-w-[240px]">{k.path}</p>
                     </div>
-                    <p className="text-[11px] font-mono text-slate-400 truncate max-w-[240px]">{k.path}</p>
+                    {isSelected ? (
+                      <CheckCircle className="w-4 h-4 text-blue-400 shrink-0" />
+                    ) : (
+                      <button className="px-2 py-1 rounded bg-slate-800 text-[10px] text-slate-400 hover:text-white">
+                        切换
+                      </button>
+                    )}
                   </div>
-                  {isSelected ? (
-                    <CheckCircle className="w-4 h-4 text-blue-400 shrink-0" />
-                  ) : (
-                    <button className="px-2 py-1 rounded bg-slate-800 text-[10px] text-slate-400 hover:text-white">
-                      切换
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 2. Custom Path Selector */}
@@ -543,137 +547,6 @@ export const SettingsPage: React.FC = () => {
             <div className="p-3 bg-slate-950 rounded-xl border border-white/10 font-mono text-[11px] text-purple-300 break-all select-all">
               {cliCommand || `xray run -config "${runtimeConfigPath || 'runtime_config.json'}"`}
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Geo Database Management Card */}
-      <div className="glass-card p-6 rounded-2xl space-y-5 border border-white/10 bg-slate-900/40">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
-          <div className="flex items-center gap-2">
-            <Globe className="w-5 h-5 text-cyan-400" />
-            <h3 className="text-base font-bold text-white">Geo 数据库与规则库管理</h3>
-          </div>
-
-          <button
-            onClick={() => updateGeoData(geoSource)}
-            disabled={isUpdatingGeoData}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-cyan-600/20 transition-all cursor-pointer self-start sm:self-auto"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isUpdatingGeoData ? 'animate-spin' : ''}`} />
-            <span>{isUpdatingGeoData ? '正在在线下载规则库...' : '一键更新 Geo 规则库'}</span>
-          </button>
-        </div>
-
-        <div className="space-y-4 text-xs">
-          {/* Geo Source Switcher */}
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/60 p-3 rounded-xl border border-white/5">
-            <span className="text-slate-400 font-medium">规则数据库源 (GitHub Release)</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setGeoSource('Loyalsoldier')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  geoSource === 'Loyalsoldier' ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Loyalsoldier 增强库 (推荐)
-              </button>
-              <button
-                type="button"
-                onClick={() => setGeoSource('v2fly')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  geoSource === 'v2fly' ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                v2fly 官方社区库
-              </button>
-            </div>
-          </div>
-
-          {/* Geo Files Info Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* geoip.dat */}
-            <div className="p-4 rounded-xl border border-white/5 bg-slate-950/50 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-blue-400" />
-                  <span className="font-bold text-white">geoip.dat (IP 地址库)</span>
-                </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold">
-                  {geoDataStatus?.geoip.size_bytes
-                    ? `${(geoDataStatus.geoip.size_bytes / 1024 / 1024).toFixed(2)} MB`
-                    : '未下载'}
-                </span>
-              </div>
-              <div className="text-[11px] text-slate-400 space-y-1 font-mono">
-                <p>最后更新: {geoDataStatus?.geoip.updated_at ? formatShanghaiTime(geoDataStatus.geoip.updated_at) : '暂无数据'}</p>
-                <p className="text-[10px] text-slate-500 truncate">包含全球 IP 划分、大陆 IP (`geoip:cn`) 与局域网段</p>
-              </div>
-            </div>
-
-            {/* geosite.dat */}
-            <div className="p-4 rounded-xl border border-white/5 bg-slate-950/50 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-emerald-400" />
-                  <span className="font-bold text-white">geosite.dat (域名分类库)</span>
-                </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
-                  {geoDataStatus?.geosite.size_bytes
-                    ? `${(geoDataStatus.geosite.size_bytes / 1024 / 1024).toFixed(2)} MB`
-                    : '未下载'}
-                </span>
-              </div>
-              <div className="text-[11px] text-slate-400 space-y-1 font-mono">
-                <p>最后更新: {geoDataStatus?.geosite.updated_at ? formatShanghaiTime(geoDataStatus.geosite.updated_at) : '暂无数据'}</p>
-                <p className="text-[10px] text-slate-500 truncate">包含国内常用网站 (`geosite:cn`)、GFW 列表及各类服务规则</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Location info */}
-          <div className="text-[11px] text-slate-500 font-mono bg-slate-950/30 p-2.5 rounded-lg border border-white/5 flex items-center justify-between">
-            <span>存储与资产目录:</span>
-            <span className="text-slate-400 truncate max-w-[320px] sm:max-w-[450px]">
-              {geoDataStatus?.asset_dir || '$APP_DATA/geodata/'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* DNS & FakeDNS */}
-      <div className="glass-card p-6 rounded-2xl space-y-4 border border-white/10">
-        <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-          <Cpu className="w-5 h-5 text-cyan-400" />
-          <h3 className="text-base font-bold text-white">Xray DNS 与 流量嗅探</h3>
-        </div>
-
-        <div className="space-y-4 text-xs">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-bold text-white">开启 FakeDNS 域名解析池</h4>
-              <p className="text-slate-400">使用 198.18.0.0/15 地址池接管 TUN 与操作系统 DNS 流量</p>
-            </div>
-            <ToggleSwitch
-              checked={enableFakeDns}
-              onChange={toggleFakeDns}
-              activeColor="blue"
-              ariaLabel="开启 FakeDNS 域名解析池"
-            />
-          </div>
-
-          <div className="flex items-center justify-between border-t border-white/5 pt-3">
-            <div>
-              <h4 className="font-bold text-white">开启入站流量嗅探</h4>
-              <p className="text-slate-400">基于 HTTP/TLS/QUIC 嗅探真实的域名目标，防御 DNS 污染</p>
-            </div>
-            <ToggleSwitch
-              checked={sniffingEnabled}
-              onChange={toggleSniffing}
-              activeColor="blue"
-              ariaLabel="开启入站流量嗅探"
-            />
           </div>
         </div>
       </div>
