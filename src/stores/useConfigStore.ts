@@ -4,6 +4,7 @@ import type { XrayConfigProfile } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { getShanghaiNowString } from '../utils/date';
 import { useAppStore } from './useAppStore';
+import { stripDisabledRoutingRules } from '../utils/configSectionHelper';
 
 interface ConfigStore {
   profiles: XrayConfigProfile[];
@@ -312,23 +313,12 @@ export const useConfigStore = create<ConfigStore>()(
         const state = get();
         const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0];
         if (activeProfile && activeProfile.content) {
-          try {
-            const config = JSON.parse(activeProfile.content);
+          // Build runtime config: only filter out disabled routing rules
+          // (Xray doesn't understand the `enabled` field, so we must strip disabled rules).
+          // 在原始文本层面过滤，避免 JSON.parse/stringify 打乱字段顺序
+          const runtimeConfigJson = stripDisabledRoutingRules(activeProfile.content);
 
-            // Build runtime config: only filter out disabled routing rules
-            // (Xray doesn't understand the `enabled` field, so we must strip disabled rules)
-            const runtimeConfig = { ...config };
-            if (runtimeConfig.routing?.rules && Array.isArray(runtimeConfig.routing.rules)) {
-              runtimeConfig.routing = {
-                ...runtimeConfig.routing,
-                rules: runtimeConfig.routing.rules.filter((r: any) => r.enabled !== false),
-              };
-            }
-
-            await invoke('start_kernel', { configJson: JSON.stringify(runtimeConfig, null, 2) });
-          } catch {
-            // Web / mock environment fallback
-          }
+          await invoke('start_kernel', { configJson: runtimeConfigJson });
         }
       },
     }),

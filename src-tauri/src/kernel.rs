@@ -462,38 +462,51 @@ fn macos_xray_running() -> bool {
         .unwrap_or(false)
 }
 
-/// 定位应用附带的 mxray-helper 可执行文件（开发目录或 .app 包内）
+/// 定位特权助手可执行文件：即主程序二进制自身
+/// （开发环境为 target/debug/mxray，打包后为 .app 内主程序）
 #[cfg(target_os = "macos")]
 fn locate_helper_binary() -> Option<String> {
-    let exe = std::env::current_exe().ok()?;
-    // 开发环境：与主程序同目录（target/debug 或 target/release）
-    let candidates = [
-        exe.parent()?.join("mxray-helper"),
-        // .app 包内：Contents/Resources 与 Contents/MacOS
-        exe.parent()?.join("../Resources/mxray-helper"),
-        exe.parent()?.join("../MacOS/mxray-helper"),
-    ];
-    candidates
-        .iter()
-        .find(|p| p.exists())
+    std::env::current_exe()
+        .ok()
         .map(|p| p.to_string_lossy().to_string())
+        .filter(|p| Path::new(p).exists())
 }
 
 /// 向特权 helper 守护进程发送指令（start / stop / status）并读取响应。
 /// helper 以 root 常驻运行，因此启停内核无需任何密码。
+/// 带重试：守护进程刚（重新）启动时 socket 可能尚未就绪。
 #[cfg(target_os = "macos")]
 fn tun_helper_command(cmd: &str) -> Result<String, String> {
+    let mut last_err = String::new();
+    for _ in 0..10 {
+        match tun_helper_command_once(cmd) {
+            Ok(resp) => return Ok(resp),
+            Err(e) => {
+                last_err = e;
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+        }
+    }
+    Err(last_err)
+}
+
+#[cfg(target_os = "macos")]
+fn tun_helper_command_once(cmd: &str) -> Result<String, String> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
 
     let mut stream = UnixStream::connect(TUN_HELPER_SOCKET)
         .map_err(|e| format!("无法连接特权守护进程: {}", e))?;
     stream
-        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .set_read_timeout(Some(std::time::Duration::from_secs(8)))
         .ok();
     stream
         .write_all(cmd.as_bytes())
         .map_err(|e| format!("发送指令失败: {}", e))?;
+    // 必须关闭写端发出 EOF，否则 helper 的 read_to_string 会一直阻塞不返回响应
+    stream
+        .shutdown(std::net::Shutdown::Write)
+        .map_err(|e| format!("关闭写端失败: {}", e))?;
     let mut resp = String::new();
     stream
         .read_to_string(&mut resp)
@@ -501,8 +514,21 @@ fn tun_helper_command(cmd: &str) -> Result<String, String> {
     Ok(resp)
 }
 
+/// 计算文件 SHA-256，用于比对已安装的 helper 与当前主程序是否一致
+#[cfg(target_os = "macos")]
+fn file_sha256(path: &str) -> Option<String> {
+    let out = Command::new("shasum").args(["-a", "256", path]).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .next()
+        .map(|s| s.to_string())
+}
+
 /// 确保特权 helper 守护进程已安装并加载。
-/// 首次安装需要一次管理员密码，此后每次启停内核均不再需要密码。
+/// 首次安装或 helper 版本更新时需要一次管理员密码，此后每次启停内核均不再需要密码。
 #[cfg(target_os = "macos")]
 fn ensure_tun_helper(app_dir: &Path) -> Result<(), String> {
     let already_loaded = Command::new("launchctl")
@@ -510,14 +536,23 @@ fn ensure_tun_helper(app_dir: &Path) -> Result<(), String> {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
-    if already_loaded && Path::new(TUN_HELPER_INSTALL_PATH).exists() {
-        return Ok(());
-    }
 
     let helper_src = locate_helper_binary()
-        .ok_or_else(|| "未找到 mxray-helper 特权助手程序".to_string())?;
+        .ok_or_else(|| "未找到主程序二进制（特权助手）".to_string())?;
+
+    // 已安装且与当前主程序一致：直接复用，无需密码
+    if already_loaded && Path::new(TUN_HELPER_INSTALL_PATH).exists() {
+        let installed_hash = file_sha256(TUN_HELPER_INSTALL_PATH);
+        let current_hash = file_sha256(&helper_src);
+        match (installed_hash, current_hash) {
+            (Some(a), Some(b)) if a == b => return Ok(()),
+            (None, _) => return Ok(()), // 无法校验时保持现状，避免反复弹密码
+            _ => {}                     // 版本不一致：继续执行重新安装以更新 helper
+        }
+    }
 
     // 生成 launchd 守护配置（应用数据目录内，无需特权）
+    // 助手即主程序二进制，通过 MXRAY_HELPER_MODE=1 环境变量进入守护进程模式
     let plist_local = app_dir.join("mxray_helper.plist");
     let plist_content = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -530,6 +565,11 @@ fn ensure_tun_helper(app_dir: &Path) -> Result<(), String> {
     <array>
         <string>{bin}</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>MXRAY_HELPER_MODE</key>
+        <string>1</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -544,12 +584,12 @@ fn ensure_tun_helper(app_dir: &Path) -> Result<(), String> {
         .map_err(|e| format!("写入守护进程配置失败: {}", e))?;
 
     // 一次管理员授权：安装 helper 二进制与 launchd 服务
+    // 注意：路径含空格必须用 shell_quote 包裹；末尾输出 MXRAY_INSTALL_OK 供结果校验
     let install_cmd = format!(
-        "mkdir -p '/Library/Application Support/MXray' && cp {} {} && chmod 755 {} && cp {} /Library/LaunchDaemons/{label}.plist && launchctl bootout system/{label} 2>/dev/null || true; launchctl bootstrap system /Library/LaunchDaemons/{label}.plist",
+        "mkdir -p '/Library/Application Support/MXray' && rm -f {dst} && cp {} {dst} && chmod 755 {dst} && cp {} /Library/LaunchDaemons/{label}.plist && {{ launchctl bootout system/{label} 2>/dev/null || true; }} && launchctl bootstrap system /Library/LaunchDaemons/{label}.plist && echo MXRAY_INSTALL_OK",
         shell_quote(&helper_src),
-        TUN_HELPER_INSTALL_PATH,
-        TUN_HELPER_INSTALL_PATH,
         shell_quote(plist_local.to_str().unwrap_or_default()),
+        dst = shell_quote(TUN_HELPER_INSTALL_PATH),
         label = TUN_HELPER_LABEL,
     );
     let script = format!(
@@ -563,13 +603,17 @@ fn ensure_tun_helper(app_dir: &Path) -> Result<(), String> {
         .output()
         .map_err(|e| format!("安装特权守护进程失败: {}", e))?;
 
-    if !out.status.success() {
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // osascript 成功返回不代表 shell 命令全部成功，需校验安装标记
+    if !out.status.success() || !stdout.contains("MXRAY_INSTALL_OK") {
         let stderr = String::from_utf8_lossy(&out.stderr);
         return Err(format!("安装特权守护进程被取消或失败: {}", stderr.trim()));
     }
 
-    // 等待 helper 启动并监听 socket
-    for _ in 0..20 {
+    // 重装后旧的 socket 文件可能残留，先删除避免误判 helper 已就绪
+    let _ = std::fs::remove_file(TUN_HELPER_SOCKET);
+    // 等待新 helper 启动并重新绑定 socket
+    for _ in 0..40 {
         if std::path::Path::new(TUN_HELPER_SOCKET).exists() {
             return Ok(());
         }
@@ -591,9 +635,10 @@ fn write_tun_manifest(bin_path: &str, config_path: &str, log_path: &str) -> Resu
 }
 
 /// 停止 TUN 内核：由常驻的 root 权限 helper 终止 xray 进程，无需密码。
+/// 仅尝试一次：helper 不存在时快速失败，由上层兜底处理。
 #[cfg(target_os = "macos")]
 fn stop_kernel_via_helper() -> bool {
-    tun_helper_command("stop").map(|r| r.starts_with("ok")).unwrap_or(false)
+    tun_helper_command_once("stop").map(|r| r.starts_with("ok")).unwrap_or(false)
 }
 
 fn tail_log_file(path: std::path::PathBuf, app_handle: tauri::AppHandle, generation: u64) {

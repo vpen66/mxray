@@ -139,6 +139,8 @@ export const InboundModal: React.FC<InboundModalProps> = ({
   // Stream settings (for vless, vmess, trojan, socks)
   const [streamSettings, setStreamSettings] = useState<any>({});
   const streamSettingsRef = React.useRef<any>({});
+  // 每次打开弹窗递增，用于强制 StreamSettingsPanel 重新挂载以读取新的 initialValue
+  const [openKey, setOpenKey] = useState(0);
 
   // TUN
   const [tunName, setTunName] = useState('');
@@ -150,9 +152,8 @@ export const InboundModal: React.FC<InboundModalProps> = ({
   const [tunAutoRouting, setTunAutoRouting] = useState('0.0.0.0/0, ::/0');
   const [tunAutoOutbounds, setTunAutoOutbounds] = useState('auto');
 
-  useEffect(() => {
-    if (isOpen) {
-      const val = initialValue || {
+  const applyInitialValue = (inputVal?: any) => {
+      const val = inputVal || {
         tag: 'socks-in',
         port: 7890,
         listen: '127.0.0.1',
@@ -257,6 +258,12 @@ export const InboundModal: React.FC<InboundModalProps> = ({
       setRawJsonText(JSON.stringify(val, null, 2));
       setJsonError(null);
       setViewMode('visual');
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setOpenKey(k => k + 1);
+      applyInitialValue(initialValue);
     }
   }, [isOpen, initialValue]);
 
@@ -981,11 +988,17 @@ export const InboundModal: React.FC<InboundModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  // 从可视化切换到 JSON 时，同步当前配置到 JSON 文本
-                  if (viewMode === 'visual') {
+                  if (viewMode === 'json') {
+                    // 从 JSON 源码切回可视化：用编辑后的 JSON 重新填充所有字段
+                    try {
+                      applyInitialValue(JSON.parse(rawJsonText));
+                      setOpenKey(k => k + 1);
+                    } catch { /* JSON 非法时保持现状 */ }
+                  } else {
+                    // 从可视化切换到 JSON 时，同步当前配置到 JSON 文本
                     setRawJsonText(JSON.stringify(buildConfigObject(), null, 2));
                   }
-                  setViewMode('json');
+                  setViewMode(viewMode === 'visual' ? 'json' : 'visual');
                 }}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                   viewMode === 'json'
@@ -1071,6 +1084,7 @@ export const InboundModal: React.FC<InboundModalProps> = ({
                 <div className="pt-2 border-t border-white/5">
                   <h4 className="text-sm font-semibold text-slate-200 mb-3">传输层配置</h4>
                   <StreamSettingsPanel
+                    key={`${openKey}-${protocol}`}
                     initialValue={streamSettings}
                     isInbound={true}
                     onChange={handleStreamSettingsChange}

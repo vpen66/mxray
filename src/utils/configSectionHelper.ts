@@ -335,6 +335,120 @@ export function moveArrayItemInConfig(jsonStr: string, moduleId: string, fromInd
   }
 }
 
+/**
+ * 在原始 JSON 文本层面剔除 routing.rules 中 enabled 为 false 的规则，
+ * 不经过 JSON.parse/JSON.stringify，完整保留原配置的字段顺序与格式
+ */
+export function stripDisabledRoutingRules(jsonStr: string): string {
+  if (!jsonStr || !jsonStr.includes('"enabled"')) return jsonStr;
+
+  const routingIdx = jsonStr.indexOf('"routing"');
+  if (routingIdx === -1) return jsonStr;
+  const rulesIdx = jsonStr.indexOf('"rules"', routingIdx);
+  if (rulesIdx === -1) return jsonStr;
+  const arrStart = jsonStr.indexOf('[', rulesIdx);
+  if (arrStart === -1) return jsonStr;
+
+  // 定位 rules 数组的结束位置（括号配平）
+  let depth = 0;
+  let arrEnd = -1;
+  let inStr = false;
+  let esc = false;
+  for (let i = arrStart; i < jsonStr.length; i++) {
+    const ch = jsonStr[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+    } else if (ch === '[' || ch === '{') {
+      depth++;
+    } else if (ch === ']' || ch === '}') {
+      depth--;
+      if (depth === 0) {
+        arrEnd = i;
+        break;
+      }
+    }
+  }
+  if (arrEnd === -1) return jsonStr;
+
+  // 扫描数组内顶层的每个对象，记录 enabled: false 的对象范围
+  const ranges: Array<{ start: number; end: number }> = [];
+  depth = 0;
+  inStr = false;
+  esc = false;
+  let objStart = -1;
+  let enabledFalse = false;
+  for (let i = arrStart + 1; i < arrEnd; i++) {
+    const ch = jsonStr[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') {
+      // 仅在规则对象顶层（depth === 1）判定 "enabled": false
+      if (depth === 1 && /^"enabled"\s*:\s*false/.test(jsonStr.slice(i))) {
+        enabledFalse = true;
+      }
+      inStr = true;
+      continue;
+    }
+    if (ch === '{' || ch === '[') {
+      if (ch === '{' && depth === 0) {
+        objStart = i;
+        enabledFalse = false;
+      }
+      depth++;
+      continue;
+    }
+    if (ch === '}' || ch === ']') {
+      depth--;
+      if (ch === '}' && depth === 0 && objStart !== -1) {
+        if (enabledFalse) ranges.push({ start: objStart, end: i });
+        objStart = -1;
+      }
+      continue;
+    }
+  }
+
+  if (ranges.length === 0) return jsonStr;
+
+  // 重建文本：跳过被剔除的对象，并清理残留的尾逗号
+  let result = '';
+  let cursor = 0;
+  for (const { start, end } of ranges) {
+    // 追加被剔除对象之前的文本，并清理尾部空白避免残留空行
+    result += jsonStr.slice(cursor, start);
+    result = result.replace(/\s+$/, '');
+    cursor = end + 1;
+    const rest = jsonStr.slice(cursor);
+    const trailing = rest.match(/^\s*,/);
+    if (trailing) {
+      cursor += trailing[0].length;
+    } else {
+      // 被剔除的是最后一项，移除其前面的逗号（尾部空白已清理）
+      if (result.endsWith(',')) {
+        result = result.slice(0, -1);
+      }
+    }
+  }
+  result += jsonStr.slice(cursor);
+
+  // 兜底校验：确保结果仍是合法 JSON，否则回退原文
+  try {
+    JSON.parse(result);
+    return result;
+  } catch {
+    return jsonStr;
+  }
+}
+
 export interface ModuleStatusItem {
   definition: ModuleDefinition;
   isAdded: boolean;

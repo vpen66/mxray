@@ -703,7 +703,14 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
     kcpMaskHeader, kcpMaskValue,
   ]);
 
-  useEffect(() => { buildAndEmit(); }, [buildAndEmit]);
+  // 挂载后跳过首次 buildAndEmit：此时状态还未被 initialValue 加载完成，
+  // 若立即向上 emit 默认值会覆盖父级刚设置的 streamSettings（StrictMode 下 effects 双跑也会触发）。
+  // 加载完成后状态变化会产生新的 buildAndEmit 引用，届时再正常 emit。
+  const firstEmitRef = useRef(buildAndEmit);
+  useEffect(() => {
+    if (buildAndEmit === firstEmitRef.current) return;
+    buildAndEmit();
+  }, [buildAndEmit]);
 
   // Auto-fix security when method doesn't support REALITY
   useEffect(() => {

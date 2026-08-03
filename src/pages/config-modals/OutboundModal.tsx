@@ -151,10 +151,11 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
   // StreamSettings from panel
   const [streamSettings, setStreamSettings] = useState<any>({});
   const streamSettingsRef = useRef<any>({});
+  // 每次打开弹窗递增，用于强制 StreamSettingsPanel 重新挂载以读取新的 initialValue
+  const [openKey, setOpenKey] = useState(0);
 
-  useEffect(() => {
-    if (isOpen) {
-      const val = initialValue || {
+  const applyInitialValue = (inputVal?: any) => {
+      const val = inputVal || {
         tag: 'proxy-new',
         protocol: 'vless',
         settings: {
@@ -285,6 +286,12 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
       setRawJsonText(JSON.stringify(val, null, 2));
       setJsonError(null);
       setViewMode('visual');
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setOpenKey(k => k + 1);
+      applyInitialValue(initialValue);
     }
   }, [isOpen, initialValue]);
 
@@ -485,10 +492,16 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (viewMode === 'visual') {
+                  if (viewMode === 'json') {
+                    // 从 JSON 源码切回可视化：用编辑后的 JSON 重新填充所有字段
+                    try {
+                      applyInitialValue(JSON.parse(rawJsonText));
+                      setOpenKey(k => k + 1);
+                    } catch { /* JSON 非法时保持现状 */ }
+                  } else {
                     setRawJsonText(JSON.stringify(buildConfigObject(), null, 2));
                   }
-                  setViewMode('json');
+                  setViewMode(viewMode === 'visual' ? 'json' : 'visual');
                 }}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                   viewMode === 'json' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
@@ -644,6 +657,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                   <div className="pt-2 border-t border-white/5">
                     <h4 className="text-sm font-semibold text-slate-200 mb-3">传输层配置</h4>
                     <StreamSettingsPanel
+                      key={`${openKey}-${protocol}`}
                       initialValue={streamSettings}
                       isInbound={false}
                       onChange={handleStreamSettingsChange}

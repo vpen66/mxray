@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Trash2,
   Search,
@@ -160,6 +160,20 @@ export const LogsPage: React.FC = () => {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
   }, [displayLogs, autoScroll]);
+
+  // 手动滚动检测：向上滚动离开底部时自动暂停滚屏，滚回底部时自动恢复
+  const handleLogScroll = useCallback(() => {
+    const el = logContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distanceFromBottom < 60;
+    const state = useLogStore.getState();
+    if (nearBottom && !state.autoScroll) {
+      setAutoScroll(true);
+    } else if (!nearBottom && state.autoScroll) {
+      setAutoScroll(false);
+    }
+  }, [setAutoScroll]);
 
   // 打开快捷编辑路由 Modal
   const handleOpenRuleModal = (log: LogEntry, e?: React.MouseEvent) => {
@@ -380,12 +394,13 @@ export const LogsPage: React.FC = () => {
 
           <button
             onClick={() => setAutoScroll(!autoScroll)}
+            title={autoScroll ? '自动滚屏进行中，点击暂停' : '滚屏已暂停，点击恢复自动滚屏'}
             className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               autoScroll ? 'bg-blue-600/30 text-blue-300 border-blue-500/40' : 'bg-slate-900 text-slate-400 border-white/10'
             }`}
           >
-            {autoScroll ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-            <span>{autoScroll ? '暂停滚屏' : '自动滚屏'}</span>
+            {autoScroll ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+            <span>{autoScroll ? '自动滚屏中' : '已暂停滚屏'}</span>
           </button>
 
           <button
@@ -512,6 +527,7 @@ export const LogsPage: React.FC = () => {
       {/* Main Content Area */}
       <div
         ref={logContainerRef}
+        onScroll={handleLogScroll}
         className="glass-card flex-1 min-h-[420px] rounded-2xl p-4 font-mono text-xs overflow-y-auto border border-white/10 bg-slate-950/90 shadow-inner custom-scrollbar"
       >
         {displayLogs.length === 0 ? (

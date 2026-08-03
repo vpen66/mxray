@@ -150,8 +150,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
   startKernel: async () => {
     try {
       await useConfigStore.getState().startActiveKernel();
-    } catch {
-      // web fallback
+    } catch (err) {
+      // 桌面环境下将启动失败原因提示给用户；Web 环境静默降级
+      if ('__TAURI_INTERNALS__' in window) {
+        console.error('启动内核失败:', err);
+        alert(`启动内核失败：${err instanceof Error ? err.message : String(err)}`);
+      }
+      set((state) => ({
+        coreState: { ...state.coreState, isRunning: false },
+      }));
+      return;
     }
     set((state) => ({
       coreState: { ...state.coreState, isRunning: true },

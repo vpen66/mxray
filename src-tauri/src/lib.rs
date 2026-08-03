@@ -1,4 +1,6 @@
 pub mod config;
+#[cfg(unix)]
+pub mod helper;
 pub mod kernel;
 pub mod sysproxy;
 
