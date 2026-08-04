@@ -38,6 +38,43 @@ jobs:
         with:
           version: 10
 
+      # -----------------------------------------------------------------------
+      # Sync Version
+      # -----------------------------------------------------------------------
+      # Extracts the semver version from the Git tag (e.g., v1.2.3 -> 1.2.3)
+      # and updates it dynamically in package.json, tauri.conf.json, and Cargo.toml
+      # so that the built application packages match the release version.
+      - name: Sync version from Git Tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.+-]+)?$ ]]; then
+            echo "GITHUB_REF_NAME '$GITHUB_REF_NAME' is not a valid semver tag, keeping versions in config files."
+            exit 0
+          fi
+          echo "Building version: $VERSION"
+          node -e "
+            const fs = require('fs');
+            const version = '$VERSION';
+
+            // 1. package.json
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = version;
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+
+            // 2. src-tauri/tauri.conf.json
+            const tauri = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+            tauri.version = version;
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 2) + '\n');
+
+            // 3. src-tauri/Cargo.toml（仅替换 [package] 中位于行首的 version 字段）
+            let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
+            cargo = cargo.replace(/^version\\s*=\\s*\\\"[^\\\"]*\\\"/m, 'version = \\\"' + version + '\\\"');
+            fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+
+            console.log('Successfully updated versions in package.json, tauri.conf.json, and Cargo.toml to ' + version);
+          "
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -75,6 +112,6 @@ jobs:
           tagName: v__VERSION__
           releaseName: 'MXray v__VERSION__'
           releaseBody: 'MXray 跨平台客户端最新构建程序包'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
