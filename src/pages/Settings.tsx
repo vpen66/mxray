@@ -39,6 +39,7 @@ export const SettingsPage: React.FC = () => {
     error: updateError,
     checkForUpdates,
     downloadAndInstallUpdate,
+    loadCurrentVersion,
   } = useUpdateStore();
 
   const [copiedCli, setCopiedCli] = useState(false);
@@ -54,7 +55,8 @@ export const SettingsPage: React.FC = () => {
   useEffect(() => {
     loadInstalledKernels();
     checkAutoStartStatus();
-  }, [loadInstalledKernels, checkAutoStartStatus]);
+    loadCurrentVersion();
+  }, [loadInstalledKernels, checkAutoStartStatus, loadCurrentVersion]);
 
   useEffect(() => {
     const fetchCliInfo = async () => {

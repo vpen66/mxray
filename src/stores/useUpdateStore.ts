@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getVersion } from '@tauri-apps/api/app';
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { open as openUrl } from '@tauri-apps/plugin-shell';
@@ -30,6 +31,7 @@ interface UpdateState {
   checkForUpdates: () => Promise<void>;
   downloadAndInstallUpdate: () => Promise<void>;
   clearStatus: () => void;
+  loadCurrentVersion: () => Promise<void>;
 }
 
 const compareVersions = (v1: string, v2: string): number => {
@@ -50,7 +52,7 @@ const compareVersions = (v1: string, v2: string): number => {
 };
 
 export const useUpdateStore = create<UpdateState>((set, get) => ({
-  currentVersion: '0.1.0',
+  currentVersion: '',
   status: 'idle',
   updateInfo: null,
   downloadProgress: null,
@@ -59,9 +61,28 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
   clearStatus: () => set({ status: 'idle', error: null, downloadProgress: null }),
 
+  loadCurrentVersion: async () => {
+    if (get().currentVersion) return;
+    try {
+      const version = await getVersion();
+      set({ currentVersion: version });
+    } catch {
+      // 忽略读取失败，保持为空由使用方降级显示
+    }
+  },
+
   checkForUpdates: async () => {
     set({ status: 'checking', error: null, downloadProgress: null });
-    const currentVer = get().currentVersion;
+
+    let currentVer = get().currentVersion;
+    if (!currentVer) {
+      try {
+        currentVer = await getVersion();
+        set({ currentVersion: currentVer });
+      } catch {
+        currentVer = '0.0.0';
+      }
+    }
 
     try {
       // 1. 尝试使用 Tauri 2 原生 Updater 插件接口

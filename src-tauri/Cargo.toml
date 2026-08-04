@@ -1,6 +1,6 @@
 [package]
 name = "mxray"
-version = "0.1.0"
+version = "1.1.0"
 description = "MXray - Modern Cross-Platform Xray-core GUI Desktop Client"
 authors = ["vpen"]
 edition = "2021"
