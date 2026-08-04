@@ -44,6 +44,7 @@ import {
   updateArrayItemInConfig,
   removeArrayItemInConfig,
   moveArrayItemInConfig,
+  reorderArrayItemInConfig,
   getAvailableModules,
   MODULE_DEFINITIONS,
 } from '../utils/configSectionHelper';
@@ -533,6 +534,8 @@ export const JsonConfigPage: React.FC = () => {
                 onAddInbound={() => setActiveModal({ type: 'inbound_add' })}
                 onEditInbound={(idx) => setActiveModal({ type: 'inbound_edit', index: idx, initialValue: parsedConfig.inbounds[idx] })}
                 onDeleteInbound={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'inbounds', idx))}
+                onMoveInbound={(idx, dir) => handleUpdateContent(moveArrayItemInConfig(editorContent, 'inbounds', idx, dir))}
+                onReorderInbound={(from, to) => handleUpdateContent(reorderArrayItemInConfig(editorContent, 'inbounds', from, to))}
                 onToggleSniffing={(idx) => {
                   const currentInbounds = parsedConfig?.inbounds || [];
                   const targetIb = currentInbounds[idx];
@@ -612,6 +615,8 @@ export const JsonConfigPage: React.FC = () => {
                 onAddOutbound={() => setActiveModal({ type: 'outbound_add' })}
                 onEditOutbound={(idx) => setActiveModal({ type: 'outbound_edit', index: idx, initialValue: parsedConfig.outbounds[idx] })}
                 onDeleteOutbound={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'outbounds', idx))}
+                onMoveOutbound={(idx, dir) => handleUpdateContent(moveArrayItemInConfig(editorContent, 'outbounds', idx, dir))}
+                onReorderOutbound={(from, to) => handleUpdateContent(reorderArrayItemInConfig(editorContent, 'outbounds', from, to))}
                 onImportSubscription={() => setIsSubscriptionImportOpen(true)}
               />
 

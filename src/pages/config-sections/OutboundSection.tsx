@@ -1,5 +1,6 @@
 import React from 'react';
-import { Globe, Plus, Edit3, Trash2, ShieldCheck, Download } from 'lucide-react';
+import { Globe, Plus, Edit3, Trash2, ShieldCheck, Download, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { useDragSort } from '../../hooks/useDragSort';
 
 interface OutboundSectionProps {
   outbounds: any[];
@@ -7,6 +8,8 @@ interface OutboundSectionProps {
   onEditOutbound: (index: number) => void;
   onDeleteOutbound: (index: number) => void;
   onImportSubscription?: () => void;
+  onMoveOutbound?: (index: number, direction: 'up' | 'down') => void;
+  onReorderOutbound?: (fromIndex: number, toIndex: number) => void;
 }
 
 export const OutboundSection: React.FC<OutboundSectionProps> = ({
@@ -15,7 +18,13 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
   onEditOutbound,
   onDeleteOutbound,
   onImportSubscription,
+  onMoveOutbound,
+  onReorderOutbound,
 }) => {
+  const { getItemDragProps, isDragging, isDropTarget, overlayEl } = useDragSort((from, to) => {
+    onReorderOutbound?.(from, to);
+  });
+
   return (
     <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4">
       <div className="flex items-center justify-between">
@@ -51,6 +60,7 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
       </div>
 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+        {overlayEl}
         {outbounds.map((ob, idx) => {
           const isDirect = ob.protocol === 'freedom';
           const isBlock = ob.protocol === 'blackhole';
@@ -68,21 +78,50 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
           return (
             <div
               key={idx}
+              {...(onReorderOutbound ? getItemDragProps(idx) : {})}
               className={`p-4 rounded-xl border transition-all flex flex-col justify-between group ${
                 isProxyNode
                   ? 'bg-slate-950/60 border-cyan-500/20 hover:border-cyan-500/40 shadow-lg shadow-cyan-950/10'
                   : 'bg-slate-950/30 border-white/5 hover:border-white/10'
-              }`}
+              } ${onReorderOutbound ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                isDragging(idx) ? 'opacity-30' : ''
+              } ${isDropTarget(idx) ? 'ring-2 ring-cyan-400/70 border-cyan-400/70 scale-[1.015]' : ''}`}
+              style={{ transition: 'transform 180ms ease-out, opacity 150ms ease-out, border-color 150ms, box-shadow 150ms, scale 180ms ease-out' }}
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
+                    {onReorderOutbound && (
+                      <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors shrink-0" />
+                    )}
                     <span className="font-mono text-sm font-medium text-slate-100">{ob.tag || `outbound-${idx}`}</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 uppercase font-mono font-medium">
                       {ob.protocol || 'freedom'}
                     </span>
                   </div>
                   <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                    {onMoveOutbound && (
+                      <div className="flex flex-col">
+                        <button
+                          type="button"
+                          onClick={() => onMoveOutbound(idx, 'up')}
+                          disabled={idx === 0}
+                          className="p-0.5 rounded text-slate-500 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                          title="上移"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onMoveOutbound(idx, 'down')}
+                          disabled={idx === outbounds.length - 1}
+                          className="p-0.5 rounded text-slate-500 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                          title="下移"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => onEditOutbound(idx)}

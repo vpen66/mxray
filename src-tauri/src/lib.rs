@@ -107,6 +107,21 @@ fn spawn_tray_agent(app_handle: &tauri::AppHandle) {
     let _ = std::process::Command::new("sh").args(["-c", &cmd]).output();
 }
 
+/// 终止托盘代理进程（内核未运行时完全退出，不留托盘驻留）
+#[cfg(unix)]
+fn kill_tray_agent(app_handle: &tauri::AppHandle) {
+    if let Some(pid_path) = tray_agent_pid_path(app_handle) {
+        if let Ok(content) = std::fs::read_to_string(&pid_path) {
+            if let Ok(pid) = content.trim().parse::<i32>() {
+                if pid > 0 && pid_alive(pid) {
+                    unsafe { libc::kill(pid, libc::SIGTERM); }
+                }
+            }
+        }
+        let _ = std::fs::remove_file(&pid_path);
+    }
+}
+
 #[tauri::command]
 fn get_core_version() -> String {
     let info = kernel::detect_bundled_kernel_version_pub();
@@ -261,6 +276,14 @@ pub fn run() {
             }
         }
         if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+            // 内核未运行时：完全退出（包括托盘代理），不保留任何后台进程
+            if !kernel::xray_process_alive() {
+                let _ = kernel::stop_kernel(_app_handle.clone());
+                let _ = sysproxy::set_system_proxy(_app_handle.clone(), false, None, None);
+                #[cfg(unix)]
+                kill_tray_agent(_app_handle);
+                return;
+            }
             // 保活开关开启时：不停止内核、不关闭系统代理，
             // Xray 以脱离/托管进程形态继续后台运行（macOS 为 nohup 脱离启动或
             // 特权 helper 托管，Windows 子进程随主程序退出后继续存活）

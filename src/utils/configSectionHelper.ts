@@ -314,6 +314,13 @@ export function removeArrayItemInConfig(jsonStr: string, moduleId: string, index
 }
 
 export function moveArrayItemInConfig(jsonStr: string, moduleId: string, fromIndex: number, direction: 'up' | 'down'): string {
+  return reorderArrayItemInConfig(jsonStr, moduleId, fromIndex, direction === 'up' ? fromIndex - 1 : fromIndex + 1);
+}
+
+/**
+ * 将数组型模块（如 inbounds/outbounds）指定项移动到目标索引位置（支持拖拽排序）
+ */
+export function reorderArrayItemInConfig(jsonStr: string, moduleId: string, fromIndex: number, toIndex: number): string {
   try {
     const config = JSON.parse(jsonStr || '{}');
     let arr: any[] | undefined;
@@ -325,8 +332,9 @@ export function moveArrayItemInConfig(jsonStr: string, moduleId: string, fromInd
       arr = config[moduleId];
     }
     if (!Array.isArray(arr)) return jsonStr;
-    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
-    if (toIndex < 0 || toIndex >= arr.length) return jsonStr;
+    if (fromIndex < 0 || fromIndex >= arr.length || toIndex < 0 || toIndex >= arr.length || fromIndex === toIndex) {
+      return jsonStr;
+    }
     const [item] = arr.splice(fromIndex, 1);
     arr.splice(toIndex, 0, item);
     return JSON.stringify(config, null, 2);
