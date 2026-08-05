@@ -288,6 +288,13 @@ pub fn list_installed_kernels(app_handle: tauri::AppHandle) -> Result<Vec<Kernel
                         let mut info = detect_kernel_version(binary_path.to_str().unwrap_or_default());
                         info.kernel_type = "installed".to_string();
                         info.name = format!("Xray-core ({})", entry.file_name().to_string_lossy());
+                        // 内核目录缺少 geosite/geoip 数据文件时 routing 规则无法加载，
+                        // 标记为无效以引导用户重新安装（重装会自动补齐数据文件）
+                        let data_dir = binary_path.parent().unwrap_or(&entry_path);
+                        if !data_dir.join("geosite.dat").exists() || !data_dir.join("geoip.dat").exists() {
+                            info.is_valid = false;
+                            info.error = Some("缺少 geosite.dat / geoip.dat 路由数据文件，请重新安装".to_string());
+                        }
                         kernels.push(info);
                     }
                 }
@@ -410,14 +417,20 @@ pub async fn install_kernel(
     let bin_name = "xray";
 
     let bin_path = cores_dir.join(bin_name);
+    let geosite_path = cores_dir.join("geosite.dat");
+    let geoip_path = cores_dir.join("geoip.dat");
 
     // 旧版占位脚本残留（非真实内核）需要清除后重新下载
     if bin_path.exists() && !is_valid_kernel_binary(&bin_path) {
         let _ = fs::remove_file(&bin_path);
     }
 
-    // 已存在真实内核则直接复用，无需重复下载
-    if !(bin_path.exists() && is_valid_kernel_binary(&bin_path)) {
+    // 已存在真实内核且 geosite/geoip 数据文件齐全则直接复用，否则（重新）下载
+    let kernel_ready = bin_path.exists()
+        && is_valid_kernel_binary(&bin_path)
+        && geosite_path.exists()
+        && geoip_path.exists();
+    if !kernel_ready {
         fs::create_dir_all(&cores_dir).map_err(|e| format!("无法创建内核存储目录: {}", e))?;
 
         // 前端可能未传下载地址（如旧数据），兜底按平台拼接官方资源名
@@ -505,12 +518,17 @@ async fn download_kernel_archive(url: &str) -> Result<Vec<u8>, String> {
     Err(last_err)
 }
 
-/// 从压缩包中提取 xray 可执行文件（忽略 zip 内目录层级，防止路径穿越）
+/// 从压缩包中提取 xray 可执行文件及 geosite.dat / geoip.dat 路由数据文件
+/// （Xray 默认在可执行文件所在目录查找 geo 数据，缺失会导致 routing 规则加载失败；
+/// 忽略 zip 内目录层级，防止路径穿越）
 fn extract_kernel_from_zip(zip_path: &Path, dest_dir: &Path, bin_name: &str) -> Result<(), String> {
     let file = fs::File::open(zip_path)
         .map_err(|e| format!("打开压缩包失败: {}", e))?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| format!("压缩包格式无效或已损坏: {}", e))?;
+
+    let targets = [bin_name, "geosite.dat", "geoip.dat"];
+    let mut bin_found = false;
 
     for i in 0..archive.len() {
         let mut entry = archive
@@ -521,15 +539,20 @@ fn extract_kernel_from_zip(zip_path: &Path, dest_dir: &Path, bin_name: &str) -> 
             .rsplit('/')
             .next()
             .unwrap_or("");
-        if file_name == bin_name {
-            let mut out = fs::File::create(dest_dir.join(bin_name))
-                .map_err(|e| format!("写入内核文件失败: {}", e))?;
+        if targets.contains(&file_name) {
+            if file_name == bin_name {
+                bin_found = true;
+            }
+            let mut out = fs::File::create(dest_dir.join(file_name))
+                .map_err(|e| format!("写入 {} 失败: {}", file_name, e))?;
             std::io::copy(&mut entry, &mut out)
-                .map_err(|e| format!("解压内核文件失败: {}", e))?;
-            return Ok(());
+                .map_err(|e| format!("解压 {} 失败: {}", file_name, e))?;
         }
     }
-    Err(format!("压缩包中未找到 {}", bin_name))
+    if !bin_found {
+        return Err(format!("压缩包中未找到 {}", bin_name));
+    }
+    Ok(())
 }
 
 pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle) -> Result<String, String> {

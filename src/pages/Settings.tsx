@@ -402,7 +402,7 @@ export const SettingsPage: React.FC = () => {
 
           <div className="space-y-2">
             {remoteReleases.map((rel) => {
-              const isAlreadyInstalled = installedKernels.some((k) => k.version === rel.version);
+              const isAlreadyInstalled = installedKernels.some((k) => k.version === rel.version && k.is_valid);
               const isCurrentVersion =
                 activeKernel.version === rel.version &&
                 rel.version !== 'Unknown' &&
