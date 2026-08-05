@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Eye, Code2, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface GeodataModalProps {
   isOpen: boolean;
@@ -156,7 +157,7 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
           {viewMode === 'visual' ? (
             <div className="space-y-4">
               <div>
-                <label className={labelCls}>定时任务 (cron)</label>
+                <label className={labelCls}><FieldLabel label="定时任务" tip="自动更新 geodata 文件的 cron 表达式。标准 5 段格式，按本地时区执行。如 0 4 * * * 表示每天 04:00。" /></label>
                 <input
                   type="text"
                   value={cron}
@@ -168,7 +169,7 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
               </div>
 
               <div>
-                <label className={labelCls}>下载出站代理</label>
+                <label className={labelCls}><FieldLabel label="下载出站代理" tip="下载 geodata 文件时使用的出站代理标识 Tag。留空则走路由模块决定。" /></label>
                 <input
                   type="text"
                   value={outbound}
@@ -201,7 +202,7 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
                         <div className="flex items-start gap-2">
                           <div className="flex-1 space-y-2">
                             <div>
-                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5">下载地址 (HTTPS)</label>
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5"><FieldLabel label="下载地址" tip="资源文件的 HTTPS 下载地址，定时任务会从此地址拉取最新数据。" /></label>
                               <input
                                 type="text"
                                 value={asset.url}
@@ -211,7 +212,7 @@ export const GeodataModal: React.FC<GeodataModalProps> = ({
                               />
                             </div>
                             <div>
-                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5">写入文件名</label>
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5"><FieldLabel label="写入文件名" tip="下载后保存的文件名，如 geoip.dat 或 geosite.dat。" /></label>
                               <input
                                 type="text"
                                 value={asset.file}

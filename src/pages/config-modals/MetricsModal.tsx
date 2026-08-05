@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Eye, Code2, AlertCircle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface MetricsModalProps {
   isOpen: boolean;
@@ -107,7 +108,7 @@ export const MetricsModal: React.FC<MetricsModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Metrics 服务标识 (Tag)
+                  <FieldLabel label="Metrics 服务标识" tip="Metrics 入站的标识 Tag，用于路由中将指标流量引导到对应入站。" />
                 </label>
                 <input
                   type="text"
@@ -120,7 +121,7 @@ export const MetricsModal: React.FC<MetricsModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Prometheus 指标导出监听地址与端口 (listen)
+                  <FieldLabel label="Prometheus 指标导出监听地址与端口" tip="Prometheus 指标导出端点的监听地址和端口。如 127.0.0.1:9090，可通过 /metrics 路径获取指标数据。" />
                 </label>
                 <input
                   type="text"

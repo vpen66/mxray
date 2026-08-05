@@ -28,6 +28,7 @@ import {
 import { useLogStore } from '../stores/useLogStore';
 import type { LogEntry } from '../types';
 import { CustomSelect, type SelectOption } from '../components/CustomSelect';
+import { FieldLabel } from '../components/FieldLabel';
 import { parseXrayLog } from '../utils/logParser';
 import { useConfigStore } from '../stores/useConfigStore';
 
@@ -761,7 +762,7 @@ export const LogsPage: React.FC = () => {
 
             {/* Match Strategy Options */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300 block">选择域名匹配匹配策略</label>
+              <label className="text-xs font-semibold text-slate-300 block"><FieldLabel label="域名匹配策略" tip="选择域名规则匹配方式：全主域匹配、完全匹配或普通关键词匹配。" /></label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
@@ -806,7 +807,7 @@ export const LogsPage: React.FC = () => {
 
             {/* Input rule string */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 block">生成的分流规则表达式</label>
+              <label className="text-xs font-semibold text-slate-300 block"><FieldLabel label="分流规则表达式" tip="根据所选匹配策略生成的域名路由规则表达式。" /></label>
               <input
                 type="text"
                 value={targetDomainRule}
@@ -817,7 +818,7 @@ export const LogsPage: React.FC = () => {
 
             {/* 目标出站策略选择器 */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 block">调整目标出站策略 / 节点</label>
+              <label className="text-xs font-semibold text-slate-300 block"><FieldLabel label="目标出站策略" tip="选择此规则匹配后流量转发到哪个出站（代理、直连或拒绝）。" /></label>
               <CustomSelect
                 value={targetOutbound}
                 onChange={(val) => setTargetOutbound(val)}
@@ -831,7 +832,7 @@ export const LogsPage: React.FC = () => {
 
             {/* Description Input */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 block">规则备注说明</label>
+              <label className="text-xs font-semibold text-slate-300 block"><FieldLabel label="规则备注" tip="为此路由规则添加备注说明，便于后续管理。" /></label>
               <input
                 type="text"
                 value={ruleDescription}

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
+import { FieldLabel } from '../components/FieldLabel';
 import {
   FileCode2,
   Plus,
@@ -995,7 +996,7 @@ export const JsonConfigPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">配置名称</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1"><FieldLabel label="配置名称" tip="为此配置预设起一个易于识别的名称。" /></label>
               <input
                 type="text"
                 value={newProfileName}
@@ -1006,7 +1007,7 @@ export const JsonConfigPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">描述说明</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1"><FieldLabel label="描述说明" tip="对此配置预设的补充描述，说明其应用场景。" /></label>
               <input
                 type="text"
                 value={newProfileDesc}
@@ -1017,7 +1018,7 @@ export const JsonConfigPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">初始模板</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5"><FieldLabel label="初始模板" tip="选择预设的初始配置模板，默认配置包含 TUN 和分流规则。" /></label>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { id: 'default' as const, name: '默认配置', desc: 'TUN + Mixed 入站，国内外分流' },

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Eye, Code2, AlertCircle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface FakeDnsModalProps {
   isOpen: boolean;
@@ -134,7 +135,7 @@ export const FakeDnsModal: React.FC<FakeDnsModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  虚拟 IP 网段 (ipPool CIDR)
+                  <FieldLabel label="虚拟 IP 网段" tip="FakeDNS 分配的虚拟 IP 地址池 CIDR。当 DNS 查询被 FakeDNS 劫持时，会从此池中分配一个虚拟 IP。默认 198.18.0.0/15。" />
                 </label>
                 <input
                   type="text"
@@ -147,7 +148,7 @@ export const FakeDnsModal: React.FC<FakeDnsModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  地址池映射容量上限 (poolSize)
+                  <FieldLabel label="地址池映射容量上限" tip="FakeDNS 地址池的最大映射条目数，即最多可缓存的域名-虚拟 IP 映射数量。默认 65535。" />
                 </label>
                 <input
                   type="number"

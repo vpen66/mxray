@@ -6,6 +6,7 @@ import { useAppStore } from '../stores/useAppStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { ToggleSwitch } from '../components/ToggleSwitch';
+import { FieldLabel } from '../components/FieldLabel';
 
 export const SettingsPage: React.FC = () => {
   const { autoStartApp, isTogglingAutoStart, toggleAutoStartApp, checkAutoStartStatus } = useAppStore();
@@ -273,7 +274,7 @@ export const SettingsPage: React.FC = () => {
 
         {/* 1. Installed Kernel Switcher */}
         <div className="space-y-2">
-          <label className="block text-xs font-semibold text-slate-300">选择已安装的内核</label>
+          <label className="block text-xs font-semibold text-slate-300"><FieldLabel label="选择已安装的内核" tip="从系统中已安装的 Xray 内核中选择一个作为当前运行的内核。" /></label>
 
           {isLoadingKernels ? (
             <div className="flex items-center justify-center py-6 text-xs text-slate-400 gap-2">
@@ -324,7 +325,7 @@ export const SettingsPage: React.FC = () => {
 
         {/* 2. Custom Path Selector */}
         <div className="space-y-2 border-t border-white/5 pt-4">
-          <label className="block text-xs font-semibold text-slate-300">指定本地安装的 Xray-core 路径</label>
+          <label className="block text-xs font-semibold text-slate-300"><FieldLabel label="指定本地内核路径" tip="手动指定本地已安装的 Xray-core 可执行文件路径。" /></label>
 
           {validationError && (
             <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2">

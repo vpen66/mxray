@@ -3,6 +3,7 @@ import { X, Save, Eye, Code2, AlertCircle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { CustomSelect } from '../../components/CustomSelect';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface ObservatoryModalProps {
   isOpen: boolean;
@@ -228,7 +229,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
           {viewMode === 'visual' ? (
             <div className="space-y-4">
               <div>
-                <label className={labelCls}>观测器模式</label>
+                <label className={labelCls}><FieldLabel label="观测器模式" tip="选择观测器类型。observatory 为常规观测器，定时探测出站延迟；burstObservatory 为突发观测器，批量并发探测。" /></label>
                 <CustomSelect
                   options={TYPE_OPTIONS}
                   value={type}
@@ -239,7 +240,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
               {type !== 'disabled' && (
                 <>
                   <div>
-                    <label className={labelCls}>目标出站选择器（多个用逗号隔开）</label>
+                    <label className={labelCls}><FieldLabel label="目标出站选择器" tip="指定需要探测延迟的出站标识，多个用逗号分隔。支持前缀匹配。" /></label>
                     <input
                       type="text"
                       value={subjectSelector}
@@ -252,7 +253,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
                   {type === 'observatory' && (
                     <>
                       <div>
-                        <label className={labelCls}>探测网址</label>
+                        <label className={labelCls}><FieldLabel label="探测网址" tip="用于探测出站延迟的 URL，应返回 HTTP 204 状态码。" /></label>
                         <input
                           type="text"
                           value={probeUrl}
@@ -263,7 +264,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
                       </div>
 
                       <div>
-                        <label className={labelCls}>探测间隔</label>
+                        <label className={labelCls}><FieldLabel label="探测间隔" tip="两次探测之间的时间间隔，格式为数字+单位，如 10s、2h45m。" /></label>
                         <input
                           type="text"
                           value={probeInterval}
@@ -295,7 +296,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
                       <span className="text-xs font-semibold text-blue-300">探测配置</span>
 
                       <div>
-                        <label className={labelCls}>探测目标网址</label>
+                        <label className={labelCls}><FieldLabel label="探测目标网址" tip="突发观测器的探测目标 URL，应返回 HTTP 204 状态码。" /></label>
                         <input
                           type="text"
                           value={destination}
@@ -307,7 +308,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
                       </div>
 
                       <div>
-                        <label className={labelCls}>本地连通性检测网址</label>
+                        <label className={labelCls}><FieldLabel label="本地连通性检测网址" tip="用于检测本地网络是否连通的 URL，仅在目标网址探测失败时执行。" /></label>
                         <input
                           type="text"
                           value={connectivity}
@@ -320,7 +321,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className={labelCls}>探测间隔</label>
+                          <label className={labelCls}><FieldLabel label="探测间隔" tip="突发观测器的探测间隔，最小 10s。" /></label>
                           <input
                             type="text"
                             value={interval}
@@ -331,7 +332,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
                           <p className="mt-1 text-[10px] text-slate-500">最小 10s</p>
                         </div>
                         <div>
-                          <label className={labelCls}>采样数量</label>
+                          <label className={labelCls}><FieldLabel label="采样数量" tip="保留最近的探测结果数量，用于计算平均延迟。" /></label>
                           <input
                             type="number"
                             value={sampling}
@@ -345,7 +346,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className={labelCls}>超时时间</label>
+                          <label className={labelCls}><FieldLabel label="超时时间" tip="单次探测的超时时间，超时视为失败。" /></label>
                           <input
                             type="text"
                             value={timeout}
@@ -355,7 +356,7 @@ export const ObservatoryModal: React.FC<ObservatoryModalProps> = ({
                           />
                         </div>
                         <div>
-                          <label className={labelCls}>HTTP 方法</label>
+                          <label className={labelCls}><FieldLabel label="HTTP 方法" tip="探测请求使用的 HTTP 方法，GET 或 HEAD。" /></label>
                           <CustomSelect
                             options={HTTP_METHOD_OPTIONS}
                             value={httpMethod}

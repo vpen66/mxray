@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Eye, Code2, AlertCircle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface VersionModalProps {
   isOpen: boolean;
@@ -107,7 +108,7 @@ export const VersionModal: React.FC<VersionModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  最低要求的 Xray 内核版本 (min)
+                  <FieldLabel label="最低要求的 Xray 内核版本" tip="指定 Xray 内核的最低版本要求。低于此版本的内核将无法启动。" />
                 </label>
                 <input
                   type="text"
@@ -120,7 +121,7 @@ export const VersionModal: React.FC<VersionModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  最高允许的 Xray 内核版本 (max)
+                  <FieldLabel label="最高允许的 Xray 内核版本" tip="指定 Xray 内核的最高允许版本。高于此版本的内核将不被接受。" />
                 </label>
                 <input
                   type="text"

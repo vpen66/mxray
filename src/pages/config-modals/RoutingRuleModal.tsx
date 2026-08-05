@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Eye, Code2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { CustomSelect } from '../../components/CustomSelect';
+import { FieldLabel } from '../../components/FieldLabel';
 
 const inputCls = 'w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500/50 font-mono';
 const textareaCls = `${inputCls} resize-none`;
@@ -277,13 +278,13 @@ export const RoutingRuleModal: React.FC<RoutingRuleModalProps> = ({
               {/* ── 基础设置 ── */}
               <Collapsible title="基础设置" defaultOpen>
                 <div>
-                  <label className={labelCls}>规则标识</label>
+                  <label className={labelCls}><FieldLabel label="规则标识" tip="可选字段，用于在调试日志中标识此路由规则，便于排查路由匹配问题。" /></label>
                   <input type="text" value={ruleTag} onChange={e => setRuleTag(e.target.value)}
                     placeholder="可选，用于调试日志标识此规则" className={inputCls} />
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex-1">
-                    <label className={labelCls}>目标出站</label>
+                    <label className={labelCls}><FieldLabel label="目标出站" tip="匹配此规则的流量将被发送到的出站标识 Tag，或选择负载均衡模式指定 Balancer Tag。" /></label>
                     {!useBalancer ? (
                       <CustomSelect options={availableOutboundOptions} value={outboundTag} onChange={setOutboundTag} accentColor="purple" />
                     ) : (
@@ -306,13 +307,13 @@ export const RoutingRuleModal: React.FC<RoutingRuleModalProps> = ({
               <Collapsible title="域名与IP匹配" defaultOpen>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                   <div className="space-y-1.5">
-                    <label className={labelCls}>匹配域名 (逗号分隔)</label>
+                    <label className={labelCls}><FieldLabel label="匹配域名" tip="要匹配的目标域名列表，逗号分隔。支持 keyword:、regexp:、domain:、full:、dotless:、geosite:、ext: 等前缀格式。" /></label>
                     <QuickTags tags={domainTags} onInsert={(prefix) => insertTag(setDomain, domain, prefix, domainRef)} />
                     <textarea ref={domainRef} rows={3} value={domain} onChange={e => setDomain(e.target.value)}
                       placeholder="geosite:cn, domain:google.com" className={textareaCls} />
                   </div>
                   <div className="space-y-1.5">
-                    <label className={labelCls}>匹配 IP 地址 (逗号分隔)</label>
+                    <label className={labelCls}><FieldLabel label="匹配 IP 地址" tip="要匹配的目标 IP 地址列表，逗号分隔。支持 geoip: 前缀、CIDR 格式及 ! 反选操作。" /></label>
                     <QuickTags tags={ipTags} onInsert={(prefix) => insertTag(setIp, ip, prefix, ipRef)} />
                     <textarea ref={ipRef} rows={3} value={ip} onChange={e => setIp(e.target.value)}
                       placeholder="geoip:cn, 10.0.0.0/8" className={textareaCls} />
@@ -324,17 +325,17 @@ export const RoutingRuleModal: React.FC<RoutingRuleModalProps> = ({
               <Collapsible title="端口匹配" defaultOpen={!!(port || sourcePort || localPort)}>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                   <div>
-                    <label className={labelCls}>目标端口</label>
+                    <label className={labelCls}><FieldLabel label="目标端口" tip="匹配的目标端口，支持单端口、逗号分隔多个端口、以及短横线表示端口范围。" /></label>
                     <input type="text" value={port} onChange={e => setPort(e.target.value)}
                       placeholder="53,443,1000-2000" className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>来源端口</label>
+                    <label className={labelCls}><FieldLabel label="来源端口" tip="匹配的来源端口，即客户端发起连接时的源端口。" /></label>
                     <input type="text" value={sourcePort} onChange={e => setSourcePort(e.target.value)}
                       placeholder="53,443,1000-2000" className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>本地入站端口</label>
+                    <label className={labelCls}><FieldLabel label="本地入站端口" tip="匹配本地监听端口范围，即流量进入 Xray 的入站监听端口。" /></label>
                     <input type="text" value={localPort} onChange={e => setLocalPort(e.target.value)}
                       placeholder="监听端口范围" className={inputCls} />
                   </div>
@@ -345,24 +346,24 @@ export const RoutingRuleModal: React.FC<RoutingRuleModalProps> = ({
               <Collapsible title="来源与入站匹配" defaultOpen={!!(sourceIP || localIP || user || inboundTag)}>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                   <div>
-                    <label className={labelCls}>来源 IP (逗号分隔)</label>
+                    <label className={labelCls}><FieldLabel label="来源 IP" tip="匹配的来源 IP 地址列表，逗号分隔。支持 geoip: 前缀和 CIDR 格式。" /></label>
                     <input type="text" value={sourceIP} onChange={e => setSourceIP(e.target.value)}
                       placeholder="10.0.0.1, geoip:private" className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>本地入站 IP (逗号分隔)</label>
+                    <label className={labelCls}><FieldLabel label="本地入站 IP" tip="匹配的本地入站 IP 地址，即流量到达 Xray 时的目标地址。" /></label>
                     <input type="text" value={localIP} onChange={e => setLocalIP(e.target.value)}
                       placeholder="192.168.0.25" className={inputCls} />
                   </div>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                   <div>
-                    <label className={labelCls}>匹配用户邮箱 (逗号分隔)</label>
+                    <label className={labelCls}><FieldLabel label="匹配用户邮箱" tip="匹配在入站中认证的用户邮箱地址，逗号分隔。用于按用户身份路由。" /></label>
                     <input type="text" value={user} onChange={e => setUser(e.target.value)}
                       placeholder="love@xray.com" className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>入站标识 (逗号分隔)</label>
+                    <label className={labelCls}><FieldLabel label="入站标识" tip="匹配流量来源的入站 Tag 列表，逗号分隔。用于按入站协议路由。" /></label>
                     <input type="text" value={inboundTag} onChange={e => setInboundTag(e.target.value)}
                       placeholder="tag-vmess, VLESS_TCP" className={inputCls} />
                   </div>
@@ -373,12 +374,12 @@ export const RoutingRuleModal: React.FC<RoutingRuleModalProps> = ({
               <Collapsible title="协议与网络" defaultOpen={!!(protocol || network || attrs)}>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                   <div>
-                    <label className={labelCls}>嗅探协议 (逗号分隔)</label>
+                    <label className={labelCls}><FieldLabel label="嗅探协议" tip="根据流量嗅探结果匹配的应用层协议，如 http、tls、quic、bittorrent 等。" /></label>
                     <input type="text" value={protocol} onChange={e => setProtocol(e.target.value)}
                       placeholder="http, tls, quic, bittorrent" className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>网络类型</label>
+                    <label className={labelCls}><FieldLabel label="网络类型" tip="匹配流量的底层传输网络类型，可选 tcp、udp 或两者。" /></label>
                     <CustomSelect
                       options={[
                         { value: '', label: '不指定' },
@@ -390,7 +391,7 @@ export const RoutingRuleModal: React.FC<RoutingRuleModalProps> = ({
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>HTTP 属性匹配 (JSON 对象)</label>
+                  <label className={labelCls}><FieldLabel label="HTTP 属性匹配" tip={'通过 HTTP 请求属性进行路由匹配，JSON 格式对象。如 {":method": "GET"} 匹配 GET 请求。'} /></label>
                   <textarea rows={2} value={attrs} onChange={e => setAttrs(e.target.value)}
                     placeholder='{":method": "GET"} 或 {":path": "/test"}' className={textareaCls} />
                 </div>
@@ -400,12 +401,12 @@ export const RoutingRuleModal: React.FC<RoutingRuleModalProps> = ({
               <Collapsible title="高级选项" defaultOpen={!!(process || vlessRoute || webhookUrl)}>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                   <div>
-                    <label className={labelCls}>匹配进程名 (逗号分隔)</label>
+                    <label className={labelCls}><FieldLabel label="匹配进程名" tip="匹配发起连接的进程名称，逗号分隔。支持前缀匹配如 self/，绝对路径如 /usr/bin/app。" /></label>
                     <input type="text" value={process} onChange={e => setProcess(e.target.value)}
                       placeholder="curl, self/, /usr/bin/app" className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>VLESS 路由标识</label>
+                    <label className={labelCls}><FieldLabel label="VLESS 路由标识" tip="基于 VLESS 用户 UUID 的第 7-8 字节进行路由匹配，用于 VLESS 协议的精细流量分发。" /></label>
                     <input type="text" value={vlessRoute} onChange={e => setVlessRoute(e.target.value)}
                       placeholder="UUID 第7-8字节路由值" className={inputCls} />
                   </div>
@@ -414,18 +415,18 @@ export const RoutingRuleModal: React.FC<RoutingRuleModalProps> = ({
                   <span className="text-[11px] font-semibold text-amber-300">Webhook 通知</span>
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                     <div>
-                      <label className={labelCls}>Webhook URL</label>
+                      <label className={labelCls}><FieldLabel label="Webhook URL" tip="当此规则匹配时发送通知的 Webhook 地址，用于告警和事件通知。" /></label>
                       <input type="text" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
                         placeholder="https://api.example.com/alert" className={inputCls} />
                     </div>
                     <div>
-                      <label className={labelCls}>去重时间 (秒)</label>
+                      <label className={labelCls}><FieldLabel label="去重时间（秒）" tip="相同 Webhook 通知的去重间隔（秒），在此时间内重复触发不会重复发送。" /></label>
                       <input type="text" value={webhookDedup} onChange={e => setWebhookDedup(e.target.value)}
                         placeholder="300" className={inputCls} />
                     </div>
                   </div>
                   <div>
-                    <label className={labelCls}>自定义请求头 (JSON 对象)</label>
+                    <label className={labelCls}><FieldLabel label="自定义请求头" tip={'Webhook 请求的自定义 HTTP 请求头，JSON 格式对象。如 {"X-API-Key": "secret"}。'} /></label>
                     <input type="text" value={webhookHeaders} onChange={e => setWebhookHeaders(e.target.value)}
                       placeholder='{"X-API-Key": "secret"}' className={inputCls} />
                   </div>

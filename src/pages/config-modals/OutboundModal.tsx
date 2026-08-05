@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import { CustomSelect } from '../../components/CustomSelect';
 import { StreamSettingsPanel } from '../../components/StreamSettingsPanel';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface OutboundModalProps {
   isOpen: boolean;
@@ -531,11 +532,11 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
               {/* Basic fields */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>出站标识</label>
+                  <label className={labelCls}><FieldLabel label="出站标识" tip="此出站的唯一标识 Tag，用于路由规则匹配。必须全局唯一。" /></label>
                   <input type="text" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="proxy" className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>出站协议</label>
+                  <label className={labelCls}><FieldLabel label="出站协议" tip="出站使用的代理协议，如 VLESS、VMess、Trojan、Shadowsocks 等。" /></label>
                   <CustomSelect options={OUTBOUND_PROTOCOL_OPTIONS} value={protocol} onChange={setProtocol} />
                 </div>
               </div>
@@ -545,11 +546,11 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="md:col-span-2">
-                      <label className={labelCls}>服务器地址</label>
+                      <label className={labelCls}><FieldLabel label="服务器地址" tip="远程服务器的域名或 IP 地址。" /></label>
                       <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="example.com" className={inputCls} />
                     </div>
                     <div>
-                      <label className={labelCls}>端口</label>
+                      <label className={labelCls}><FieldLabel label="端口" tip="远程服务器的端口号。" /></label>
                       <input type="number" value={port} onChange={(e) => setPort(e.target.value)} placeholder="443" className={inputCls} />
                     </div>
                   </div>
@@ -558,15 +559,15 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                   {protocol === 'vless' && (
                     <div className="space-y-3">
                       <div>
-                        <label className={labelCls}>用户 UUID</label>
+                        <label className={labelCls}><FieldLabel label="用户 UUID" tip="VLESS 用户标识，格式为 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx。" /></label>
                         <input type="text" value={uuid} onChange={(e) => setUuid(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className={inputCls} />
                       </div>
                       <div>
-                        <label className={labelCls}>流控模式</label>
+                        <label className={labelCls}><FieldLabel label="流控模式" tip="VLESS 流控方式。xtls-rprx-vision 为常用流控，可提升性能并防止检测。" /></label>
                         <CustomSelect options={VLESS_FLOW_OPTIONS} value={vlessFlow} onChange={setVlessFlow} size="sm" accentColor="blue" />
                       </div>
                       <div>
-                        <label className={labelCls}>用户等级</label>
+                        <label className={labelCls}><FieldLabel label="用户等级" tip="用户等级，用于区分不同用户的策略。数值越大优先级越高。" /></label>
                         <input type="number" value={userLevel} onChange={(e) => setUserLevel(Number(e.target.value) || 0)} className={inputSmall} />
                       </div>
                       <div className="p-3 bg-slate-800/30 border border-white/5 rounded-xl space-y-3">
@@ -574,7 +575,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                         <p className="text-[11px] text-slate-500">启用后该出站可作为 VLESS 反向代理出站，向服务端注册隧道并保留公网源 IP。</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
-                            <label className={labelCls}>反向入站标识 tag</label>
+                            <label className={labelCls}><FieldLabel label="反向入站标识 tag" tip="反向代理对应的入站 Tag，需与反向入站的 tag 一致。" /></label>
                             <input type="text" value={vlessReverseTag} onChange={(e) => setVlessReverseTag(e.target.value)} placeholder="留空则不启用" className={inputSmall} />
                           </div>
                           <div className="flex items-end gap-2">
@@ -589,21 +590,21 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                   {protocol === 'vmess' && (
                     <div className="space-y-3">
                       <div>
-                        <label className={labelCls}>用户 UUID</label>
+                        <label className={labelCls}><FieldLabel label="用户 UUID" tip="VMess 用户标识，格式为 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx。" /></label>
                         <input type="text" value={uuid} onChange={(e) => setUuid(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className={inputCls} />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                          <label className={labelCls}>加密方式</label>
+                          <label className={labelCls}><FieldLabel label="加密方式" tip="VMess 用户数据的加密方式，推荐 auto 自动选择。" /></label>
                           <CustomSelect options={VMESS_SECURITY_OPTIONS} value={vmessSecurity} onChange={setVmessSecurity} size="sm" accentColor="blue" />
                         </div>
                         <div>
-                          <label className={labelCls}>alterId</label>
+                          <label className={labelCls}><FieldLabel label="alterId" tip="VMess 额外 ID，用于兼容旧版客户端。建议设为 0。" /></label>
                           <input type="number" value={vmessAlterId} onChange={(e) => setVmessAlterId(Number(e.target.value) || 0)} className={inputSmall} />
                         </div>
                       </div>
                       <div>
-                        <label className={labelCls}>用户等级</label>
+                        <label className={labelCls}><FieldLabel label="用户等级" tip="用户等级，用于区分不同用户的策略。" /></label>
                         <input type="number" value={userLevel} onChange={(e) => setUserLevel(Number(e.target.value) || 0)} className={inputSmall} />
                       </div>
                     </div>
@@ -612,16 +613,16 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                   {protocol === 'trojan' && (
                     <div className="space-y-3">
                       <div>
-                        <label className={labelCls}>密码</label>
+                        <label className={labelCls}><FieldLabel label="密码" tip="Trojan 密码，需与服务端配置一致。" /></label>
                         <input type="text" value={uuid} onChange={(e) => setUuid(e.target.value)} placeholder="Trojan 密码" className={inputCls} />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className={labelCls}>用户邮箱</label>
+                          <label className={labelCls}><FieldLabel label="用户邮箱" tip="可选字段，用于标识用户以便流量统计。" /></label>
                           <input type="text" value={userEmail} onChange={(e) => setUserEmail(e.target.value)} placeholder="可选，用于流量统计" className={inputSmall} />
                         </div>
                         <div>
-                          <label className={labelCls}>用户等级</label>
+                          <label className={labelCls}><FieldLabel label="用户等级" tip="用户等级，用于区分不同用户的策略。" /></label>
                           <input type="number" value={userLevel} onChange={(e) => setUserLevel(Number(e.target.value) || 0)} className={inputSmall} />
                         </div>
                       </div>
@@ -632,21 +633,21 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                     <div className="space-y-3">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                          <label className={labelCls}>加密方式</label>
+                          <label className={labelCls}><FieldLabel label="加密方式" tip="Shadowsocks 加密算法，推荐使用 2022 系列 AEAD 加密。" /></label>
                           <CustomSelect options={SS_METHOD_OPTIONS} value={ssMethod} onChange={setSsMethod} size="sm" accentColor="blue" />
                         </div>
                         <div>
-                          <label className={labelCls}>密码</label>
+                          <label className={labelCls}><FieldLabel label="密码" tip="Shadowsocks 密码，需与服务端配置一致。" /></label>
                           <input type="text" value={ssPassword} onChange={(e) => setSsPassword(e.target.value)} placeholder="Shadowsocks 密码" className={inputSmall} />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className={labelCls}>用户邮箱</label>
+                          <label className={labelCls}><FieldLabel label="用户邮箱" tip="可选字段，用于标识用户以便流量统计。" /></label>
                           <input type="text" value={userEmail} onChange={(e) => setUserEmail(e.target.value)} placeholder="可选，用于流量统计" className={inputSmall} />
                         </div>
                         <div>
-                          <label className={labelCls}>用户等级</label>
+                          <label className={labelCls}><FieldLabel label="用户等级" tip="用户等级，用于区分不同用户的策略。" /></label>
                           <input type="number" value={userLevel} onChange={(e) => setUserLevel(Number(e.target.value) || 0)} className={inputSmall} />
                         </div>
                       </div>
@@ -671,16 +672,16 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className={labelCls}>域名解析策略</label>
+                      <label className={labelCls}><FieldLabel label="域名解析策略" tip="Freedom 出站的域名解析策略。AsIs 直接使用域名，UseIP 强制解析 IP。" /></label>
                       <CustomSelect options={FREEDOM_DS_OPTIONS} value={freedomDs} onChange={setFreedomDs} size="sm" accentColor="blue" />
                     </div>
                     <div>
-                      <label className={labelCls}>目标重定向</label>
+                      <label className={labelCls}><FieldLabel label="目标重定向" tip="将 Freedom 出站流量重定向到指定地址，格式为 IP:Port。" /></label>
                       <input type="text" value={freedomRedirect} onChange={(e) => setFreedomRedirect(e.target.value)} placeholder="127.0.0.1:8080" className={inputSmall} />
                     </div>
                   </div>
                   <div>
-                    <label className={labelCls}>用户等级</label>
+                    <label className={labelCls}><FieldLabel label="用户等级" tip="Freedom 出站的用户等级。" /></label>
                     <input type="number" value={freedomUserLevel} onChange={(e) => setFreedomUserLevel(Number(e.target.value) || 0)} className={inputSmall} />
                   </div>
                 </div>
@@ -690,7 +691,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
               {protocol === 'blackhole' && (
                 <div className="space-y-3">
                   <div>
-                    <label className={labelCls}>响应类型</label>
+                    <label className={labelCls}><FieldLabel label="响应类型" tip="Blackhole 阻断协议返回的响应类型。none 丢弃数据，http 返回空 HTTP 响应。" /></label>
                     <CustomSelect
                       options={[
                         { value: 'none', label: 'none 无响应丢弃数据' },
@@ -712,7 +713,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                   <p className="text-xs text-slate-500">DNS 查询转发协议，将 DNS 请求转发至指定服务器，支持改写目标地址、端口和协议。</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className={labelCls}>改写传输协议</label>
+                      <label className={labelCls}><FieldLabel label="改写传输协议" tip="DNS 出站改写 DNS 请求的传输协议，可选 TCP 或 UDP。" /></label>
                       <CustomSelect
                         options={[
                           { value: '', label: '保持来源' },
@@ -726,15 +727,15 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label className={labelCls}>改写地址</label>
+                      <label className={labelCls}><FieldLabel label="改写地址" tip="DNS 出站改写 DNS 请求的目标地址。" /></label>
                       <input type="text" value={dnsRewriteAddress} onChange={(e) => setDnsRewriteAddress(e.target.value)} placeholder="保持来源" className={inputSmall} />
                     </div>
                     <div>
-                      <label className={labelCls}>改写端口</label>
+                      <label className={labelCls}><FieldLabel label="改写端口" tip="DNS 出站改写 DNS 请求的目标端口，默认 53。" /></label>
                       <input type="number" value={dnsRewritePort || ''} onChange={(e) => setDnsRewritePort(Number(e.target.value) || 0)} placeholder="53" className={inputSmall} />
                     </div>
                     <div>
-                      <label className={labelCls}>用户等级</label>
+                      <label className={labelCls}><FieldLabel label="用户等级" tip="DNS 出站的用户等级。" /></label>
                       <input type="number" value={dnsUserLevel} onChange={(e) => setDnsUserLevel(Number(e.target.value) || 0)} className={inputSmall} />
                     </div>
                   </div>
@@ -746,7 +747,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 <div className="space-y-3">
                   <p className="text-xs text-slate-500">本地回环协议，将流量重新送回 routing 处理，可借助 balancer 实现复杂分流。</p>
                   <div>
-                    <label className={labelCls}>回环入站标识 inboundTag</label>
+                    <label className={labelCls}><FieldLabel label="回环入站标识 inboundTag" tip="Loopback 出站将流量送回指定 Tag 的入站重新进行路由匹配。" /></label>
                     <input type="text" value={loopbackInboundTag} onChange={(e) => setLoopbackInboundTag(e.target.value)} placeholder="用于路由重新匹配的入站 Tag" className={inputSmall} />
                   </div>
                 </div>
@@ -756,26 +757,26 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 <div className="space-y-3">
                   <p className="text-xs text-slate-500">WireGuard VPN 协议，支持完整配置。注意 WireGuard 不支持 streamSettings。</p>
                   <div>
-                    <label className={labelCls}>私钥 SecretKey</label>
+                    <label className={labelCls}><FieldLabel label="私钥 SecretKey" tip="WireGuard 客户端私钥，用于加密通信。" /></label>
                     <input type="text" value={wgSecretKey} onChange={(e) => setWgSecretKey(e.target.value)} placeholder="WireGuard Private Key" className={inputCls} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className={labelCls}>虚拟网卡地址 (逗号分隔)</label>
+                      <label className={labelCls}><FieldLabel label="虚拟网卡地址 (逗号分隔)" tip="WireGuard 虚拟网卡的 IP 地址，支持 IPv4 和 IPv6。" /></label>
                       <input type="text" value={wgAddress} onChange={(e) => setWgAddress(e.target.value)} placeholder="10.0.0.1, fd59:7153:2388:b5fd::1" className={inputSmall} />
                     </div>
                     <div>
-                      <label className={labelCls}>MTU</label>
+                      <label className={labelCls}><FieldLabel label="MTU" tip="WireGuard 最大传输单元，默认 1420。" /></label>
                       <input type="number" value={wgMtu} onChange={(e) => setWgMtu(Number(e.target.value) || 1420)} placeholder="1420" className={inputSmall} />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className={labelCls}>Reserved 保留字节 (逗号分隔)</label>
+                      <label className={labelCls}><FieldLabel label="Reserved 保留字节 (逗号分隔)" tip="WireGuard Reserved 字节，用于 WARP 等场景。" /></label>
                       <input type="text" value={wgReserved} onChange={(e) => setWgReserved(e.target.value)} placeholder="1, 2, 3" className={inputSmall} />
                     </div>
                     <div>
-                      <label className={labelCls}>域名解析策略</label>
+                      <label className={labelCls}><FieldLabel label="域名解析策略" tip="WireGuard 出站的域名解析策略。" /></label>
                       <CustomSelect
                         options={[
                           { value: '', label: '默认 ForceIP' },
@@ -810,21 +811,21 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                       <div key={i} className="space-y-2 pb-2 border-b border-white/5 last:border-0">
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[11px] text-slate-400 mb-1 block">Endpoint 端点地址</label>
+                            <label className="text-[11px] text-slate-400 mb-1 block"><FieldLabel label="端点地址" tip="WireGuard 对端节点的地址和端口，格式为 host:port。" /></label>
                             <input type="text" value={peer.endpoint} onChange={(e) => setWgPeers(prev => prev.map((p, idx) => idx === i ? { ...p, endpoint: e.target.value } : p))} placeholder="engage.cloudflareclient.com:2408" className={inputSmall} />
                           </div>
                           <div>
-                            <label className="text-[11px] text-slate-400 mb-1 block">PublicKey 公钥</label>
+                            <label className="text-[11px] text-slate-400 mb-1 block"><FieldLabel label="公钥" tip="WireGuard 对端节点的公钥，用于加密通信。" /></label>
                             <input type="text" value={peer.publicKey} onChange={(e) => setWgPeers(prev => prev.map((p, idx) => idx === i ? { ...p, publicKey: e.target.value } : p))} placeholder="服务器公钥" className={inputSmall} />
                           </div>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <label className="text-[11px] text-slate-400 mb-1 block">PreSharedKey</label>
+                            <label className="text-[11px] text-slate-400 mb-1 block"><FieldLabel label="预共享密钥" tip="WireGuard 对端的预共享密钥（PreSharedKey），可选，用于增强前向保密性。" /></label>
                             <input type="text" value={peer.preSharedKey} onChange={(e) => setWgPeers(prev => prev.map((p, idx) => idx === i ? { ...p, preSharedKey: e.target.value } : p))} placeholder="可选" className={inputSmall} />
                           </div>
                           <div>
-                            <label className="text-[11px] text-slate-400 mb-1 block">KeepAlive 秒</label>
+                            <label className="text-[11px] text-slate-400 mb-1 block"><FieldLabel label="保活间隔" tip="WireGuard KeepAlive 间隔秒数，0 表示禁用。" /></label>
                             <input type="number" value={peer.keepAlive} onChange={(e) => setWgPeers(prev => prev.map((p, idx) => idx === i ? { ...p, keepAlive: Number(e.target.value) || 0 } : p))} placeholder="0" className={inputSmall} />
                           </div>
                           <div className="flex items-end gap-1">
@@ -836,7 +837,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                           </div>
                         </div>
                         <div>
-                          <label className="text-[11px] text-slate-400 mb-1 block">AllowedIPs (逗号分隔)</label>
+                          <label className="text-[11px] text-slate-400 mb-1 block"><FieldLabel label="允许 IP" tip="WireGuard 对端允许路由的 IP 列表，逗号分隔。" /></label>
                           <input type="text" value={peer.allowedIPs} onChange={(e) => setWgPeers(prev => prev.map((p, idx) => idx === i ? { ...p, allowedIPs: e.target.value } : p))} placeholder="0.0.0.0/0, ::/0" className={inputSmall} />
                         </div>
                       </div>
@@ -850,11 +851,11 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className={labelCls}>用户名</label>
+                      <label className={labelCls}><FieldLabel label="用户名" tip="SOCKS/HTTP 代理认证用户名，留空则无认证。" /></label>
                       <input type="text" value={uuid} onChange={(e) => setUuid(e.target.value)} placeholder="留空则无认证" className={inputSmall} />
                     </div>
                     <div>
-                      <label className={labelCls}>密码</label>
+                      <label className={labelCls}><FieldLabel label="密码" tip="SOCKS/HTTP 代理认证密码，留空则无认证。" /></label>
                       <input type="text" value={ssPassword} onChange={(e) => setSsPassword(e.target.value)} placeholder="留空则无认证" className={inputSmall} />
                     </div>
                   </div>
@@ -866,11 +867,11 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 <p className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wide">出站高级设置</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className={labelCls}>发送源地址 sendThrough</label>
+                    <label className={labelCls}><FieldLabel label="发送源地址 sendThrough" tip="指定发送数据包的源 IP 地址，默认为 0.0.0.0。" /></label>
                     <input type="text" value={sendThrough} onChange={(e) => setSendThrough(e.target.value)} placeholder="0.0.0.0 默认" className={inputSmall} />
                   </div>
                   <div>
-                    <label className={labelCls}>目标域名策略 targetStrategy</label>
+                    <label className={labelCls}><FieldLabel label="目标域名策略 targetStrategy" tip="出站连接目标域名的解析策略。" /></label>
                     <CustomSelect options={TARGET_STRATEGY_OPTIONS} value={targetStrategy} onChange={setTargetStrategy} size="sm" accentColor="blue" />
                   </div>
                 </div>
@@ -881,7 +882,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">出站代理 proxySettings</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className={labelCls}>代理目标 Tag</label>
+                    <label className={labelCls}><FieldLabel label="代理目标 Tag" tip="将此出站的数据转发给另一个指定 Tag 的出站。" /></label>
                     <input type="text" value={proxyTag} onChange={(e) => setProxyTag(e.target.value)} placeholder="留空则不设置" className={inputSmall} />
                   </div>
                   <div className="flex items-end gap-2">
@@ -901,15 +902,15 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                 {muxEnabled && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className={labelCls}>TCP 并发数</label>
+                      <label className={labelCls}><FieldLabel label="TCP 并发数" tip="Mux 多路复用的 TCP 最大并发连接数，-1 表示不限制。" /></label>
                       <input type="number" value={muxConcurrency} onChange={(e) => setMuxConcurrency(Number(e.target.value) || 8)} min={-1} max={128} className={inputSmall} />
                     </div>
                     <div>
-                      <label className={labelCls}>XUDP 并发数</label>
+                      <label className={labelCls}><FieldLabel label="XUDP 并发数" tip="Mux 多路复用的 XUDP 最大并发连接数。" /></label>
                       <input type="number" value={muxXudpConcurrency} onChange={(e) => setMuxXudpConcurrency(Number(e.target.value) || 0)} min={-1} max={1024} className={inputSmall} />
                     </div>
                     <div>
-                      <label className={labelCls}>QUIC 流量处理</label>
+                      <label className={labelCls}><FieldLabel label="QUIC 流量处理" tip="Mux 对 UDP 443 端口的 QUIC 流量处理方式。reject 拒绝，allow 允许，skip 跳过 Mux。" /></label>
                       <CustomSelect options={XUDP_PROXY_OPTIONS} value={muxXudpProxyUDP443} onChange={setMuxXudpProxyUDP443} size="sm" accentColor="blue" />
                     </div>
                   </div>

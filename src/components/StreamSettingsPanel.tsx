@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { CustomSelect } from './CustomSelect';
 import { ToggleSwitch } from './ToggleSwitch';
+import { FieldLabel } from './FieldLabel';
 
 // ── Option constants ──
 const METHOD_OPTIONS = [
@@ -746,18 +747,18 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
               </div>
             )}
             <div>
-              <label className={labelCls}>数据包头伪装</label>
+              <label className={labelCls}><FieldLabel label="数据包头伪装" tip="TCP 数据包的头部伪装类型，可伪装为 HTTP 流量以混淆检测。" /></label>
               <CustomSelect options={RAW_HEADER_OPTIONS} value={rawHeaderType} onChange={setRawHeaderType} size="sm" accentColor="blue" />
             </div>
             {rawHeaderType === 'http' && (
               <div className="space-y-3">
                 <p className="text-[10px] text-amber-400/80">HTTP 伪装需在入站出站同时配置且内容一致，可通过 VLESS fallbacks path 分流</p>
                 <div>
-                  <label className={labelCls}>HTTP 请求 JSON</label>
+                  <label className={labelCls}><FieldLabel label="HTTP 请求 JSON" tip="HTTP 伪装的请求模板 JSON，定义伪装请求的方法、路径和头部。入站出站必须一致。" /></label>
                   <textarea value={rawHttpRequest} onChange={e => setRawHttpRequest(e.target.value)} rows={4} placeholder='{"version":"1.1","method":"GET","path":["/"],"headers":{"Host":["www.baidu.com"]}}' className={`${inputSmall} resize-none font-mono`} />
                 </div>
                 <div>
-                  <label className={labelCls}>HTTP 响应 JSON</label>
+                  <label className={labelCls}><FieldLabel label="HTTP 响应 JSON" tip="HTTP 伪装的响应模板 JSON，定义伪装响应的状态码和头部。入站出站必须一致。" /></label>
                   <textarea value={rawHttpResponse} onChange={e => setRawHttpResponse(e.target.value)} rows={4} placeholder='{"version":"1.1","status":"200","reason":"OK","headers":{"Content-Type":["application/octet-stream"]}}' className={`${inputSmall} resize-none font-mono`} />
                 </div>
               </div>
@@ -770,16 +771,16 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
           <div className="space-y-3">
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>传输模式</label>
+                <label className={labelCls}><FieldLabel label="传输模式" tip="XHTTP 的传输模式。auto 自动选择，packet-up 数据包上行，stream-up 流式上行，stream-one 单流模式。" /></label>
                 <CustomSelect options={XHTTP_MODE_OPTIONS} value={xhttpMode} onChange={setXhttpMode} size="sm" accentColor="blue" />
               </div>
               <div>
-                <label className={labelCls}>路径</label>
+                <label className={labelCls}><FieldLabel label="路径" tip="XHTTP 传输的请求路径。" /></label>
                 <input type="text" value={xhttpPath} onChange={e => setXhttpPath(e.target.value)} placeholder="/" className={inputSmall} />
               </div>
             </div>
             <div>
-              <label className={labelCls}>Host 主机</label>
+              <label className={labelCls}><FieldLabel label="Host 主机" tip="XHTTP 传输的 Host 头部值，用于域名验证。" /></label>
               <input type="text" value={xhttpHost} onChange={e => setXhttpHost(e.target.value)} placeholder="example.com" className={inputSmall} />
             </div>
             <div className="flex items-center justify-between p-2.5 bg-slate-950/30 border border-white/5 rounded-lg">
@@ -787,7 +788,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
               <ToggleSwitch checked={xhttpNoSSEHeader} onChange={() => setXhttpNoSSEHeader(p => !p)} size="sm" activeColor="blue" />
             </div>
             <div>
-              <label className={labelCls}>附加参数 JSON</label>
+              <label className={labelCls}><FieldLabel label="附加参数 JSON" tip="XHTTP 传输的附加配置参数，JSON 格式对象。" /></label>
               <textarea value={xhttpExtra} onChange={e => setXhttpExtra(e.target.value)} rows={2} placeholder='{"key": "value"}' className={`${inputSmall} resize-none`} />
             </div>
           </div>
@@ -798,27 +799,27 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
           <div className="space-y-3">
             <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>MTU 最大传输单元</label>
+                <label className={labelCls}><FieldLabel label="MTU 最大传输单元" tip="mKCP 的最大传输单元（字节），影响数据包大小。默认 1350，范围 576-1460。" /></label>
                 <input type="number" value={kcpMtu} onChange={e => setKcpMtu(Number(e.target.value) || 1350)} min={576} max={1460} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>TTI 传输间隔 ms</label>
+                <label className={labelCls}><FieldLabel label="TTI 传输间隔 ms" tip="mKCP 的传输时间间隔（毫秒），影响发送频率。默认 50，范围 10-100。" /></label>
                 <input type="number" value={kcpTti} onChange={e => setKcpTti(Number(e.target.value) || 50)} min={10} max={100} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>上行带宽 MB/s</label>
+                <label className={labelCls}><FieldLabel label="上行带宽 MB/s" tip="mKCP 的上行带宽容量（MB/s），用于拥塞控制。" /></label>
                 <input type="number" value={kcpUplink} onChange={e => setKcpUplink(Number(e.target.value) || 5)} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>下行带宽 MB/s</label>
+                <label className={labelCls}><FieldLabel label="下行带宽 MB/s" tip="mKCP 的下行带宽容量（MB/s），用于拥塞控制。" /></label>
                 <input type="number" value={kcpDownlink} onChange={e => setKcpDownlink(Number(e.target.value) || 20)} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>读缓冲区 MB</label>
+                <label className={labelCls}><FieldLabel label="读缓冲区 MB" tip="mKCP 的接收缓冲区大小（MB），影响接收性能。" /></label>
                 <input type="number" value={kcpReadBuf} onChange={e => setKcpReadBuf(Number(e.target.value) || 2)} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>写缓冲区 MB</label>
+                <label className={labelCls}><FieldLabel label="写缓冲区 MB" tip="mKCP 的发送缓冲区大小（MB），影响发送性能。" /></label>
                 <input type="number" value={kcpWriteBuf} onChange={e => setKcpWriteBuf(Number(e.target.value) || 2)} className={inputSmall} />
               </div>
             </div>
@@ -831,12 +832,12 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
             </div>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>mKCP 包头伪装</label>
+                <label className={labelCls}><FieldLabel label="mKCP 包头伪装" tip="mKCP 数据包的伪装类型，可伪装为 DNS/DTLS/SRTP/uTP/微信/WireGuard 等协议流量。" /></label>
                 <CustomSelect options={MKCP_HEADER_OPTIONS} value={kcpMaskHeader} onChange={setKcpMaskHeader} size="sm" accentColor="blue" />
               </div>
               {kcpMaskHeader && (
                 <div>
-                  <label className={labelCls}>伪装参数</label>
+                  <label className={labelCls}><FieldLabel label="伪装参数" tip="mKCP 伪装的参数值。DNS 伪装填域名，其他类型填密码。" /></label>
                   <input type="text" value={kcpMaskValue} onChange={e => setKcpMaskValue(e.target.value)} placeholder={kcpMaskHeader === 'dns' ? 'www.baidu.com' : '密码'} className={inputSmall} />
                 </div>
               )}
@@ -849,11 +850,11 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
           <div className="space-y-3">
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>Authority 权威</label>
+                <label className={labelCls}><FieldLabel label="Authority 权威" tip="gRPC 的 Authority 头部值，类似 Host，用于虚拟主机路由。" /></label>
                 <input type="text" value={grpcAuthority} onChange={e => setGrpcAuthority(e.target.value)} placeholder="grpc.example.com" className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>服务名称</label>
+                <label className={labelCls}><FieldLabel label="服务名称" tip="gRPC 的服务名称，客户端和服务端必须一致。用于在同一个端口上区分不同的服务。" /></label>
                 <input type="text" value={grpcServiceName} onChange={e => setGrpcServiceName(e.target.value)} placeholder="serviceName" className={inputSmall} />
               </div>
             </div>
@@ -868,19 +869,19 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
                   <div>
-                    <label className={labelCls}>用户代理</label>
+                    <label className={labelCls}><FieldLabel label="用户代理" tip="自定义 gRPC 连接的 User-Agent 头部。" /></label>
                     <input type="text" value={grpcUserAgent} onChange={e => setGrpcUserAgent(e.target.value)} placeholder="自定义 User Agent" className={inputSmall} />
                   </div>
                   <div>
-                    <label className={labelCls}>空闲超时 秒</label>
+                    <label className={labelCls}><FieldLabel label="空闲超时（秒）" tip="gRPC 连接空闲超时时间（秒），超时后自动关闭连接。" /></label>
                     <input type="number" value={grpcIdleTimeout} onChange={e => setGrpcIdleTimeout(Number(e.target.value) || 0)} className={inputSmall} />
                   </div>
                   <div>
-                    <label className={labelCls}>健康检查超时 秒</label>
+                    <label className={labelCls}><FieldLabel label="健康检查超时（秒）" tip="gRPC 健康检查的超时时间（秒），默认 20 秒。" /></label>
                     <input type="number" value={grpcHealthTimeout} onChange={e => setGrpcHealthTimeout(Number(e.target.value) || 20)} className={inputSmall} />
                   </div>
                   <div>
-                    <label className={labelCls}>H2 初始窗口大小</label>
+                    <label className={labelCls}><FieldLabel label="H2 初始窗口大小" tip="gRPC HTTP/2 流的初始窗口大小（字节），影响流量控制。" /></label>
                     <input type="number" value={grpcInitialWindowsSize} onChange={e => setGrpcInitialWindowsSize(Number(e.target.value) || 0)} className={inputSmall} />
                   </div>
                 </div>
@@ -907,17 +908,17 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
             )}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>路径</label>
+                <label className={labelCls}><FieldLabel label="路径" tip="WebSocket 的 HTTP 升级请求路径。" /></label>
                 <input type="text" value={wsPath} onChange={e => setWsPath(e.target.value)} placeholder="/" className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>Host 主机</label>
+                <label className={labelCls}><FieldLabel label="Host 主机" tip="WebSocket 的 Host 头部值，用于域名验证。" /></label>
                 <input type="text" value={wsHost} onChange={e => setWsHost(e.target.value)} placeholder="example.com" className={inputSmall} />
               </div>
             </div>
             {!isInbound && (
               <div>
-                <label className={labelCls}>心跳间隔 秒 (0=禁用)</label>
+                <label className={labelCls}><FieldLabel label="心跳间隔（秒）" tip="WebSocket 心跳发送间隔（秒），设为 0 则禁用心跳。" /></label>
                 <input type="number" value={wsHeartbeat} onChange={e => setWsHeartbeat(Number(e.target.value) || 0)} className={inputSmall} />
               </div>
             )}
@@ -953,11 +954,11 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
             )}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>路径</label>
+                <label className={labelCls}><FieldLabel label="路径" tip="HTTPUpgrade 的 HTTP 升级请求路径。" /></label>
                 <input type="text" value={hupPath} onChange={e => setHupPath(e.target.value)} placeholder="/" className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>Host 主机</label>
+                <label className={labelCls}><FieldLabel label="Host 主机" tip="HTTPUpgrade 的 Host 头部值，用于域名验证。" /></label>
                 <input type="text" value={hupHost} onChange={e => setHupHost(e.target.value)} placeholder="example.com" className={inputSmall} />
               </div>
             </div>
@@ -984,20 +985,20 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
           <div className="space-y-3">
             <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>版本</label>
+                <label className={labelCls}><FieldLabel label="版本" tip="Hysteria 协议版本，当前仅支持 v2。" /></label>
                 <input type="number" value={hysteriaVersion} onChange={e => setHysteriaVersion(Number(e.target.value) || 2)} className={inputSmall} readOnly />
               </div>
               <div>
-                <label className={labelCls}>UDP 空闲超时 秒</label>
+                <label className={labelCls}><FieldLabel label="UDP 空闲超时（秒）" tip="Hysteria UDP 会话的空闲超时时间（秒），默认 60 秒。" /></label>
                 <input type="number" value={hysteriaUdpIdle} onChange={e => setHysteriaUdpIdle(Number(e.target.value) || 60)} className={inputSmall} />
               </div>
             </div>
             <div>
-              <label className={labelCls}>认证密码</label>
+              <label className={labelCls}><FieldLabel label="认证密码" tip="Hysteria2 的认证密码，客户端和服务端必须一致。" /></label>
               <input type="text" value={hysteriaAuth} onChange={e => setHysteriaAuth(e.target.value)} placeholder="服务端与客户端保持一致" className={inputSmall} />
             </div>
             <div>
-              <label className={labelCls}>HTTP3 伪装类型</label>
+              <label className={labelCls}><FieldLabel label="HTTP3 伪装类型" tip="Hysteria2 的 HTTP/3 伪装类型，可伪装为文件服务、反代目标或自定义内容。" /></label>
               <CustomSelect
                 options={[
                   { value: '', label: '无 默认 404' },
@@ -1013,14 +1014,14 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
             </div>
             {hysteriaMasqType === 'file' && (
               <div>
-                <label className={labelCls}>文件目录路径</label>
+                <label className={labelCls}><FieldLabel label="文件目录路径" tip="伪装为文件服务时提供的本地文件目录路径。" /></label>
                 <input type="text" value={hysteriaMasqDir} onChange={e => setHysteriaMasqDir(e.target.value)} placeholder="/var/www/html" className={inputSmall} />
               </div>
             )}
             {hysteriaMasqType === 'proxy' && (
               <div className="space-y-3">
                 <div>
-                  <label className={labelCls}>反代目标 URL</label>
+                  <label className={labelCls}><FieldLabel label="反代目标 URL" tip="伪装为反向代理时的目标 URL。" /></label>
                   <input type="text" value={hysteriaMasqUrl} onChange={e => setHysteriaMasqUrl(e.target.value)} placeholder="https://example.com" className={inputSmall} />
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -1038,15 +1039,15 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
             {hysteriaMasqType === 'string' && (
               <div className="space-y-3">
                 <div>
-                  <label className={labelCls}>自定义内容</label>
+                  <label className={labelCls}><FieldLabel label="自定义内容" tip="伪装为 string 类型时返回的自定义响应内容。" /></label>
                   <textarea value={hysteriaMasqContent} onChange={e => setHysteriaMasqContent(e.target.value)} rows={2} placeholder="Hello World" className={`${inputSmall} resize-none`} />
                 </div>
                 <div>
-                  <label className={labelCls}>HTTP 头 JSON</label>
+                  <label className={labelCls}><FieldLabel label="HTTP 头 JSON" tip="伪装响应的自定义 HTTP 头部，JSON 格式。" /></label>
                   <textarea value={hysteriaMasqHeaders} onChange={e => setHysteriaMasqHeaders(e.target.value)} rows={2} placeholder='{"Content-Type": "text/plain"}' className={`${inputSmall} resize-none`} />
                 </div>
                 <div>
-                  <label className={labelCls}>状态码</label>
+                  <label className={labelCls}><FieldLabel label="状态码" tip="伪装响应的 HTTP 状态码。" /></label>
                   <input type="number" value={hysteriaMasqStatusCode} onChange={e => setHysteriaMasqStatusCode(Number(e.target.value) || 0)} className={inputSmall} />
                 </div>
               </div>
@@ -1070,19 +1071,19 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
               <ToggleSwitch checked={realityShow} onChange={() => setRealityShow(p => !p)} size="sm" activeColor="purple" />
             </div>
             <div>
-              <label className={labelCls}>目标</label>
+              <label className={labelCls}><FieldLabel label="目标" tip="REALITY 服务端的目标地址，当客户端访问的目标不在 serverNames 中时，流量将被转发到此目标。格式为 domain:port。" /></label>
               <input type="text" value={realityTarget} onChange={e => setRealityTarget(e.target.value)} placeholder="example.com:443" className={inputSmall} />
             </div>
             <div>
-              <label className={labelCls}>ServerNames 列表 (逗号分隔)</label>
+              <label className={labelCls}><FieldLabel label="ServerNames 列表" tip="REALITY 服务端接受的 SNI 域名列表，逗号分隔。客户端连接的域名必须在此列表中。" /></label>
               <input type="text" value={realityServerNames} onChange={e => setRealityServerNames(e.target.value)} placeholder="example.com, www.example.com" className={inputSmall} />
             </div>
             <div>
-              <label className={labelCls}>私钥</label>
+              <label className={labelCls}><FieldLabel label="私钥" tip="REALITY 服务端的私钥，通过 x25519 工具生成。" /></label>
               <input type="text" value={realityPrivateKey} onChange={e => setRealityPrivateKey(e.target.value)} placeholder="x25519 生成" className={inputSmall} />
             </div>
             <div>
-              <label className={labelCls}>Short IDs 列表 (逗号分隔)</label>
+              <label className={labelCls}><FieldLabel label="Short IDs 列表" tip="REALITY 服务端接受的 Short ID 列表，逗号分隔。客户端的 shortId 必须匹配其中之一。" /></label>
               <input type="text" value={realityShortIds} onChange={e => setRealityShortIds(e.target.value)} placeholder='"", 0123456789abcdef' className={inputSmall} />
             </div>
           </div>
@@ -1091,28 +1092,28 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
       return (
         <div className="space-y-3">
           <div>
-            <label className={labelCls}>伪装域名 SNI</label>
+            <label className={labelCls}><FieldLabel label="伪装域名 SNI" tip="REALITY 客户端连接的伪装域名，必须与服务端的 serverNames 之一匹配。" /></label>
             <input type="text" value={realityServerName} onChange={e => setRealityServerName(e.target.value)} placeholder="itunes.apple.com" className={inputSmall} />
           </div>
           <div>
-            <label className={labelCls}>TLS 指纹</label>
+            <label className={labelCls}><FieldLabel label="TLS 指纹" tip="模拟的浏览器 TLS 指纹，用于去特征化。可选 chrome、firefox、safari 等。" /></label>
             <CustomSelect options={FINGERPRINT_OPTIONS} value={realityFingerprint} onChange={setRealityFingerprint} size="sm" accentColor="purple" />
           </div>
           <div>
-            <label className={labelCls}>密码</label>
+            <label className={labelCls}><FieldLabel label="密码" tip="REALITY 客户端的公钥，从服务端配置中获取。" /></label>
             <input type="text" value={realityPassword} onChange={e => setRealityPassword(e.target.value)} placeholder="公钥" className={inputSmall} />
           </div>
           <div>
-            <label className={labelCls}>ML-DSA-65 公钥</label>
+            <label className={labelCls}><FieldLabel label="ML-DSA-65 公钥" tip="后量子签名验证公钥，用于 ML-DSA-65 算法的签名验证。" /></label>
             <input type="text" value={realityMldsa65Verify} onChange={e => setRealityMldsa65Verify(e.target.value)} placeholder="后量子签名验证公钥" className={inputSmall} />
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
             <div>
-              <label className={labelCls}>Short ID</label>
+              <label className={labelCls}><FieldLabel label="Short ID" tip="REALITY 客户端的 Short ID，必须与服务端配置的 shortIds 之一匹配。" /></label>
               <input type="text" value={realityShortId} onChange={e => setRealityShortId(e.target.value)} placeholder="6ba85170" className={inputSmall} />
             </div>
             <div>
-              <label className={labelCls}>爬虫路径</label>
+              <label className={labelCls}><FieldLabel label="爬虫路径" tip="REALITY 爬虫的起始路径，用于模拟正常浏览器访问行为。" /></label>
               <input type="text" value={realitySpiderX} onChange={e => setRealitySpiderX(e.target.value)} placeholder="/" className={inputSmall} />
             </div>
           </div>
@@ -1124,16 +1125,16 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
       return (
         <div className="space-y-3">
           <div>
-            <label className={labelCls}>服务器名称 SNI</label>
+            <label className={labelCls}><FieldLabel label="服务器名称 SNI" tip="TLS 连接的服务器名称指示（SNI），必须与服务器证书匹配。" /></label>
             <input type="text" value={tlsServerName} onChange={e => setTlsServerName(e.target.value)} placeholder="example.com" className={inputSmall} />
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
             <div>
-              <label className={labelCls}>TLS 指纹</label>
+              <label className={labelCls}><FieldLabel label="TLS 指纹" tip="模拟的浏览器 TLS 指纹，用于去特征化。可选 chrome、firefox、safari 等。" /></label>
               <CustomSelect options={FINGERPRINT_OPTIONS} value={tlsFingerprint} onChange={setTlsFingerprint} size="sm" accentColor="blue" />
             </div>
             <div>
-              <label className={labelCls}>ALPN</label>
+              <label className={labelCls}><FieldLabel label="ALPN" tip="TLS 应用层协议协商，指定协商的协议类型。h2 为 HTTP/2，http/1.1 为 HTTP/1.1。" /></label>
               <CustomSelect options={ALPN_OPTIONS} value={tlsAlpn} onChange={setTlsAlpn} size="sm" accentColor="blue" />
             </div>
           </div>
@@ -1147,7 +1148,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
                 <ToggleSwitch checked={tlsAllowInsecure} onChange={() => setTlsAllowInsecure(p => !p)} size="sm" activeColor="blue" />
               </div>
               <div>
-                <label className={labelCls}>证书 SHA256 指纹</label>
+                <label className={labelCls}><FieldLabel label="证书 SHA256 指纹" tip="固定服务器证书的 SHA256 指纹，仅接受匹配的证书，增强安全性。" /></label>
                 <input type="text" value={tlsPinnedCert} onChange={e => setTlsPinnedCert(e.target.value)} placeholder="e8e2d387fdbffe..." className={inputSmall} />
               </div>
             </>
@@ -1155,11 +1156,11 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
           {isInbound && (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>证书文件路径</label>
+                <label className={labelCls}><FieldLabel label="证书文件路径" tip="TLS 服务端证书文件的路径（PEM 格式）。" /></label>
                 <input type="text" value={tlsCertFile} onChange={e => setTlsCertFile(e.target.value)} placeholder="/path/to/cert.crt" className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>密钥文件路径</label>
+                <label className={labelCls}><FieldLabel label="密钥文件路径" tip="TLS 服务端私钥文件的路径（PEM 格式）。" /></label>
                 <input type="text" value={tlsKeyFile} onChange={e => setTlsKeyFile(e.target.value)} placeholder="/path/to/key.key" className={inputSmall} />
               </div>
             </div>
@@ -1185,11 +1186,11 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
       {/* Method & Security selectors */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
         <div>
-          <label className={labelCls}>传输方式</label>
+          <label className={labelCls}><FieldLabel label="传输方式" tip="底层传输协议类型。RAW 为原始 TCP/UDP，XHTTP 为多模式传输，mKCP 基于 UDP 模拟 TCP，gRPC 基于 HTTP/2 复用，WebSocket 伪装 HTTP 流量，HTTPUpgrade 轻量升级协议，Hysteria2 基于 QUIC。" /></label>
           <CustomSelect options={METHOD_OPTIONS} value={method} onChange={setMethod} size="sm" accentColor="blue" />
         </div>
         <div>
-          <label className={labelCls}>传输安全</label>
+          <label className={labelCls}><FieldLabel label="传输安全" tip="传输层安全加密类型。none 不加密，TLS 标准 TLS 1.3 加密，REALITY 去特征安全传输（仅兼容 RAW/XHTTP/gRPC）。" /></label>
           <CustomSelect
             options={SECURITY_OPTIONS.map(o => ({
               ...o,
@@ -1234,43 +1235,43 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
               <span className="text-[11px] font-semibold text-amber-300">QUIC 参数</span>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
                 <div>
-                  <label className={labelCls}>拥塞控制</label>
+                  <label className={labelCls}><FieldLabel label="拥塞控制" tip="QUIC 协议的拥塞控制算法。BBR 推荐，Brutal 可协商速率。" /></label>
                   <CustomSelect options={QUIC_CONGESTION_OPTIONS} value={quicCongestion} onChange={setQuicCongestion} size="sm" accentColor="amber" />
                 </div>
                 <div>
-                  <label className={labelCls}>BBR 预设</label>
+                  <label className={labelCls}><FieldLabel label="BBR 预设" tip="BBR 拥塞控制的预设模式。standard 标准、conservative 保守、aggressive 激进。" /></label>
                   <CustomSelect options={BBR_PROFILE_OPTIONS} value={quicBbrProfile} onChange={setQuicBbrProfile} size="sm" accentColor="amber" />
                 </div>
               </div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
                 <div>
-                  <label className={labelCls}>上行速率 (如 60 mbps)</label>
+                  <label className={labelCls}><FieldLabel label="上行速率" tip="Brutal 拥塞控制的上行速率，如 60 mbps。" /></label>
                   <input type="text" value={quicBrutalUp} onChange={e => setQuicBrutalUp(e.target.value)} placeholder="60 mbps" className={inputSmall} />
                 </div>
                 <div>
-                  <label className={labelCls}>下行速率</label>
+                  <label className={labelCls}><FieldLabel label="下行速率" tip="Brutal 拥塞控制的下行速率，如 100 mbps。" /></label>
                   <input type="text" value={quicBrutalDown} onChange={e => setQuicBrutalDown(e.target.value)} placeholder="100 mbps" className={inputSmall} />
                 </div>
               </div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
                 <div>
-                  <label className={labelCls}>UDP 端口跳跃</label>
+                  <label className={labelCls}><FieldLabel label="UDP 端口跳跃" tip="UDP 端口跳跃的端口范围，如 20000-50000。用于防止端口封锁。" /></label>
                   <input type="text" value={quicUdpHopPorts} onChange={e => setQuicUdpHopPorts(e.target.value)} placeholder="20000-50000" className={inputSmall} />
                 </div>
                 {quicUdpHopPorts && (
                   <div>
-                    <label className={labelCls}>跳跃间隔 秒</label>
+                    <label className={labelCls}><FieldLabel label="跳跃间隔（秒）" tip="UDP 端口跳跃的切换间隔（秒），默认 30 秒。" /></label>
                     <input type="number" value={quicUdpHopInterval} onChange={e => setQuicUdpHopInterval(Number(e.target.value) || 30)} className={inputSmall} />
                   </div>
                 )}
               </div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
                 <div>
-                  <label className={labelCls}>空闲超时 秒</label>
+                  <label className={labelCls}><FieldLabel label="空闲超时（秒）" tip="QUIC 连接的空闲超时时间（秒），超时后自动关闭。" /></label>
                   <input type="number" value={quicMaxIdleTimeout} onChange={e => setQuicMaxIdleTimeout(Number(e.target.value) || 30)} className={inputSmall} />
                 </div>
                 <div>
-                  <label className={labelCls}>KeepAlive 间隔 秒 (0=禁用)</label>
+                  <label className={labelCls}><FieldLabel label="KeepAlive 间隔（秒）" tip="QUIC 连接的 KeepAlive 发送间隔（秒），设为 0 则禁用。" /></label>
                   <input type="number" value={quicKeepAlive} onChange={e => setQuicKeepAlive(Number(e.target.value) || 0)} className={inputSmall} />
                 </div>
               </div>
@@ -1280,12 +1281,12 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
             <div className="space-y-3">
               <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
                 <div>
-                  <label className={labelCls}>mKCP 包头伪装</label>
+                  <label className={labelCls}><FieldLabel label="mKCP 包头伪装" tip="FinalMask 中 mKCP 数据包的伪装类型。" /></label>
                   <CustomSelect options={MKCP_HEADER_OPTIONS} value={kcpMaskHeader} onChange={setKcpMaskHeader} size="sm" accentColor="amber" />
                 </div>
                 {kcpMaskHeader && (
                   <div>
-                    <label className={labelCls}>伪装参数</label>
+                    <label className={labelCls}><FieldLabel label="伪装参数" tip="FinalMask mKCP 伪装的参数值。DNS 伪装填域名，其他类型填密码。" /></label>
                     <input type="text" value={kcpMaskValue} onChange={e => setKcpMaskValue(e.target.value)} placeholder={kcpMaskHeader === 'dns' ? 'www.baidu.com' : '密码'} className={inputSmall} />
                   </div>
                 )}
@@ -1308,43 +1309,43 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
           <div className="space-y-3">
             <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>域名解析策略</label>
+                <label className={labelCls}><FieldLabel label="域名解析策略" tip="Sockopt 层的域名解析策略，决定如何在连接前解析域名。AsIs 直接使用，UseIP 解析为 IP 后连接。" /></label>
                 <CustomSelect options={DOMAIN_STRATEGY_OPTIONS} value={sockoptDomainStrategy} onChange={setSockoptDomainStrategy} size="sm" accentColor="emerald" />
               </div>
               {isInbound && (
                 <div>
-                  <label className={labelCls}>透明代理</label>
+                  <label className={labelCls}><FieldLabel label="透明代理" tip="透明代理模式。redirect 使用 iptables REDIRECT，tproxy 使用 TPROXY 模式。" /></label>
                   <CustomSelect options={TPROXY_OPTIONS} value={sockoptTproxy} onChange={setSockoptTproxy} size="sm" accentColor="emerald" />
                 </div>
               )}
               {!isInbound && (
                 <div>
-                  <label className={labelCls}>TCP 拥塞控制</label>
+                  <label className={labelCls}><FieldLabel label="TCP 拥塞控制" tip="TCP 连接的拥塞控制算法。bbr 推荐，cubic 和 reno 为传统算法。" /></label>
                   <CustomSelect options={TCP_CONGESTION_OPTIONS} value={sockoptTcpCongestion} onChange={setSockoptTcpCongestion} size="sm" accentColor="emerald" />
                 </div>
               )}
             </div>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>SO_MARK (Linux)</label>
+                <label className={labelCls}><FieldLabel label="SO_MARK (Linux)" tip="Linux 下为 Socket 设置 SO_MARK 标记值，用于 iptables 路由规则匹配。" /></label>
                 <input type="number" value={sockoptMark} onChange={e => setSockoptMark(Number(e.target.value) || 0)} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>出站接口绑定</label>
+                <label className={labelCls}><FieldLabel label="出站接口绑定" tip="绑定出站流量到指定网络接口（如 wg0、eth0），用于策略路由。" /></label>
                 <input type="text" value={sockoptInterface} onChange={e => setSockoptInterface(e.target.value)} placeholder="wg0" className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>TCP 最大分段</label>
+                <label className={labelCls}><FieldLabel label="TCP 最大分段" tip="TCP 最大分段大小（字节），影响 TCP 数据包的分片行为。" /></label>
                 <input type="number" value={sockoptTcpMaxSeg} onChange={e => setSockoptTcpMaxSeg(Number(e.target.value) || 0)} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>TCP 窗口限制</label>
+                <label className={labelCls}><FieldLabel label="TCP 窗口限制" tip="TCP 窗口大小限制（字节），用于限制 TCP 接收窗口。" /></label>
                 <input type="number" value={sockoptTcpWindowClamp} onChange={e => setSockoptTcpWindowClamp(Number(e.target.value) || 0)} className={inputSmall} />
               </div>
             </div>
             {!isInbound && (
               <div>
-                <label className={labelCls}>代理链转发标识</label>
+                <label className={labelCls}><FieldLabel label="代理链转发标识" tip="指定下一跳出站的 Tag，用于构建代理链（如多跳中转）。" /></label>
                 <input type="text" value={sockoptDialerProxy} onChange={e => setSockoptDialerProxy(e.target.value)} placeholder="outbound tag" className={inputSmall} />
               </div>
             )}
@@ -1358,26 +1359,26 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
               </div>
             )}
             <div>
-              <label className={labelCls}>可信 XFF 头来源 (逗号分隔)</label>
+              <label className={labelCls}><FieldLabel label="可信 XFF 头来源" tip="可信的 X-Forwarded-For / X-Real-IP 头部来源地址，逗号分隔。用于反向代理场景。" /></label>
               <input type="text" value={sockoptTrustedXFF} onChange={e => setSockoptTrustedXFF(e.target.value)} placeholder="X-Forwarded-For, X-Real-IP" className={inputSmall} />
               <p className="text-[10px] text-slate-500 mt-1">XHTTP/WebSocket/HTTPUpgrade/gRPC 可信反向代理标识</p>
             </div>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
               <div>
-                <label className={labelCls}>KeepAlive 空闲 秒</label>
+                <label className={labelCls}><FieldLabel label="KeepAlive 空闲（秒）" tip="TCP KeepAlive 空闲时间（秒），连接空闲多久后开始发送 KeepAlive 探测。" /></label>
                 <input type="number" value={sockoptTcpKeepAliveIdle} onChange={e => setSockoptTcpKeepAliveIdle(Number(e.target.value) || 0)} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>KeepAlive 间隔 秒</label>
+                <label className={labelCls}><FieldLabel label="KeepAlive 间隔（秒）" tip="TCP KeepAlive 探测包的发送间隔（秒）。" /></label>
                 <input type="number" value={sockoptTcpKeepAliveInterval} onChange={e => setSockoptTcpKeepAliveInterval(Number(e.target.value) || 0)} className={inputSmall} />
               </div>
               <div>
-                <label className={labelCls}>TCP 用户超时 ms</label>
+                <label className={labelCls}><FieldLabel label="TCP 用户超时（ms）" tip="TCP 用户层超时时间（毫秒），超过此时间未收到数据则断开连接。" /></label>
                 <input type="number" value={sockoptTcpUserTimeout} onChange={e => setSockoptTcpUserTimeout(Number(e.target.value) || 0)} className={inputSmall} />
               </div>
             </div>
             <div>
-              <label className={labelCls}>地址端口策略 (SRV/TXT)</label>
+              <label className={labelCls}><FieldLabel label="地址端口策略" tip="SRV/TXT 记录解析时的地址和端口获取策略，用于 DNS SRV 记录解析。" /></label>
               <CustomSelect options={ADDRESS_PORT_STRATEGY_OPTIONS} value={sockoptAddressPortStrategy} onChange={setSockoptAddressPortStrategy} size="sm" accentColor="emerald" />
             </div>
             <div className="flex flex-wrap gap-3">
@@ -1411,15 +1412,15 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
               {happyEyeballsEnabled && (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
                   <div>
-                    <label className={labelCls}>尝试延迟 ms</label>
+                    <label className={labelCls}><FieldLabel label="尝试延迟（ms）" tip="Happy Eyeballs 算法中 IPv4 尝试的延迟（毫秒），超过后开始 IPv6 尝试。" /></label>
                     <input type="number" value={heTryDelay} onChange={e => setHeTryDelay(Number(e.target.value) || 0)} className={inputSmall} />
                   </div>
                   <div>
-                    <label className={labelCls}>交错数量</label>
+                    <label className={labelCls}><FieldLabel label="交错数量" tip="Happy Eyeballs 的连接尝试交错数量，控制 IPv4/IPv6 尝试的交错间隔。" /></label>
                     <input type="number" value={heInterleave} onChange={e => setHeInterleave(Number(e.target.value) || 1)} min={1} className={inputSmall} />
                   </div>
                   <div>
-                    <label className={labelCls}>最大并发</label>
+                    <label className={labelCls}><FieldLabel label="最大并发" tip="Happy Eyeballs 的最大并发连接尝试数。" /></label>
                     <input type="number" value={heMaxConcurrent} onChange={e => setHeMaxConcurrent(Number(e.target.value) || 4)} min={0} className={inputSmall} />
                   </div>
                   <div className="flex items-center justify-between p-2 bg-slate-950/30 border border-white/5 rounded-lg">
@@ -1431,7 +1432,7 @@ export const StreamSettingsPanel: React.FC<StreamSettingsPanelProps> = ({
             </div>
             {/* customSockopt JSON */}
             <div>
-              <label className={labelCls}>自定义 Sockopt (JSON 数组)</label>
+              <label className={labelCls}><FieldLabel label="自定义 Sockopt" tip="高级用户自定义 Socket 选项，JSON 数组格式。可设置特定系统的 TCP/UDP 选项。" /></label>
               <textarea value={sockoptCustomJson} onChange={e => setSockoptCustomJson(e.target.value)} rows={3} placeholder='[{"system":"linux","network":"tcp","type":"str","level":"6","opt":"13","value":"bbr"}]' className={`${inputSmall} resize-none`} />
               <p className="text-[10px] text-slate-500 mt-1">高级用户自定义 Socket 选项，留空则不生效</p>
             </div>

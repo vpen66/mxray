@@ -107,7 +107,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
       // 2. 降级使用 GitHub API 检查最新 Releases
       try {
-        const resp = await fetch('https://api.github.com/repos/vpen/mxray/releases/latest', {
+        const resp = await fetch('https://api.github.com/repos/vpen66/mxray/releases/latest', {
           headers: { Accept: 'application/vnd.github.v3+json' },
         });
 
@@ -119,7 +119,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         const latestTag = (data.tag_name || data.name || '').trim();
         const releaseBody = data.body || '无详细更新说明';
         const releaseDate = data.published_at ? data.published_at.split('T')[0] : '';
-        const htmlUrl = data.html_url || 'https://github.com/vpen/mxray/releases';
+        const htmlUrl = data.html_url || 'https://github.com/vpen66/mxray/releases';
 
         if (latestTag && compareVersions(latestTag, currentVer) > 0) {
           set({

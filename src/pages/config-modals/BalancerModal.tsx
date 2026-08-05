@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Eye, Code2, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { CustomSelect } from '../../components/CustomSelect';
+import { FieldLabel } from '../../components/FieldLabel';
 
 const inputCls = 'w-full px-3 py-2 bg-slate-950/60 border border-white/10 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 font-mono';
 const labelCls = 'block text-[11px] font-medium text-slate-400 mb-1';
@@ -147,19 +148,19 @@ export const BalancerModal: React.FC<BalancerModalProps> = ({
               {/* Tag & Strategy */}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                 <div>
-                  <label className={labelCls}>负载均衡器标识</label>
+                  <label className={labelCls}><FieldLabel label="负载均衡器标识" tip="负载均衡器的唯一标识 Tag，用于路由规则中指定 balancerTag。" /></label>
                   <input type="text" value={tag} onChange={e => setTag(e.target.value)}
                     placeholder="如: my-balancer" className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>选择策略</label>
+                  <label className={labelCls}><FieldLabel label="选择策略" tip="负载均衡的节点选择策略。random 随机选择，leastPing 选择延迟最低，leastLoad 综合延迟和成功率。" /></label>
                   <CustomSelect options={STRATEGY_OPTIONS} value={strategyType} onChange={setStrategyType} accentColor="cyan" />
                 </div>
               </div>
 
               {/* Fallback */}
               <div>
-                <label className={labelCls}>回退出站 (全部不可用时)</label>
+                <label className={labelCls}><FieldLabel label="回退出站" tip="当所有节点均不可用时，流量将转发到此回退出站。留空则丢弃连接。" /></label>
                 <CustomSelect
                   options={[{ value: '', label: '不设置' }, ...availableOutboundOptions]}
                   value={fallbackTag} onChange={setFallbackTag} accentColor="cyan" />
@@ -196,24 +197,24 @@ export const BalancerModal: React.FC<BalancerModalProps> = ({
                   <span className="text-[11px] font-semibold text-cyan-300">策略参数</span>
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                     <div>
-                      <label className={labelCls}>最优节点数</label>
+                      <label className={labelCls}><FieldLabel label="最优节点数" tip="leastLoad 策略中同时使用的最优节点数量，流量会在这些节点间分配。" /></label>
                       <input type="text" value={expected} onChange={e => setExpected(e.target.value)}
                         placeholder="2" className={inputCls} />
                     </div>
                     <div>
-                      <label className={labelCls}>最高 RTT</label>
+                      <label className={labelCls}><FieldLabel label="最高 RTT" tip="节点的最高往返延迟阈值，超过此值的节点将被排除。如 1s、500ms。" /></label>
                       <input type="text" value={maxRTT} onChange={e => setMaxRTT(e.target.value)}
                         placeholder="1s" className={inputCls} />
                     </div>
                   </div>
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
                     <div>
-                      <label className={labelCls}>容忍失败比例</label>
+                      <label className={labelCls}><FieldLabel label="容忍失败比例" tip="允许的最大探测失败比例，超过此比例的节点将被排除。如 0.01 表示 1%。" /></label>
                       <input type="text" value={tolerance} onChange={e => setTolerance(e.target.value)}
                         placeholder="0.01" className={inputCls} />
                     </div>
                     <div>
-                      <label className={labelCls}>RTT 基线 (逗号分隔)</label>
+                      <label className={labelCls}><FieldLabel label="RTT 基线" tip="RTT 基线值列表，逗号分隔。用于计算节点的相对延迟评分。" /></label>
                       <input type="text" value={baselines} onChange={e => setBaselines(e.target.value)}
                         placeholder="1s, 2s" className={inputCls} />
                     </div>

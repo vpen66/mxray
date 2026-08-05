@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Eye, Code2, AlertCircle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface ApiModalProps {
   isOpen: boolean;
@@ -146,7 +147,7 @@ export const ApiModal: React.FC<ApiModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  API 服务标识
+                  <FieldLabel label="API 服务标识" tip="API 入站的标识 Tag，默认为 api。用于路由中将 API 流量引导到对应入站。" />
                 </label>
                 <input
                   type="text"
@@ -159,7 +160,7 @@ export const ApiModal: React.FC<ApiModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  监听地址与端口
+                  <FieldLabel label="监听地址与端口" tip="API 的 gRPC 监听地址和端口。设置后自动创建入站和路由，但流量统计不包含 API 连接。" />
                 </label>
                 <input
                   type="text"
@@ -173,7 +174,7 @@ export const ApiModal: React.FC<ApiModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-2">
-                  要开启的 gRPC API 服务模块
+                  <FieldLabel label="gRPC API 服务模块" tip="选择要开启的 gRPC API 服务。HandlerService 管理入站出站，LoggerService 日志控制，StatsService 流量统计，RoutingService 路由管理，ReflectionService 服务反射。" />
                 </label>
                 <div className="space-y-2">
                   {AVAILABLE_SERVICES.map((srv) => (

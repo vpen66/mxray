@@ -3,6 +3,7 @@ import { X, Save, Eye, Code2, AlertCircle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { CustomSelect } from '../../components/CustomSelect';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface LogModalProps {
   isOpen: boolean;
@@ -177,7 +178,7 @@ export const LogModal: React.FC<LogModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  日志输出级别
+                  <FieldLabel label="日志输出级别" tip="日志的详细程度。debug 输出所有调试信息，info 基本状态，warning 警告与异常，error 仅严重错误，none 关闭日志。" />
                 </label>
                 <CustomSelect
                   options={LOGLEVEL_OPTIONS}
@@ -188,7 +189,7 @@ export const LogModal: React.FC<LogModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  访问日志文件路径 (可选)
+                  <FieldLabel label="访问日志文件路径" tip="访问日志的写入路径，记录每个连接的访问信息。留空则不写入文件。" />
                 </label>
                 <input
                   type="text"
@@ -201,7 +202,7 @@ export const LogModal: React.FC<LogModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  错误日志文件路径 (可选)
+                  <FieldLabel label="错误日志文件路径" tip="错误日志的写入路径，记录运行时错误信息。留空则不写入文件。" />
                 </label>
                 <input
                   type="text"
@@ -214,7 +215,7 @@ export const LogModal: React.FC<LogModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  日志脱敏策略
+                  <FieldLabel label="日志脱敏策略" tip="日志中 IP 地址的脱敏级别。quarter 显示前两段，half 显示第一段，full 完全隐藏，自定义可指定掩码格式。" />
                 </label>
                 <CustomSelect
                   options={MASK_ADDRESS_OPTIONS}
@@ -235,7 +236,7 @@ export const LogModal: React.FC<LogModalProps> = ({
 
               <div className="flex items-center justify-between p-3 bg-slate-950/40 border border-white/5 rounded-xl">
                 <div>
-                  <span className="text-sm font-medium text-slate-200">启用 DNS 解析日志</span>
+                  <span className="text-sm font-medium text-slate-200"><FieldLabel label="启用 DNS 解析日志" tip="开启后独立记录 DNS 详细查询与响应过程，便于排查 DNS 问题。" /></span>
                   <p className="text-xs text-slate-400">独立记录 DNS 详细查询与响应过程</p>
                 </div>
                 <ToggleSwitch

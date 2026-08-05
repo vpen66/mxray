@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Eye, Code2, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface PolicyModalProps {
   isOpen: boolean;
@@ -177,7 +178,7 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
     setLevels(next);
   };
 
-  const ToggleRow = ({ label, checked, onChange, desc }: { label: string; checked: boolean; onChange: () => void; desc?: string }) => (
+  const ToggleRow = ({ label, checked, onChange, desc }: { label: React.ReactNode; checked: boolean; onChange: () => void; desc?: string }) => (
     <div className="flex items-center justify-between py-1">
       <div>
         <span className="text-xs text-slate-200">{label}</span>
@@ -240,28 +241,28 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
                     <div key={idx} className="bg-slate-800/30 border border-white/5 rounded-xl p-4 space-y-3">
                       <div className="flex items-center gap-3">
                         <div className="w-24">
-                          <label className={labelCls}>等级</label>
+                          <label className={labelCls}><FieldLabel label="等级" tip="用户等级编号，对应入站中用户配置的 level 值。不同等级可应用不同的连接策略。" /></label>
                           <input type="text" value={lv.level} onChange={e => updateLevel(idx, 'level', e.target.value)}
                             placeholder="0" className={inputCls} />
                         </div>
                         <div className="flex-1 grid grid-cols-4 gap-2">
                           <div>
-                            <label className={labelCls}>握手超时</label>
+                            <label className={labelCls}><FieldLabel label="握手超时" tip="连接握手超时时间（秒），默认 4 秒。超时未完成握手则断开连接。" /></label>
                             <input type="number" value={lv.handshake} onChange={e => updateLevel(idx, 'handshake', e.target.value)}
                               placeholder="4" className={inputCls} />
                           </div>
                           <div>
-                            <label className={labelCls}>空闲超时</label>
+                            <label className={labelCls}><FieldLabel label="空闲超时" tip="连接空闲超时时间（秒），默认 300 秒。无数据传输超过此时间则断开。" /></label>
                             <input type="number" value={lv.connIdle} onChange={e => updateLevel(idx, 'connIdle', e.target.value)}
                               placeholder="300" className={inputCls} />
                           </div>
                           <div>
-                            <label className={labelCls}>上行等待</label>
+                            <label className={labelCls}><FieldLabel label="上行等待" tip="上行等待超时（秒），默认 2 秒。服务端在收到数据后等待下行的时间。" /></label>
                             <input type="number" value={lv.uplinkOnly} onChange={e => updateLevel(idx, 'uplinkOnly', e.target.value)}
                               placeholder="2" className={inputCls} />
                           </div>
                           <div>
-                            <label className={labelCls}>下行等待</label>
+                            <label className={labelCls}><FieldLabel label="下行等待" tip="下行等待超时（秒），默认 5 秒。服务端在发出数据后等待上行的时间。" /></label>
                             <input type="number" value={lv.downlinkOnly} onChange={e => updateLevel(idx, 'downlinkOnly', e.target.value)}
                               placeholder="5" className={inputCls} />
                           </div>
@@ -273,7 +274,7 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="w-24">
-                          <label className={labelCls}>缓存大小 KB</label>
+                          <label className={labelCls}><FieldLabel label="缓存大小 KB" tip="每连接的内部缓冲区大小（KB）。较大的缓存可能提升性能但占用更多内存。" /></label>
                           <input type="number" value={lv.bufferSize} onChange={e => updateLevel(idx, 'bufferSize', e.target.value)}
                             placeholder="默认" className={inputCls} />
                         </div>
@@ -311,12 +312,12 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
                 <div className="bg-slate-800/30 border border-white/5 rounded-xl p-4">
                   <div className="grid grid-cols-2 gap-x-6 divide-x divide-white/5">
                     <div className="space-y-0.5">
-                      <ToggleRow label="入站上行统计" checked={statsInboundUplink} onChange={() => setStatsInboundUplink(!statsInboundUplink)} />
-                      <ToggleRow label="入站下行统计" checked={statsInboundDownlink} onChange={() => setStatsInboundDownlink(!statsInboundDownlink)} />
+                      <ToggleRow label={<FieldLabel label="入站上行统计" tip="统计所有入站的上行流量。" />} checked={statsInboundUplink} onChange={() => setStatsInboundUplink(!statsInboundUplink)} />
+                      <ToggleRow label={<FieldLabel label="入站下行统计" tip="统计所有入站的下行流量。" />} checked={statsInboundDownlink} onChange={() => setStatsInboundDownlink(!statsInboundDownlink)} />
                     </div>
                     <div className="pl-6 space-y-0.5">
-                      <ToggleRow label="出站上行统计" checked={statsOutboundUplink} onChange={() => setStatsOutboundUplink(!statsOutboundUplink)} />
-                      <ToggleRow label="出站下行统计" checked={statsOutboundDownlink} onChange={() => setStatsOutboundDownlink(!statsOutboundDownlink)} />
+                      <ToggleRow label={<FieldLabel label="出站上行统计" tip="统计所有出站的上行流量。" />} checked={statsOutboundUplink} onChange={() => setStatsOutboundUplink(!statsOutboundUplink)} />
+                      <ToggleRow label={<FieldLabel label="出站下行统计" tip="统计所有出站的下行流量。" />} checked={statsOutboundDownlink} onChange={() => setStatsOutboundDownlink(!statsOutboundDownlink)} />
                     </div>
                   </div>
                 </div>

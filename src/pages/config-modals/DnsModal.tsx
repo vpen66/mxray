@@ -3,6 +3,7 @@ import { X, Save, Eye, Code2, AlertCircle, Plus, Trash2, ChevronDown, ChevronRig
 import Editor from '@monaco-editor/react';
 import { CustomSelect } from '../../components/CustomSelect';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { FieldLabel } from '../../components/FieldLabel';
 
 interface DnsModalProps {
   isOpen: boolean;
@@ -267,7 +268,7 @@ export const DnsModal: React.FC<DnsModalProps> = ({ isOpen, onClose, initialValu
   };
 
   /* ── toggle row helper ── */
-  const ToggleRow = ({ label, checked, onChange, desc }: { label: string; checked: boolean; onChange: () => void; desc?: string }) => (
+  const ToggleRow = ({ label, checked, onChange, desc }: { label: React.ReactNode; checked: boolean; onChange: () => void; desc?: string }) => (
     <div className="flex items-center justify-between py-1.5">
       <div>
         <span className="text-xs text-slate-200">{label}</span>
@@ -313,31 +314,31 @@ export const DnsModal: React.FC<DnsModalProps> = ({ isOpen, onClose, initialValu
                 </h4>
                 <div className="space-y-3 bg-slate-800/30 border border-white/5 rounded-xl p-4">
                   <div>
-                    <label className={labelCls}>查询策略</label>
+                    <label className={labelCls}><FieldLabel label="查询策略" tip="DNS 查询的 IP 记录策略。UseIP 同时查询 A+AAAA，UseIPv4 仅 A 记录，UseIPv6 仅 AAAA 记录。" /></label>
                     <CustomSelect options={QUERY_STRATEGY_OPTIONS} value={queryStrategy} onChange={setQueryStrategy} accentColor="blue" />
                   </div>
                   <div>
-                    <label className={labelCls}>EDNS Client Subnet IP</label>
+                    <label className={labelCls}><FieldLabel label="EDNS Client Subnet IP" tip="向 DNS 服务器发送的客户端子网 IP，用于 EDNS Client Subnet 扩展，可影响 CDN 调度结果。" /></label>
                     <input type="text" value={clientIp} onChange={e => setClientIp(e.target.value)} placeholder="如 1.2.3.4（留空则不设置）" className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>入站标识</label>
+                    <label className={labelCls}><FieldLabel label="入站标识" tip="指定 DNS 查询流量应经过的入站 Tag，用于路由分流 DNS 流量。" /></label>
                     <input type="text" value={tag} onChange={e => setTag(e.target.value)} placeholder="DNS 查询流量的入站标识（留空则不设置）" className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>乐观缓存有效期（秒）</label>
+                    <label className={labelCls}><FieldLabel label="乐观缓存有效期（秒）" tip="设置 DNS 缓存过期后仍可返回旧记录的时间（秒），配合 serveStale 使用可减少 DNS 查询延迟。" /></label>
                     <input type="number" value={serveExpiredTTL} onChange={e => setServeExpiredTTL(e.target.value)} placeholder="0 = 永不过期（留空则不设置）" className={inputCls} />
                   </div>
                   <div className="grid grid-cols-2 gap-x-6 divide-x divide-white/5">
                     <div className="space-y-0.5">
-                      <ToggleRow label="禁用缓存" checked={disableCache} onChange={() => setDisableCache(!disableCache)} />
-                      <ToggleRow label="乐观缓存" checked={serveStale} onChange={() => setServeStale(!serveStale)} desc="返回陈旧记录并后台刷新" />
-                      <ToggleRow label="禁用 Fallback" checked={disableFallback} onChange={() => setDisableFallback(!disableFallback)} />
+                      <ToggleRow label={<FieldLabel label="禁用缓存" tip="开启后将不缓存任何 DNS 查询结果，每次请求都会重新解析。" />} checked={disableCache} onChange={() => setDisableCache(!disableCache)} />
+                      <ToggleRow label={<FieldLabel label="乐观缓存" tip="允许返回已过期的缓存记录，同时在后台刷新该记录，减少用户感知延迟。" />} checked={serveStale} onChange={() => setServeStale(!serveStale)} desc="返回陈旧记录并后台刷新" />
+                      <ToggleRow label={<FieldLabel label="禁用 Fallback" tip="禁用 DNS Fallback 机制。正常情况下当首选 DNS 无结果时会尝试 Fallback 服务器。" />} checked={disableFallback} onChange={() => setDisableFallback(!disableFallback)} />
                     </div>
                     <div className="pl-6 space-y-0.5">
-                      <ToggleRow label="命中时禁用 Fallback" checked={disableFallbackIfMatch} onChange={() => setDisableFallbackIfMatch(!disableFallbackIfMatch)} />
-                      <ToggleRow label="并行查询" checked={enableParallelQuery} onChange={() => setEnableParallelQuery(!enableParallelQuery)} desc="动态分组，组内竞速，组间回退" />
-                      <ToggleRow label="使用系统 Hosts" checked={useSystemHosts} onChange={() => setUseSystemHosts(!useSystemHosts)} />
+                      <ToggleRow label={<FieldLabel label="命中时禁用 Fallback" tip="当非 Fallback 服务器返回了有效结果后，不再等待 Fallback 服务器响应，加速 DNS 解析。" />} checked={disableFallbackIfMatch} onChange={() => setDisableFallbackIfMatch(!disableFallbackIfMatch)} />
+                      <ToggleRow label={<FieldLabel label="并行查询" tip="启用并行查询模式，DNS 请求会按服务器分组，组内竞速查询、组间顺序回退。" />} checked={enableParallelQuery} onChange={() => setEnableParallelQuery(!enableParallelQuery)} desc="动态分组，组内竞速，组间回退" />
+                      <ToggleRow label={<FieldLabel label="使用系统 Hosts" tip="启用后将读取操作系统 /etc/hosts 文件中的域名映射条目。" />} checked={useSystemHosts} onChange={() => setUseSystemHosts(!useSystemHosts)} />
                     </div>
                   </div>
                 </div>
@@ -359,11 +360,11 @@ export const DnsModal: React.FC<DnsModalProps> = ({ isOpen, onClose, initialValu
                       <div key={i} className="flex items-start gap-2 bg-slate-800/30 border border-white/5 rounded-xl p-3">
                         <div className="flex-1 grid grid-cols-2 gap-2">
                           <div>
-                            <label className={labelCls}>域名</label>
+                            <label className={labelCls}><FieldLabel label="域名" tip="要映射的域名，支持 domain:、regexp:、full:、geosite: 等前缀格式。" /></label>
                             <input type="text" value={h.domain} onChange={e => updateHost(i, 'domain', e.target.value)} placeholder="如 baidu.com 或 domain:xray.com" className={inputCls} />
                           </div>
                           <div>
-                            <label className={labelCls}>地址</label>
+                            <label className={labelCls}><FieldLabel label="地址" tip="域名对应的 IP 地址或 CNAME 域名，多个值用逗号分隔。" /></label>
                             <input type="text" value={h.address} onChange={e => updateHost(i, 'address', e.target.value)} placeholder="IP 或域名，多个用逗号分隔" className={inputCls} />
                           </div>
                         </div>
@@ -414,56 +415,56 @@ export const DnsModal: React.FC<DnsModalProps> = ({ isOpen, onClose, initialValu
                         <div className="px-3 pb-3 space-y-3 border-t border-white/5 pt-3">
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className={labelCls}>端口</label>
+                              <label className={labelCls}><FieldLabel label="端口" tip="DNS 服务器的查询端口，默认 53。DoH/DoT 等加密协议通常使用 443 或 853。" /></label>
                               <input type="number" value={srv.port} onChange={e => updateServer(idx, 'port', e.target.value)} placeholder="默认 53" className={inputCls} />
                             </div>
                             <div>
-                              <label className={labelCls}>查询策略</label>
+                              <label className={labelCls}><FieldLabel label="查询策略" tip="此 DNS 服务器的 IP 查询策略，留空则继承全局 queryStrategy 设置。" /></label>
                               <CustomSelect options={SERVER_QUERY_STRATEGY_OPTIONS} value={srv.queryStrategy} onChange={v => updateServer(idx, 'queryStrategy', v)} accentColor="purple" size="sm" />
                             </div>
                           </div>
                           <div>
-                            <label className={labelCls}>优先匹配域名（每行一个）</label>
+                            <label className={labelCls}><FieldLabel label="优先匹配域名" tip="指定此服务器优先处理的域名列表，每行一个。支持 geosite:、domain: 等前缀。仅匹配这些域名的查询才会发往此服务器。" /></label>
                             <textarea value={srv.domains} onChange={e => updateServer(idx, 'domains', e.target.value)} placeholder={"如:\ngeosite:netflix\ndomain:xray.com"} rows={2} className={`${inputCls} resize-y`} />
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className={labelCls}>期望 IP（每行一个）</label>
+                              <label className={labelCls}><FieldLabel label="期望 IP" tip="期望此 DNS 服务器返回的 IP 列表（每行一个）。若返回的 IP 不在期望列表中，该结果将被丢弃。支持 geoip: 前缀。" /></label>
                               <textarea value={srv.expectedIPs} onChange={e => updateServer(idx, 'expectedIPs', e.target.value)} placeholder="如 geoip:cn" rows={2} className={`${inputCls} resize-y`} />
                             </div>
                             <div>
-                              <label className={labelCls}>排除 IP（每行一个）</label>
+                              <label className={labelCls}><FieldLabel label="排除 IP" tip="不期望此 DNS 服务器返回的 IP 列表（每行一个）。若返回的 IP 在排除列表中，该结果将被丢弃。" /></label>
                               <textarea value={srv.unexpectedIPs} onChange={e => updateServer(idx, 'unexpectedIPs', e.target.value)} placeholder="如 geoip:cloudflare" rows={2} className={`${inputCls} resize-y`} />
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className={labelCls}>客户端 IP</label>
+                              <label className={labelCls}><FieldLabel label="客户端 IP" tip="发送 DNS 查询时携带的 EDNS Client Subnet IP，留空则继承全局 clientIp 设置。" /></label>
                               <input type="text" value={srv.clientIP} onChange={e => updateServer(idx, 'clientIP', e.target.value)} placeholder="继承全局" className={inputCls} />
                             </div>
                             <div>
-                              <label className={labelCls}>入站标识</label>
+                              <label className={labelCls}><FieldLabel label="入站标识" tip="此 DNS 服务器查询流量的入站标识 Tag，留空则继承全局设置。" /></label>
                               <input type="text" value={srv.tag} onChange={e => updateServer(idx, 'tag', e.target.value)} placeholder="继承全局" className={inputCls} />
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className={labelCls}>超时时间（毫秒）</label>
+                              <label className={labelCls}><FieldLabel label="超时时间（毫秒）" tip="此 DNS 服务器的查询超时时间（毫秒），默认 4000ms。超时后视为查询失败。" /></label>
                               <input type="number" value={srv.timeoutMs} onChange={e => updateServer(idx, 'timeoutMs', e.target.value)} placeholder="默认 4000" className={inputCls} />
                             </div>
                             <div>
-                              <label className={labelCls}>乐观缓存有效期（秒）</label>
+                              <label className={labelCls}><FieldLabel label="乐观缓存有效期（秒）" tip="此服务器的过期缓存保留时间（秒），留空则继承全局 serveExpiredTTL 设置。" /></label>
                               <input type="number" value={srv.serveExpiredTTL} onChange={e => updateServer(idx, 'serveExpiredTTL', e.target.value)} placeholder="继承全局" className={inputCls} />
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-x-6 divide-x divide-white/5">
                             <div className="space-y-0.5">
-                              <ToggleRow label="跳过 Fallback" checked={srv.skipFallback} onChange={() => updateServer(idx, 'skipFallback', !srv.skipFallback)} />
-                              <ToggleRow label="最终查询" checked={srv.finalQuery} onChange={() => updateServer(idx, 'finalQuery', !srv.finalQuery)} desc="此服务器为最终尝试，不触发 fallback" />
+                              <ToggleRow label={<FieldLabel label="跳过 Fallback" tip="标记此服务器为跳过 Fallback，在 Fallback 阶段不会被使用。" />} checked={srv.skipFallback} onChange={() => updateServer(idx, 'skipFallback', !srv.skipFallback)} />
+                              <ToggleRow label={<FieldLabel label="最终查询" tip="标记此服务器为最终查询服务器。当其他服务器均无结果时，此服务器作为最后尝试，不触发 fallback。" />} checked={srv.finalQuery} onChange={() => updateServer(idx, 'finalQuery', !srv.finalQuery)} desc="此服务器为最终尝试，不触发 fallback" />
                             </div>
                             <div className="pl-6 space-y-0.5">
-                              <ToggleRow label="禁用缓存" checked={srv.disableCache} onChange={() => updateServer(idx, 'disableCache', !srv.disableCache)} desc="继承全局（未设置时）" />
-                              <ToggleRow label="乐观缓存" checked={srv.serveStale} onChange={() => updateServer(idx, 'serveStale', !srv.serveStale)} />
+                              <ToggleRow label={<FieldLabel label="禁用缓存" tip="对此服务器禁用 DNS 缓存，每次查询都直接转发。留空则继承全局设置。" />} checked={srv.disableCache} onChange={() => updateServer(idx, 'disableCache', !srv.disableCache)} desc="继承全局（未设置时）" />
+                              <ToggleRow label={<FieldLabel label="乐观缓存" tip="允许此服务器返回过期的缓存记录并后台刷新。" />} checked={srv.serveStale} onChange={() => updateServer(idx, 'serveStale', !srv.serveStale)} />
                             </div>
                           </div>
                         </div>
