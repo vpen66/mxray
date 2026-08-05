@@ -453,6 +453,17 @@ pub async fn install_kernel(
         let _ = fs::remove_file(&tmp_zip);
         extracted?;
 
+        // Windows TUN 模式依赖 wintun.dll；若压缩包未附带则从官方源补全
+        #[cfg(target_os = "windows")]
+        {
+            let wintun_path = cores_dir.join("wintun.dll");
+            if !wintun_path.exists() {
+                if let Err(e) = ensure_wintun_dll(&wintun_path).await {
+                    log::warn!("安装内核时自动下载 wintun.dll 失败: {}", e);
+                }
+            }
+        }
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -527,7 +538,10 @@ fn extract_kernel_from_zip(zip_path: &Path, dest_dir: &Path, bin_name: &str) -> 
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| format!("压缩包格式无效或已损坏: {}", e))?;
 
-    let targets = [bin_name, "geosite.dat", "geoip.dat"];
+    #[allow(unused_mut)]
+    let mut targets: Vec<&str> = vec![bin_name, "geosite.dat", "geoip.dat"];
+    #[cfg(target_os = "windows")]
+    targets.push("wintun.dll");
     let mut bin_found = false;
 
     for i in 0..archive.len() {
@@ -552,6 +566,70 @@ fn extract_kernel_from_zip(zip_path: &Path, dest_dir: &Path, bin_name: &str) -> 
     if !bin_found {
         return Err(format!("压缩包中未找到 {}", bin_name));
     }
+    Ok(())
+}
+
+/// 当前架构对应的 Wintun 官方包内 DLL 子目录（wintun/bin/<arch>/wintun.dll）
+#[cfg(target_os = "windows")]
+fn wintun_arch_dir() -> &'static str {
+    match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86" => "x86",
+        _ => "amd64",
+    }
+}
+
+/// 确保 wintun.dll 存在于指定路径。Windows TUN 模式下 Xray 需加载该驱动
+/// 创建虚拟网卡；官方 Xray 发布包并不附带此 DLL，需从 Wintun 官方构建
+/// 产物中按架构下载并提取到内核所在目录
+#[cfg(target_os = "windows")]
+async fn ensure_wintun_dll(target_path: &Path) -> Result<(), String> {
+    if target_path.exists() {
+        return Ok(());
+    }
+
+    let url = "https://www.wintun.net/builds/wintun-0.14.1.zip";
+    let zip_bytes = download_kernel_archive(url).await?;
+
+    let file = std::io::Cursor::new(zip_bytes);
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Wintun 压缩包格式无效或已损坏: {}", e))?;
+
+    // 优先匹配当前架构目录下的 DLL，兜底取任意架构的 wintun.dll
+    let wanted = format!("wintun/bin/{}/wintun.dll", wintun_arch_dir());
+    let mut fallback: Option<usize> = None;
+    let mut wanted_index: Option<usize> = None;
+
+    for i in 0..archive.len() {
+        if let Ok(entry) = archive.by_index_raw(i) {
+            let name = entry.name().replace('\\', "/").to_lowercase();
+            if name.ends_with("wintun.dll") {
+                if name == wanted.to_lowercase() {
+                    wanted_index = Some(i);
+                    break;
+                }
+                if fallback.is_none() {
+                    fallback = Some(i);
+                }
+            }
+        }
+    }
+
+    let index = wanted_index.or(fallback)
+        .ok_or_else(|| "Wintun 压缩包中未找到 wintun.dll".to_string())?;
+
+    let mut entry = archive
+        .by_index(index)
+        .map_err(|e| format!("读取 Wintun 压缩包条目失败: {}", e))?;
+
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("创建内核目录失败: {}", e))?;
+    }
+    let mut out = fs::File::create(target_path)
+        .map_err(|e| format!("写入 wintun.dll 失败: {}", e))?;
+    std::io::copy(&mut entry, &mut out)
+        .map_err(|e| format!("解压 wintun.dll 失败: {}", e))?;
     Ok(())
 }
 
@@ -919,6 +997,26 @@ pub fn start_kernel(
         || config_json.contains("\"protocol\": \"tun\"")
         || config_json.contains("\"tag\":\"tun-in\"")
         || config_json.contains("\"tag\": \"tun-in\"");
+
+    // Windows TUN 模式必须存在 wintun.dll（与 xray.exe 同目录），
+    // 否则内核启动时报 "Error loading wintun.dll DLL" 并拒绝创建虚拟网卡。
+    // 该 DLL 不包含在官方 Xray 发布包中，缺失时自动从 Wintun 官方源补全
+    #[cfg(target_os = "windows")]
+    if is_tun_enabled {
+        if let Some(bin_dir) = Path::new(&bin_path).parent() {
+            let wintun_path = bin_dir.join("wintun.dll");
+            if !wintun_path.exists() {
+                // start_kernel 为同步命令，需在当前 Tauri async runtime 内阻塞等待下载完成
+                let download = ensure_wintun_dll(&wintun_path);
+                tokio::runtime::Handle::current().block_on(download).map_err(|e| {
+                    format!(
+                        "TUN 模式需要 wintun.dll 虚拟网卡驱动，自动下载失败: {}。请手动从 https://www.wintun.net 下载并将 wintun.dll 放到 xray.exe 所在目录",
+                        e
+                    )
+                })?;
+            }
+        }
+    }
 
     let app_dir = app_handle
         .path()
