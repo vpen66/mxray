@@ -633,6 +633,34 @@ async fn ensure_wintun_dll(target_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 在同步上下文（start_kernel）中阻塞等待 wintun.dll 下载完成。
+/// 注意：不能在 runtime 工作/阻塞线程上直接调用 block_on，
+/// 否则会 panic "Cannot block the current thread from within a runtime" 导致应用闪退。
+/// 因此通过 channel 把异步任务提交给 runtime 后阻塞等待结果；
+/// 无 runtime 上下文时兜底创建临时运行时
+#[cfg(target_os = "windows")]
+fn ensure_wintun_dll_blocking(target_path: &Path) -> Result<(), String> {
+    if target_path.exists() {
+        return Ok(());
+    }
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => {
+            let path = target_path.to_path_buf();
+            let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+            handle.spawn(async move {
+                let res = ensure_wintun_dll(&path).await;
+                let _ = tx.send(res);
+            });
+            rx.recv().map_err(|_| "等待 wintun.dll 下载结果失败".to_string())?
+        }
+        Err(_) => {
+            let rt = tokio::runtime::Runtime::new()
+                .map_err(|e| format!("初始化下载运行时失败: {}", e))?;
+            rt.block_on(ensure_wintun_dll(target_path))
+        }
+    }
+}
+
 pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle) -> Result<String, String> {
     if let Some(p) = custom_path {
         if !p.is_empty() && p != "bundled" && Path::new(p).exists() {
@@ -1006,9 +1034,9 @@ pub fn start_kernel(
         if let Some(bin_dir) = Path::new(&bin_path).parent() {
             let wintun_path = bin_dir.join("wintun.dll");
             if !wintun_path.exists() {
-                // start_kernel 为同步命令，需在当前 Tauri async runtime 内阻塞等待下载完成
-                let download = ensure_wintun_dll(&wintun_path);
-                tokio::runtime::Handle::current().block_on(download).map_err(|e| {
+                // start_kernel 为同步命令，且运行在 runtime 阻塞线程上，
+                // 必须用 channel 方式阻塞等待，直接 block_on 会 panic 导致闪退
+                ensure_wintun_dll_blocking(&wintun_path).map_err(|e| {
                     format!(
                         "TUN 模式需要 wintun.dll 虚拟网卡驱动，自动下载失败: {}。请手动从 https://www.wintun.net 下载并将 wintun.dll 放到 xray.exe 所在目录",
                         e
