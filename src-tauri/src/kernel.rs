@@ -284,7 +284,7 @@ pub fn list_installed_kernels(app_handle: tauri::AppHandle) -> Result<Vec<Kernel
                         entry_path.clone()
                     };
 
-                    if binary_path.exists() {
+                    if binary_path.exists() && is_valid_kernel_binary(&binary_path) {
                         let mut info = detect_kernel_version(binary_path.to_str().unwrap_or_default());
                         info.kernel_type = "installed".to_string();
                         info.name = format!("Xray-core ({})", entry.file_name().to_string_lossy());
@@ -318,7 +318,7 @@ fn get_platform_asset_name() -> String {
 
     match (os, arch) {
         ("windows", "x86_64") => "Xray-windows-64.zip".to_string(),
-        ("windows", "aarch64") => "Xray-windows-arm64.zip".to_string(),
+        ("windows", "aarch64") => "Xray-windows-arm64-v8a.zip".to_string(),
         ("windows", _) => "Xray-windows-64.zip".to_string(),
         ("linux", "x86_64") => "Xray-linux-64.zip".to_string(),
         ("linux", "aarch64") => "Xray-linux-arm64-v8a.zip".to_string(),
@@ -394,7 +394,7 @@ pub async fn fetch_remote_releases() -> Result<Vec<RemoteRelease>, String> {
 pub async fn install_kernel(
     app_handle: tauri::AppHandle,
     version: String,
-    _download_url: String,
+    download_url: String,
 ) -> Result<KernelInfo, String> {
 
     let app_dir = app_handle
@@ -403,7 +403,6 @@ pub async fn install_kernel(
         .map_err(|e| format!("无法获取 App 数据目录: {}", e))?;
 
     let cores_dir = app_dir.join("cores").join(format!("xray-{}", version));
-    fs::create_dir_all(&cores_dir).map_err(|e| format!("无法创建内核存储目录: {}", e))?;
 
     #[cfg(target_os = "windows")]
     let bin_name = "xray.exe";
@@ -412,28 +411,125 @@ pub async fn install_kernel(
 
     let bin_path = cores_dir.join(bin_name);
 
-    if !bin_path.exists() {
-        #[cfg(not(target_os = "windows"))]
+    // 旧版占位脚本残留（非真实内核）需要清除后重新下载
+    if bin_path.exists() && !is_valid_kernel_binary(&bin_path) {
+        let _ = fs::remove_file(&bin_path);
+    }
+
+    // 已存在真实内核则直接复用，无需重复下载
+    if !(bin_path.exists() && is_valid_kernel_binary(&bin_path)) {
+        fs::create_dir_all(&cores_dir).map_err(|e| format!("无法创建内核存储目录: {}", e))?;
+
+        // 前端可能未传下载地址（如旧数据），兜底按平台拼接官方资源名
+        let url = if download_url.trim().is_empty() {
+            format!(
+                "https://github.com/XTLS/Xray-core/releases/download/v{}/{}",
+                version.trim_start_matches('v'),
+                get_platform_asset_name()
+            )
+        } else {
+            download_url.trim().to_string()
+        };
+
+        let zip_bytes = download_kernel_archive(&url).await?;
+        let tmp_zip = app_dir.join(format!(".kernel_download_{}.zip", version));
+        fs::write(&tmp_zip, &zip_bytes)
+            .map_err(|e| format!("写入下载缓存失败: {}", e))?;
+
+        let extracted = extract_kernel_from_zip(&tmp_zip, &cores_dir, bin_name);
+        let _ = fs::remove_file(&tmp_zip);
+        extracted?;
+
+        #[cfg(unix)]
         {
-            let script = format!("#!/bin/sh\necho \"Xray {} (MXray Managed Core)\"\n", version);
-            let _ = fs::write(&bin_path, script);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755));
-            }
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755));
         }
-        #[cfg(target_os = "windows")]
-        {
-            let script = format!("@echo off\r\necho Xray {} (MXray Managed Core)\r\n", version);
-            let _ = fs::write(&bin_path, script);
+
+        if !bin_path.exists() {
+            return Err("压缩包中未找到 xray 可执行文件".to_string());
         }
     }
 
     let mut info = detect_kernel_version(bin_path.to_str().unwrap_or_default());
+    if !info.is_valid {
+        return Err(format!(
+            "内核安装后校验失败: {}",
+            info.error.unwrap_or_else(|| "未知错误".to_string())
+        ));
+    }
     info.kernel_type = "installed".to_string();
     info.name = format!("Xray-core ({})", version);
     Ok(info)
+}
+
+/// 快速判断二进制是否为真实内核：体积过小的文件（如占位脚本）必然无效
+fn is_valid_kernel_binary(path: &Path) -> bool {
+    fs::metadata(path).map(|m| m.len() > 1024 * 100).unwrap_or(false)
+}
+
+/// 下载内核压缩包，失败时自动重试一次
+async fn download_kernel_archive(url: &str) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("MXray-Desktop")
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("初始化下载客户端失败: {}", e))?;
+
+    let mut last_err = String::new();
+    for attempt in 0..2 {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+        match client.get(url).send().await {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    last_err = format!("下载失败（HTTP {}）: {}", resp.status(), url);
+                    continue;
+                }
+                match resp.bytes().await {
+                    Ok(bytes) if bytes.len() > 1024 * 100 => return Ok(bytes.to_vec()),
+                    Ok(_) => {
+                        last_err = "下载内容过小，可能不是有效的内核压缩包".to_string();
+                    }
+                    Err(e) => {
+                        last_err = format!("读取下载数据失败: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                last_err = format!("下载请求失败: {}", e);
+            }
+        }
+    }
+    Err(last_err)
+}
+
+/// 从压缩包中提取 xray 可执行文件（忽略 zip 内目录层级，防止路径穿越）
+fn extract_kernel_from_zip(zip_path: &Path, dest_dir: &Path, bin_name: &str) -> Result<(), String> {
+    let file = fs::File::open(zip_path)
+        .map_err(|e| format!("打开压缩包失败: {}", e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("压缩包格式无效或已损坏: {}", e))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("读取压缩包条目失败: {}", e))?;
+        let name = entry.name().to_string();
+        let file_name = name
+            .rsplit('/')
+            .next()
+            .unwrap_or("");
+        if file_name == bin_name {
+            let mut out = fs::File::create(dest_dir.join(bin_name))
+                .map_err(|e| format!("写入内核文件失败: {}", e))?;
+            std::io::copy(&mut entry, &mut out)
+                .map_err(|e| format!("解压内核文件失败: {}", e))?;
+            return Ok(());
+        }
+    }
+    Err(format!("压缩包中未找到 {}", bin_name))
 }
 
 pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle) -> Result<String, String> {
@@ -454,7 +550,7 @@ pub fn find_xray_binary(custom_path: Option<&str>, app_handle: &tauri::AppHandle
             if let Ok(entries) = fs::read_dir(&cores_dir) {
                 for entry in entries.flatten() {
                     let sub_bin = entry.path().join(bin_name);
-                    if sub_bin.exists() {
+                    if sub_bin.exists() && is_valid_kernel_binary(&sub_bin) {
                         return Ok(sub_bin.to_str().unwrap_or_default().to_string());
                     }
                 }
