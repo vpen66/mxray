@@ -2,6 +2,8 @@ import React from 'react';
 import { Globe, Plus, Edit3, Trash2, ShieldCheck, Download, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { useDragSort } from '../../hooks/useDragSort';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { DisabledItemCard } from '../../components/DisabledCards';
+import { mergeActiveWithDisabled, type DisabledEntryItem } from '../../utils/configSectionHelper';
 
 interface OutboundSectionProps {
   outbounds: any[];
@@ -12,6 +14,9 @@ interface OutboundSectionProps {
   onToggleOutboundEnabled?: (index: number) => void;
   onMoveOutbound?: (index: number, direction: 'up' | 'down') => void;
   onReorderOutbound?: (fromIndex: number, toIndex: number) => void;
+  disabledItems?: DisabledEntryItem[];
+  onEnableEntry?: (key: string) => void;
+  onDeleteDisabledEntry?: (key: string) => void;
 }
 
 export const OutboundSection: React.FC<OutboundSectionProps> = ({
@@ -23,6 +28,9 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
   onToggleOutboundEnabled,
   onMoveOutbound,
   onReorderOutbound,
+  disabledItems,
+  onEnableEntry,
+  onDeleteDisabledEntry,
 }) => {
   const { getItemDragProps, isDragging, isDropTarget, overlayEl } = useDragSort((from, to) => {
     onReorderOutbound?.(from, to);
@@ -64,7 +72,30 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
         {overlayEl}
-        {outbounds.map((ob, idx) => {
+        {mergeActiveWithDisabled<any>(outbounds, disabledItems ?? []).map((entry) => {
+          if (entry.kind === 'disabled') {
+            const v = entry.value;
+            let dAddress = '系统内置';
+            if (v?.settings?.address !== undefined && v?.settings?.port !== undefined) {
+              dAddress = `${v.settings.address}:${v.settings.port}`;
+            } else if (v?.settings?.vnext?.[0]) {
+              dAddress = `${v.settings.vnext[0].address}:${v.settings.vnext[0].port}`;
+            } else if (v?.settings?.servers?.[0]) {
+              dAddress = `${v.settings.servers[0].address}:${v.settings.servers[0].port}`;
+            }
+            return (
+              <DisabledItemCard
+                key={`disabled:${entry.key}`}
+                title={v?.tag || 'outbound'}
+                badge={v?.protocol || 'freedom'}
+                subtitle={`地址: ${dAddress}`}
+                onEnable={() => onEnableEntry?.(entry.key)}
+                onDelete={() => onDeleteDisabledEntry?.(entry.key)}
+              />
+            );
+          }
+          const ob = entry.value;
+          const idx = entry.activeIndex;
           const isDirect = ob.protocol === 'freedom';
           const isBlock = ob.protocol === 'blackhole';
           const isProxyNode = !isDirect && !isBlock;

@@ -429,6 +429,72 @@ export function moduleIdOfDisabledKey(key: string): string {
   return i === -1 ? key : key.slice(0, i);
 }
 
+/** 禁用暂存记录解析后的条目（含存储位置） */
+export interface DisabledEntryItem {
+  key: string;
+  value: any;
+  index: number; // 原始位置，-1 表示未知（追加到末尾）
+}
+
+/**
+ * 取出某个数组模块下所有被禁用的暂存条目（按原始位置升序，未知位置排在最后），
+ * 用于在可视化视图中按原位渲染置灰卡片。
+ */
+export function getModuleDisabledEntries(
+  disabled: Record<string, any>,
+  moduleId: string
+): DisabledEntryItem[] {
+  const entries: DisabledEntryItem[] = [];
+  for (const [key, entry] of Object.entries(disabled || {})) {
+    const mid = moduleIdOfDisabledKey(key);
+    if (mid === key || mid !== moduleId) continue;
+    const isWrapped = entry && typeof entry === 'object' && !Array.isArray(entry) && 'value' in entry && 'index' in entry;
+    entries.push({
+      key,
+      value: isWrapped ? entry.value : entry,
+      index: isWrapped && typeof entry.index === 'number' ? entry.index : -1,
+    });
+  }
+  entries.sort((a, b) => (a.index < 0 ? Infinity : a.index) - (b.index < 0 ? Infinity : b.index));
+  return entries;
+}
+
+/** 合并渲染列表元素：正常条目（含原始索引）或禁用暂存条目 */
+export type MergedEntry<T = any> =
+  | { kind: 'active'; value: T; activeIndex: number }
+  | { kind: 'disabled'; key: string; value: any };
+
+/**
+ * 将正常条目与禁用暂存条目按原始位置合并为渲染列表：
+ * 禁用项插回其暂存索引处（超出当前长度则置于末尾），实现「原地置灰」展示。
+ */
+export function mergeActiveWithDisabled<T>(
+  active: T[],
+  disabledItems: DisabledEntryItem[]
+): MergedEntry<T>[] {
+  const result: MergedEntry<T>[] = (active || []).map((value, activeIndex) => ({
+    kind: 'active',
+    value,
+    activeIndex,
+  }));
+  for (const item of disabledItems || []) {
+    const pos = item.index < 0 ? result.length : Math.min(item.index, result.length);
+    result.splice(pos, 0, { kind: 'disabled', key: item.key, value: item.value });
+  }
+  return result;
+}
+
+/** 生成禁用条目的展示名称（顶级模块名或数组条目摘要） */
+export function describeDisabledEntry(key: string, value: any): string {
+  const moduleId = moduleIdOfDisabledKey(key);
+  if (moduleId === key) {
+    return MODULE_DEFINITIONS.find((d) => d.id === key)?.name || key;
+  }
+  const scope = MODULE_DEFINITIONS.find((d) => d.id === moduleId)?.name || moduleId;
+  const detail = value?.tag || value?.address || value?.ipPool || (typeof value === 'string' ? value : '');
+  return detail ? `${scope}：${detail}` : scope;
+}
+
 /**
  * 禁用一个配置项：将其从 JSON 内容中移除，值与原始位置暂存到禁用记录中（可随时恢复到原位）。
  * index 为 null 时表示禁用顶级单对象模块；否则禁用数组路径下指定索引的条目。

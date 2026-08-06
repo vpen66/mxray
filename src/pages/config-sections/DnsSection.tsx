@@ -1,6 +1,8 @@
 import React from 'react';
 import { Database, Edit3, Trash2, Globe, Shield, Wifi, Layers, Ghost, Server, Zap } from 'lucide-react';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { DisabledItemCard } from '../../components/DisabledCards';
+import { mergeActiveWithDisabled, type DisabledEntryItem } from '../../utils/configSectionHelper';
 
 interface DnsSectionProps {
   dns: any;
@@ -10,6 +12,9 @@ interface DnsSectionProps {
   onToggleServerEnabled?: (index: number) => void;
   enabled?: boolean;
   onToggleEnabled?: () => void;
+  disabledServers?: DisabledEntryItem[];
+  onEnableEntry?: (key: string) => void;
+  onDeleteDisabledEntry?: (key: string) => void;
 }
 
 /* ── helpers ── */
@@ -73,6 +78,9 @@ export const DnsSection: React.FC<DnsSectionProps> = ({
   onToggleServerEnabled,
   enabled,
   onToggleEnabled,
+  disabledServers,
+  onEnableEntry,
+  onDeleteDisabledEntry,
 }) => {
   const servers = Array.isArray(dns?.servers) ? dns.servers : [];
   const hosts = dns?.hosts && typeof dns.hosts === 'object' ? Object.entries(dns.hosts) : [];
@@ -134,7 +142,23 @@ export const DnsSection: React.FC<DnsSectionProps> = ({
       </div>
 
       <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-        {servers.map((srv: any, idx: number) => {
+        {mergeActiveWithDisabled<any>(servers, disabledServers ?? []).map((entry) => {
+          if (entry.kind === 'disabled') {
+            const v = entry.value;
+            const dAddr = extractAddress(v);
+            const dMeta = KIND_META[detectKind(dAddr)];
+            return (
+              <DisabledItemCard
+                key={`disabled:${entry.key}`}
+                title={dAddr}
+                badge={dMeta.label}
+                onEnable={() => onEnableEntry?.(entry.key)}
+                onDelete={() => onDeleteDisabledEntry?.(entry.key)}
+              />
+            );
+          }
+          const srv = entry.value;
+          const idx = entry.activeIndex;
           const { addr, meta, IconComp, isObj, domains, expectedIPs, skipFallback, finalQuery, qs, port } = summarizeServer(srv);
           const isSrvEnabled = !isObj || srv.enabled !== false;
           return (

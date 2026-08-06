@@ -36,7 +36,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useConfigStore, TEMPLATE_DEFAULT } from '../stores/useConfigStore';
 import { useAppStore } from '../stores/useAppStore';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { ToggleSwitch } from '../components/ToggleSwitch';
+import { DisabledModuleCard } from '../components/DisabledCards';
 
 import {
   getModuleFromConfig,
@@ -50,7 +50,7 @@ import {
   getAvailableModules,
   disableConfigEntry,
   enableConfigEntry,
-  moduleIdOfDisabledKey,
+  getModuleDisabledEntries,
   migrateEmbeddedEnabledFlags,
   sortTopLevelKeys,
   MODULE_DEFINITIONS,
@@ -334,17 +334,6 @@ export const JsonConfigPage: React.FC = () => {
     updateProfile(selectedProfile.id, { disabled: next });
   };
 
-  // 禁用项展示名称
-  const describeDisabledEntry = (key: string, value: any): string => {
-    const moduleId = moduleIdOfDisabledKey(key);
-    if (moduleId === key) {
-      return MODULE_DEFINITIONS.find((d) => d.id === key)?.name || key;
-    }
-    const scope = MODULE_DEFINITIONS.find((d) => d.id === moduleId)?.name || moduleId;
-    const detail = value?.tag || value?.address || value?.ipPool;
-    return detail ? `${scope}：${detail}` : scope;
-  };
-
   // 连接观测模块实际存储键（observatory 与 burstObservatory 二选一）
   const observatoryKey = parsedConfig?.burstObservatory ? 'burstObservatory' : 'observatory';
 
@@ -587,14 +576,20 @@ export const JsonConfigPage: React.FC = () => {
           {viewMode === 'visual' ? (
             <div className="space-y-6 max-w-6xl mx-auto pb-12">
               {/* Log Section */}
-              {parsedConfig?.log && (
+              {parsedConfig?.log ? (
                 <LogSection
                   log={parsedConfig.log}
                   onEdit={() => setActiveModal({ type: 'log', initialValue: parsedConfig.log })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'log'))}
                   onToggleEnabled={() => disableModuleEntry('log')}
                 />
-              )}
+              ) : disabledEntries['log'] !== undefined ? (
+                <DisabledModuleCard
+                  title="日志配置"
+                  onEnable={() => enableEntry('log')}
+                  onDelete={() => deleteDisabledEntry('log')}
+                />
+              ) : null}
 
               {/* Inbounds Section */}
               <InboundSection
@@ -621,10 +616,13 @@ export const JsonConfigPage: React.FC = () => {
                     handleUpdateContent(updateArrayItemInConfig(editorContent, 'inbounds', idx, updatedIb));
                   }
                 }}
+                disabledItems={getModuleDisabledEntries(disabledEntries, 'inbounds')}
+                onEnableEntry={enableEntry}
+                onDeleteDisabledEntry={deleteDisabledEntry}
               />
 
               {/* DNS Section */}
-              {parsedConfig?.dns && (
+              {parsedConfig?.dns ? (
                 <DnsSection
                   dns={parsedConfig.dns}
                   onEdit={() => setActiveModal({ type: 'dns', initialValue: parsedConfig.dns })}
@@ -640,10 +638,26 @@ export const JsonConfigPage: React.FC = () => {
                       }
                     } catch { /* ignore */ }
                   }}
+                  disabledServers={getModuleDisabledEntries(disabledEntries, 'dns.servers')}
+                  onEnableEntry={enableEntry}
+                  onDeleteDisabledEntry={deleteDisabledEntry}
                 />
-              )}
+              ) : disabledEntries['dns'] !== undefined ? (
+                <DisabledModuleCard
+                  title="DNS 服务器"
+                  onEnable={() => enableEntry('dns')}
+                  onDelete={() => deleteDisabledEntry('dns')}
+                />
+              ) : null}
 
               {/* Routing Section */}
+              {disabledEntries['routing'] !== undefined && !parsedConfig?.routing ? (
+                <DisabledModuleCard
+                  title="路由规则"
+                  onEnable={() => enableEntry('routing')}
+                  onDelete={() => deleteDisabledEntry('routing')}
+                />
+              ) : (
               <RoutingSection
                 routing={parsedConfig?.routing}
                 onAddRule={() => setActiveModal({ type: 'routing_rule_add' })}
@@ -673,7 +687,12 @@ export const JsonConfigPage: React.FC = () => {
                 onEditBalancer={(idx) => setActiveModal({ type: 'balancer_edit', index: idx, initialValue: parsedConfig?.routing?.balancers?.[idx] })}
                 onDeleteBalancer={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'routing.balancers', idx))}
                 onToggleBalancerEnabled={(idx) => disableArrayItemEntry('routing.balancers', idx)}
+                disabledRules={getModuleDisabledEntries(disabledEntries, 'routing.rules')}
+                disabledBalancers={getModuleDisabledEntries(disabledEntries, 'routing.balancers')}
+                onEnableEntry={enableEntry}
+                onDeleteDisabledEntry={deleteDisabledEntry}
               />
+              )}
 
               {/* Outbounds Section */}
               <OutboundSection
@@ -685,17 +704,26 @@ export const JsonConfigPage: React.FC = () => {
                 onReorderOutbound={(from, to) => handleUpdateContent(reorderArrayItemInConfig(editorContent, 'outbounds', from, to))}
                 onToggleOutboundEnabled={(idx) => disableArrayItemEntry('outbounds', idx)}
                 onImportSubscription={() => setIsSubscriptionImportOpen(true)}
+                disabledItems={getModuleDisabledEntries(disabledEntries, 'outbounds')}
+                onEnableEntry={enableEntry}
+                onDeleteDisabledEntry={deleteDisabledEntry}
               />
 
               {/* Api Section */}
-              {parsedConfig?.api && (
+              {parsedConfig?.api ? (
                 <ApiSection
                   api={parsedConfig.api}
                   onEdit={() => setActiveModal({ type: 'api', initialValue: parsedConfig.api })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'api'))}
                   onToggleEnabled={() => disableModuleEntry('api')}
                 />
-              )}
+              ) : disabledEntries['api'] !== undefined ? (
+                <DisabledModuleCard
+                  title="API 接口"
+                  onEnable={() => enableEntry('api')}
+                  onDelete={() => deleteDisabledEntry('api')}
+                />
+              ) : null}
 
               {/* FakeDNS Section */}
               {Array.isArray(parsedConfig?.fakedns) && (
@@ -706,49 +734,76 @@ export const JsonConfigPage: React.FC = () => {
                   onDelete={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'fakedns', idx))}
                   onToggleItemEnabled={(idx) => disableArrayItemEntry('fakedns', idx)}
                   onRemoveModule={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'fakedns'))}
+                  disabledItems={getModuleDisabledEntries(disabledEntries, 'fakedns')}
+                  onEnableEntry={enableEntry}
+                  onDeleteDisabledEntry={deleteDisabledEntry}
                 />
               )}
 
               {/* Transport Section */}
-              {parsedConfig?.transport && (
+              {parsedConfig?.transport ? (
                 <TransportSection
                   transport={parsedConfig.transport}
                   onEdit={() => setActiveModal({ type: 'transport', initialValue: parsedConfig.transport })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'transport'))}
                   onToggleEnabled={() => disableModuleEntry('transport')}
                 />
-              )}
+              ) : disabledEntries['transport'] !== undefined ? (
+                <DisabledModuleCard
+                  title="全局传输配置"
+                  onEnable={() => enableEntry('transport')}
+                  onDelete={() => deleteDisabledEntry('transport')}
+                />
+              ) : null}
 
               {/* Policy Section */}
-              {parsedConfig?.policy && (
+              {parsedConfig?.policy ? (
                 <PolicySection
                   policy={parsedConfig.policy}
                   onEdit={() => setActiveModal({ type: 'policy', initialValue: parsedConfig.policy })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'policy'))}
                   onToggleEnabled={() => disableModuleEntry('policy')}
                 />
-              )}
+              ) : disabledEntries['policy'] !== undefined ? (
+                <DisabledModuleCard
+                  title="本地策略"
+                  onEnable={() => enableEntry('policy')}
+                  onDelete={() => deleteDisabledEntry('policy')}
+                />
+              ) : null}
 
               {/* Stats Section */}
-              {parsedConfig?.stats && (
+              {parsedConfig?.stats ? (
                 <StatsSection
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'stats'))}
                   onToggleEnabled={() => disableModuleEntry('stats')}
                 />
-              )}
+              ) : disabledEntries['stats'] !== undefined ? (
+                <DisabledModuleCard
+                  title="统计信息"
+                  onEnable={() => enableEntry('stats')}
+                  onDelete={() => deleteDisabledEntry('stats')}
+                />
+              ) : null}
 
               {/* Metrics Section */}
-              {parsedConfig?.metrics && (
+              {parsedConfig?.metrics ? (
                 <MetricsSection
                   metrics={parsedConfig.metrics}
                   onEdit={() => setActiveModal({ type: 'metrics', initialValue: parsedConfig.metrics })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'metrics'))}
                   onToggleEnabled={() => disableModuleEntry('metrics')}
                 />
-              )}
+              ) : disabledEntries['metrics'] !== undefined ? (
+                <DisabledModuleCard
+                  title="Metrics 监控"
+                  onEnable={() => enableEntry('metrics')}
+                  onDelete={() => deleteDisabledEntry('metrics')}
+                />
+              ) : null}
 
               {/* Observatory Section */}
-              {(parsedConfig?.observatory || parsedConfig?.burstObservatory) && (
+              {(parsedConfig?.observatory || parsedConfig?.burstObservatory) ? (
                 <ObservatorySection
                   observatory={parsedConfig?.observatory}
                   burstObservatory={parsedConfig?.burstObservatory}
@@ -760,69 +815,61 @@ export const JsonConfigPage: React.FC = () => {
                   }}
                   onToggleEnabled={() => disableModuleEntry(observatoryKey)}
                 />
-              )}
+              ) : (disabledEntries['observatory'] !== undefined || disabledEntries['burstObservatory'] !== undefined) ? (
+                <DisabledModuleCard
+                  title="连接观测"
+                  onEnable={() => enableEntry(disabledEntries['observatory'] !== undefined ? 'observatory' : 'burstObservatory')}
+                  onDelete={() => deleteDisabledEntry(disabledEntries['observatory'] !== undefined ? 'observatory' : 'burstObservatory')}
+                />
+              ) : null}
 
               {/* Geodata Section */}
-              {parsedConfig?.geodata && (
+              {parsedConfig?.geodata ? (
                 <GeodataSection
                   geodata={parsedConfig.geodata}
                   onEdit={() => setActiveModal({ type: 'geodata', initialValue: parsedConfig.geodata })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'geodata'))}
                   onToggleEnabled={() => disableModuleEntry('geodata')}
                 />
-              )}
+              ) : disabledEntries['geodata'] !== undefined ? (
+                <DisabledModuleCard
+                  title="地理数据"
+                  onEnable={() => enableEntry('geodata')}
+                  onDelete={() => deleteDisabledEntry('geodata')}
+                />
+              ) : null}
 
               {/* Version Section */}
-              {parsedConfig?.version && (
+              {parsedConfig?.version ? (
                 <VersionSection
                   version={parsedConfig.version}
                   onEdit={() => setActiveModal({ type: 'version', initialValue: parsedConfig.version })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'version'))}
                   onToggleEnabled={() => disableModuleEntry('version')}
                 />
-              )}
+              ) : disabledEntries['version'] !== undefined ? (
+                <DisabledModuleCard
+                  title="版本约束"
+                  onEnable={() => enableEntry('version')}
+                  onDelete={() => deleteDisabledEntry('version')}
+                />
+              ) : null}
 
               {/* Env Section */}
-              {parsedConfig?.env && (
+              {parsedConfig?.env ? (
                 <EnvSection
                   env={parsedConfig.env}
                   onEdit={() => setActiveModal({ type: 'env', initialValue: parsedConfig.env })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'env'))}
                   onToggleEnabled={() => disableModuleEntry('env')}
                 />
-              )}
-
-              {/* 已禁用配置暂存区 */}
-              {Object.keys(disabledEntries).length > 0 && (
-                <div className="bg-slate-900/40 border border-dashed border-white/10 rounded-2xl p-4 space-y-2">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-xs font-semibold text-slate-300">已禁用的配置</span>
-                    <span className="text-[10px] text-slate-500">已从 JSON 中移除并暂存，重新启用后将恢复写入</span>
-                  </div>
-                  {Object.entries(disabledEntries).map(([key, entry]) => (
-                    <div key={key} className="flex items-center justify-between gap-3 px-3 py-2 bg-slate-950/50 border border-white/5 rounded-xl">
-                      <span className="text-xs text-slate-300 truncate">{describeDisabledEntry(key, entry?.value)}</span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <ToggleSwitch
-                          checked={false}
-                          onChange={() => enableEntry(key)}
-                          activeColor="blue"
-                          size="sm"
-                          ariaLabel="重新启用该配置"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => deleteDisabledEntry(key)}
-                          className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                          title="永久删除"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              ) : disabledEntries['env'] !== undefined ? (
+                <DisabledModuleCard
+                  title="环境变量"
+                  onEnable={() => enableEntry('env')}
+                  onDelete={() => deleteDisabledEntry('env')}
+                />
+              ) : null}
             </div>
           ) : (
             <div className="flex h-full min-h-[500px] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">

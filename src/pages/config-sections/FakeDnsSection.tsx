@@ -1,6 +1,8 @@
 import React from 'react';
 import { Layers, Plus, Edit3, Trash2 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { DisabledItemCard } from '../../components/DisabledCards';
+import { mergeActiveWithDisabled, type DisabledEntryItem } from '../../utils/configSectionHelper';
 
 interface FakeDnsSectionProps {
   fakedns: any[];
@@ -9,6 +11,9 @@ interface FakeDnsSectionProps {
   onDelete: (index: number) => void;
   onRemoveModule?: () => void;
   onToggleItemEnabled?: (index: number) => void;
+  disabledItems?: DisabledEntryItem[];
+  onEnableEntry?: (key: string) => void;
+  onDeleteDisabledEntry?: (key: string) => void;
 }
 
 export const FakeDnsSection: React.FC<FakeDnsSectionProps> = ({
@@ -18,6 +23,9 @@ export const FakeDnsSection: React.FC<FakeDnsSectionProps> = ({
   onDelete,
   onRemoveModule,
   onToggleItemEnabled,
+  disabledItems,
+  onEnableEntry,
+  onDeleteDisabledEntry,
 }) => {
   return (
     <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4">
@@ -54,7 +62,21 @@ export const FakeDnsSection: React.FC<FakeDnsSectionProps> = ({
       </div>
 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-        {fakedns.map((item, idx) => {
+        {mergeActiveWithDisabled<any>(fakedns, disabledItems ?? []).map((entry) => {
+          if (entry.kind === 'disabled') {
+            const v = entry.value;
+            return (
+              <DisabledItemCard
+                key={`disabled:${entry.key}`}
+                title={v?.ipPool || '198.18.0.0/15'}
+                subtitle={`Pool Size: ${v?.poolSize || 65535}`}
+                onEnable={() => onEnableEntry?.(entry.key)}
+                onDelete={() => onDeleteDisabledEntry?.(entry.key)}
+              />
+            );
+          }
+          const item = entry.value;
+          const idx = entry.activeIndex;
           const isItemEnabled = item?.enabled !== false;
           return (
             <div

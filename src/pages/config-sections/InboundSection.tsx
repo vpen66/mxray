@@ -1,6 +1,8 @@
 import React from 'react';
 import { Server, Plus, Edit3, Trash2, ShieldCheck, ShieldAlert, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
+import { DisabledItemCard } from '../../components/DisabledCards';
+import { mergeActiveWithDisabled, type DisabledEntryItem } from '../../utils/configSectionHelper';
 import { useDragSort } from '../../hooks/useDragSort';
 
 interface InboundSectionProps {
@@ -12,6 +14,9 @@ interface InboundSectionProps {
   onToggleInboundEnabled?: (index: number) => void;
   onMoveInbound?: (index: number, direction: 'up' | 'down') => void;
   onReorderInbound?: (fromIndex: number, toIndex: number) => void;
+  disabledItems?: DisabledEntryItem[];
+  onEnableEntry?: (key: string) => void;
+  onDeleteDisabledEntry?: (key: string) => void;
 }
 
 export const InboundSection: React.FC<InboundSectionProps> = ({
@@ -23,6 +28,9 @@ export const InboundSection: React.FC<InboundSectionProps> = ({
   onToggleInboundEnabled,
   onMoveInbound,
   onReorderInbound,
+  disabledItems,
+  onEnableEntry,
+  onDeleteDisabledEntry,
 }) => {
   const { getItemDragProps, isDragging, isDropTarget, overlayEl } = useDragSort((from, to) => {
     onReorderInbound?.(from, to);
@@ -52,7 +60,22 @@ export const InboundSection: React.FC<InboundSectionProps> = ({
 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
         {overlayEl}
-        {inbounds.map((ib, idx) => {
+        {mergeActiveWithDisabled<any>(inbounds, disabledItems ?? []).map((entry) => {
+          if (entry.kind === 'disabled') {
+            const v = entry.value;
+            return (
+              <DisabledItemCard
+                key={`disabled:${entry.key}`}
+                title={v?.tag || 'inbound'}
+                badge={v?.protocol || 'socks'}
+                subtitle={`监听网卡: ${v?.listen || '0.0.0.0'} | 端口: ${v?.port ?? '动态'}`}
+                onEnable={() => onEnableEntry?.(entry.key)}
+                onDelete={() => onDeleteDisabledEntry?.(entry.key)}
+              />
+            );
+          }
+          const ib = entry.value;
+          const idx = entry.activeIndex;
           const isSniffingEnabled = ib.sniffing?.enabled !== false;
           const isIbEnabled = ib.enabled !== false;
           return (

@@ -2,6 +2,8 @@ import React from 'react';
 import { Route, Plus, Edit3, Trash2, ChevronUp, ChevronDown, Settings2, Shuffle } from 'lucide-react';
 import { ToggleSwitch } from '../../components/ToggleSwitch';
 import { CustomSelect } from '../../components/CustomSelect';
+import { DisabledItemCard } from '../../components/DisabledCards';
+import { mergeActiveWithDisabled, type DisabledEntryItem } from '../../utils/configSectionHelper';
 
 interface RoutingSectionProps {
   routing: any;
@@ -18,6 +20,10 @@ interface RoutingSectionProps {
   onToggleBalancerEnabled?: (index: number) => void;
   enabled?: boolean;
   onToggleEnabled?: () => void;
+  disabledRules?: DisabledEntryItem[];
+  disabledBalancers?: DisabledEntryItem[];
+  onEnableEntry?: (key: string) => void;
+  onDeleteDisabledEntry?: (key: string) => void;
 }
 
 export const RoutingSection: React.FC<RoutingSectionProps> = ({
@@ -35,6 +41,10 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
   onToggleBalancerEnabled,
   enabled,
   onToggleEnabled,
+  disabledRules,
+  disabledBalancers,
+  onEnableEntry,
+  onDeleteDisabledEntry,
 }) => {
   const rules = Array.isArray(routing?.rules) ? routing.rules : [];
   const balancers = Array.isArray(routing?.balancers) ? routing.balancers : [];
@@ -115,7 +125,30 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
       </div>
 
       <div className="space-y-2">
-        {rules.map((r: any, idx: number) => {
+        {mergeActiveWithDisabled<any>(rules, disabledRules ?? []).map((entry) => {
+          if (entry.kind === 'disabled') {
+            const v = entry.value;
+            const dTarget = v?.outboundTag || v?.balancerTag || 'direct';
+            const dDomain = Array.isArray(v?.domain) ? v.domain.join(', ') : v?.domain || '';
+            const dIp = Array.isArray(v?.ip) ? v.ip.join(', ') : v?.ip || '';
+            const parts = [
+              dDomain ? `域名: ${dDomain}` : '',
+              dIp ? `IP: ${dIp}` : '',
+              v?.port ? `端口: ${v.port}` : '',
+              v?.network ? `网络: ${v.network}` : '',
+            ].filter(Boolean);
+            return (
+              <DisabledItemCard
+                key={`disabled:${entry.key}`}
+                title={dTarget}
+                subtitle={parts.join(' | ') || '路由规则'}
+                onEnable={() => onEnableEntry?.(entry.key)}
+                onDelete={() => onDeleteDisabledEntry?.(entry.key)}
+              />
+            );
+          }
+          const r = entry.value;
+          const idx = entry.activeIndex;
           const isEnabled = r.enabled !== false;
           const target = r.outboundTag || r.balancerTag || 'direct';
           const domainStr = Array.isArray(r.domain) ? r.domain.join(', ') : r.domain || '';
@@ -226,7 +259,7 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
       </div>
 
       {/* ── 负载均衡器 ── */}
-      {balancers.length > 0 && (
+      {(balancers.length > 0 || (disabledBalancers?.length ?? 0) > 0) && (
         <div className="pt-2">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -242,7 +275,22 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
             )}
           </div>
           <div className="space-y-1.5">
-            {balancers.map((b: any, idx: number) => {
+            {mergeActiveWithDisabled<any>(balancers, disabledBalancers ?? []).map((entry) => {
+              if (entry.kind === 'disabled') {
+                const v = entry.value;
+                return (
+                  <DisabledItemCard
+                    key={`disabled:${entry.key}`}
+                    title={v?.tag || '未命名'}
+                    badge={v?.strategy?.type || 'random'}
+                    subtitle={Array.isArray(v?.selector) && v.selector.length > 0 ? `选择: ${v.selector.join(', ')}` : '负载均衡器'}
+                    onEnable={() => onEnableEntry?.(entry.key)}
+                    onDelete={() => onDeleteDisabledEntry?.(entry.key)}
+                  />
+                );
+              }
+              const b = entry.value;
+              const idx = entry.activeIndex;
               const isBEnabled = b.enabled !== false;
               return (
                 <div key={idx} className={`flex items-center justify-between p-2.5 bg-slate-950/40 border border-white/5 rounded-xl hover:border-cyan-500/20 transition-all ${isBEnabled ? '' : 'opacity-50'}`}>
@@ -292,7 +340,7 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
         </div>
       )}
 
-      {balancers.length === 0 && onAddBalancer && (
+      {balancers.length === 0 && (disabledBalancers?.length ?? 0) === 0 && onAddBalancer && (
         <div className="pt-1">
           <button type="button" onClick={onAddBalancer}
             className="w-full flex items-center justify-center gap-1.5 py-2 text-[11px] text-cyan-400/60 hover:text-cyan-300 border border-dashed border-cyan-500/20 hover:border-cyan-500/40 rounded-xl transition-all">
