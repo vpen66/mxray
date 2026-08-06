@@ -135,23 +135,17 @@ impl ConfigParser {
 
         let stream_settings = Self::build_stream_settings(&params, "tcp");
 
-        let mut user_obj = json!({
-            "id": uuid,
-            "encryption": "none",
-        });
-        if !flow.is_empty() {
-            user_obj["flow"] = json!(flow);
-        }
-
+        // VLESS OutboundConfigurationObject 采用扁平结构（simplified outbound）
+        // 见 https://xtls.github.io/config/outbounds/vless.html
         let outbound = json!({
             "tag": "proxy",
             "protocol": "vless",
             "settings": {
-                "vnext": [{
-                    "address": host,
-                    "port": port,
-                    "users": [user_obj]
-                }]
+                "address": host,
+                "port": port,
+                "id": uuid,
+                "encryption": "none",
+                "flow": flow,
             },
             "streamSettings": stream_settings
         });
@@ -180,14 +174,12 @@ impl ConfigParser {
         let port = v["port"].as_str().and_then(|s| s.parse().ok()).or_else(|| v["port"].as_u64().map(|p| p as u16)).unwrap_or(443);
         let uuid = v["id"].as_str().unwrap_or("");
         let name = v["ps"].as_str().unwrap_or("VMess Node").to_string();
-        let aid = v["aid"].as_str().and_then(|s| s.parse().ok()).or_else(|| v["aid"].as_u64().map(|a| a as u64)).unwrap_or(0);
         let security = v["scy"].as_str().unwrap_or("auto");
         let net = v["net"].as_str().unwrap_or("tcp");
         let tls = v["tls"].as_str().unwrap_or("");
         let sni = v["sni"].as_str().unwrap_or("");
         let host_header = v["host"].as_str().unwrap_or("");
         let path = v["path"].as_str().unwrap_or("");
-        let flow = v["flow"].as_str().unwrap_or("");
         let fp = v["fp"].as_str().unwrap_or("");
         let alpn = v["alpn"].as_str().unwrap_or("");
 
@@ -202,24 +194,16 @@ impl ConfigParser {
 
         let stream_settings = Self::build_stream_settings(&params, net);
 
-        let mut user_obj = json!({
-            "id": uuid,
-            "alterId": aid,
-            "security": security,
-        });
-        if !flow.is_empty() {
-            user_obj["flow"] = json!(flow);
-        }
-
+        // VMess OutboundConfigurationObject 采用扁平结构（simplified outbound）
+        // 见 https://xtls.github.io/config/outbounds/vmess.html
         let outbound = json!({
             "tag": "proxy",
             "protocol": "vmess",
             "settings": {
-                "vnext": [{
-                    "address": host,
-                    "port": port,
-                    "users": [user_obj]
-                }]
+                "address": host,
+                "port": port,
+                "id": uuid,
+                "security": security,
             },
             "streamSettings": stream_settings
         });
@@ -245,15 +229,15 @@ impl ConfigParser {
         let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
         let stream_settings = Self::build_stream_settings(&params, "tcp");
 
+        // Trojan OutboundConfigurationObject 采用扁平结构（simplified outbound）
+        // 见 https://xtls.github.io/config/outbounds/trojan.html
         let outbound = json!({
             "tag": "proxy",
             "protocol": "trojan",
             "settings": {
-                "servers": [{
-                    "address": host,
-                    "port": port,
-                    "password": password,
-                }]
+                "address": host,
+                "port": port,
+                "password": password,
             },
             "streamSettings": stream_settings
         });
@@ -301,16 +285,16 @@ impl ConfigParser {
             (host_port_clean, 443u16)
         };
 
+        // Shadowsocks OutboundConfigurationObject 采用扁平结构（simplified outbound）
+        // 见 https://xtls.github.io/config/outbounds/shadowsocks.html
         let outbound = json!({
             "tag": "proxy",
             "protocol": "shadowsocks",
             "settings": {
-                "servers": [{
-                    "address": host,
-                    "port": port,
-                    "method": method,
-                    "password": password,
-                }]
+                "address": host,
+                "port": port,
+                "method": method,
+                "password": password,
             }
         });
 
@@ -339,20 +323,27 @@ impl ConfigParser {
         let sni = params.get("sni").cloned().unwrap_or_default();
         let insecure = params.get("insecure").cloned().unwrap_or_default() == "1";
 
+        // Hysteria2 在新版 Xray 中协议名为 hysteria（version 必须为 2）
+        // settings 仅含 version/address/port，认证密码位于 streamSettings.hysteriaSettings.auth
+        // 见 https://xtls.github.io/config/outbounds/hysteria.html
         let outbound = json!({
             "tag": "proxy",
-            "protocol": "hysteria2",
+            "protocol": "hysteria",
             "settings": {
+                "version": 2,
                 "address": host,
                 "port": port,
-                "password": password,
             },
             "streamSettings": {
-                "network": "tcp",
+                "network": "hysteria",
                 "security": "tls",
                 "tlsSettings": {
                     "serverName": sni,
                     "allowInsecure": insecure,
+                },
+                "hysteriaSettings": {
+                    "version": 2,
+                    "auth": password,
                 }
             }
         });
@@ -360,7 +351,7 @@ impl ConfigParser {
         Ok(ParsedNode {
             id: format!("node-hy2-{}-{}", host, port),
             name,
-            protocol: "hysteria2".into(),
+            protocol: "hysteria".into(),
             server: host.into(),
             port,
             raw_outbound: outbound,
@@ -434,30 +425,87 @@ impl ConfigParser {
 
         if let Some(proxies) = docs.get("proxies").and_then(|p| p.as_array()) {
             for (idx, proxy) in proxies.iter().enumerate() {
-                if let (Some(name), Some(ptype), Some(server), Some(port)) = (
+                let (Some(name), Some(ptype), Some(server), Some(port)) = (
                     proxy.get("name").and_then(|v| v.as_str()),
                     proxy.get("type").and_then(|v| v.as_str()),
                     proxy.get("server").and_then(|v| v.as_str()),
                     proxy.get("port").and_then(|v| v.as_u64()),
-                ) {
-                    let outbound = json!({
-                        "tag": format!("proxy-{}", idx),
-                        "protocol": ptype.to_lowercase(),
-                        "settings": {
-                            "address": server,
-                            "port": port,
-                        }
-                    });
+                ) else {
+                    continue;
+                };
 
-                    nodes.push(ParsedNode {
-                        id: format!("clash-node-{}", idx),
-                        name: name.to_string(),
-                        protocol: ptype.to_lowercase(),
-                        server: server.to_string(),
-                        port: port as u16,
-                        raw_outbound: outbound,
+                let port = port as u16;
+                let ptype_lower = ptype.to_lowercase();
+                let protocol = match ptype_lower.as_str() {
+                    "ss" => "shadowsocks",
+                    "hysteria2" | "hy2" => "hysteria",
+                    other => other,
+                };
+
+                // 按协议生成符合官方规范的扁平 OutboundConfigurationObject
+                let settings = match protocol {
+                    "vless" => json!({
+                        "address": server,
+                        "port": port,
+                        "id": proxy.get("uuid").and_then(|v| v.as_str()).unwrap_or(""),
+                        "encryption": "none",
+                        "flow": proxy.get("flow").and_then(|v| v.as_str()).unwrap_or(""),
+                    }),
+                    "vmess" => json!({
+                        "address": server,
+                        "port": port,
+                        "id": proxy.get("uuid").and_then(|v| v.as_str()).unwrap_or(""),
+                        "security": proxy.get("cipher").and_then(|v| v.as_str()).unwrap_or("auto"),
+                    }),
+                    "trojan" => json!({
+                        "address": server,
+                        "port": port,
+                        "password": proxy.get("password").and_then(|v| v.as_str()).unwrap_or(""),
+                    }),
+                    "shadowsocks" => json!({
+                        "address": server,
+                        "port": port,
+                        "method": proxy.get("cipher").and_then(|v| v.as_str()).unwrap_or(""),
+                        "password": proxy.get("password").and_then(|v| v.as_str()).unwrap_or(""),
+                    }),
+                    "hysteria" => json!({
+                        "version": 2,
+                        "address": server,
+                        "port": port,
+                    }),
+                    _ => json!({
+                        "address": server,
+                        "port": port,
+                    }),
+                };
+
+                let mut outbound = json!({
+                    "tag": format!("proxy-{}", idx),
+                    "protocol": protocol,
+                    "settings": settings,
+                });
+
+                // Hysteria2 认证密码位于 streamSettings.hysteriaSettings.auth
+                if protocol == "hysteria" {
+                    let auth = proxy.get("password").and_then(|v| v.as_str()).unwrap_or("");
+                    let sni = proxy.get("sni").and_then(|v| v.as_str()).unwrap_or("");
+                    let insecure = proxy.get("skip-cert-verify").and_then(|v| v.as_bool()).unwrap_or(false);
+                    outbound["streamSettings"] = json!({
+                        "network": "hysteria",
+                        "security": "tls",
+                        "tlsSettings": { "serverName": sni, "allowInsecure": insecure },
+                        "hysteriaSettings": { "version": 2, "auth": auth }
                     });
                 }
+
+                nodes.push(ParsedNode {
+                    id: format!("clash-node-{}", idx),
+                    name: name.to_string(),
+                    protocol: protocol.to_string(),
+                    server: server.to_string(),
+                    port,
+                    raw_outbound: outbound,
+                });
             }
         }
 

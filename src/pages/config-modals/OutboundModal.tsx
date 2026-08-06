@@ -110,7 +110,6 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
   const [vlessReverseSniffing, setVlessReverseSniffing] = useState(false);
   // VMess-specific
   const [vmessSecurity, setVmessSecurity] = useState('auto');
-  const [vmessAlterId, setVmessAlterId] = useState(0);
   // Common user-level fields (email for Trojan/SS, level for all)
   const [userEmail, setUserEmail] = useState('');
   const [userLevel, setUserLevel] = useState(0);
@@ -172,7 +171,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
       setTag(val.tag || 'proxy');
       setProtocol(val.protocol || 'vless');
 
-      // Extract address/port/uuid from settings
+      // Extract address/port/uuid from settings (official flat OutboundConfigurationObject)
       if (val.protocol === 'vless' && val.settings?.address !== undefined) {
         // VLESS flat format (official spec)
         setAddress(val.settings.address || '');
@@ -180,18 +179,53 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
         setUuid(val.settings.id || '');
         setVlessFlow(val.settings.flow || 'xtls-rprx-vision');
         setUserLevel(val.settings.level ?? 0);
+        setUserEmail('');
         setVlessReverseTag(val.settings.reverse?.tag || '');
         setVlessReverseSniffing(!!val.settings.reverse?.sniffing);
+      } else if (val.protocol === 'vmess' && val.settings?.address !== undefined) {
+        // VMess flat format (official spec)
+        setAddress(val.settings.address || '');
+        setPort(val.settings.port || 443);
+        setUuid(val.settings.id || '');
+        setVmessSecurity(val.settings.security || 'auto');
+        setUserLevel(val.settings.level ?? 0);
+        setUserEmail('');
+      } else if ((val.protocol === 'trojan' || val.protocol === 'shadowsocks') && val.settings?.address !== undefined) {
+        // Trojan / Shadowsocks flat format (official spec)
+        setAddress(val.settings.address || '');
+        setPort(val.settings.port || 443);
+        if (val.protocol === 'shadowsocks') {
+          setSsMethod(val.settings.method || 'aes-256-gcm');
+          setSsPassword(val.settings.password || '');
+          setUuid('');
+        } else {
+          setUuid(val.settings.password || '');
+        }
+        setUserEmail(val.settings.email || '');
+        setUserLevel(val.settings.level ?? 0);
+      } else if ((val.protocol === 'socks' || val.protocol === 'http') && val.settings?.address !== undefined) {
+        // SOCKS / HTTP flat format (official spec)
+        setAddress(val.settings.address || '');
+        setPort(val.settings.port || 443);
+        setUuid(val.settings.user || '');
+        setSsPassword(val.settings.pass || '');
+        setUserEmail(val.settings.email || '');
+        setUserLevel(val.settings.level ?? 0);
       } else if (val.settings?.vnext && val.settings.vnext[0]) {
+        // 兼容旧版 vnext 格式
         const vn = val.settings.vnext[0];
         setAddress(vn.address || '');
         setPort(vn.port || 443);
         setUuid(vn.users?.[0]?.id || '');
         const vlessUser = vn.users?.[0] || {};
-        setVlessFlow('flow' in vlessUser ? vlessUser.flow : 'xtls-rprx-vision');
+        if (val.protocol === 'vless') {
+          setVlessFlow('flow' in vlessUser ? vlessUser.flow : 'xtls-rprx-vision');
+        }
         setVmessSecurity(vn.users?.[0]?.security || 'auto');
-        setVmessAlterId(vn.users?.[0]?.alterId ?? 0);
+        setUserEmail('');
+        setUserLevel(vn.users?.[0]?.level ?? 0);
       } else if (val.settings?.servers && val.settings.servers[0]) {
+        // 兼容旧版 servers 格式
         const srv = val.settings.servers[0];
         setAddress(srv.address || '');
         setPort(srv.port || 443);
@@ -200,25 +234,15 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
           setSsPassword(srv.password || '');
           setUuid('');
         } else {
-          setUuid(srv.password || '');
+          setUuid(srv.password || srv.users?.[0]?.user || '');
+          setSsPassword(srv.users?.[0]?.pass || '');
         }
+        setUserEmail(srv.email || '');
+        setUserLevel(srv.level ?? 0);
       } else {
         setAddress('');
         setPort(443);
         setUuid('');
-      }
-
-      // Common user-level email/level
-      if (val.protocol === 'vless' && val.settings?.address !== undefined) {
-        setUserEmail('');
-        setUserLevel(val.settings.level ?? 0);
-      } else if (val.settings?.vnext?.[0]?.users?.[0]) {
-        setUserEmail('');
-        setUserLevel(val.settings.vnext[0].users[0].level ?? 0);
-      } else if (val.settings?.servers?.[0]) {
-        setUserEmail(val.settings.servers[0].email || '');
-        setUserLevel(val.settings.servers[0].level ?? 0);
-      } else {
         setUserEmail('');
         setUserLevel(0);
       }
@@ -326,25 +350,18 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
       }
       case 'vmess':
         settings = {
-          vnext: [{
-            address: trimmedAddr,
-            port: numPort,
-            users: [{
-              id: uuid.trim(),
-              alterId: vmessAlterId,
-              security: vmessSecurity,
-              ...(userLevel > 0 ? { level: userLevel } : {}),
-            }],
-          }],
+          address: trimmedAddr,
+          port: numPort,
+          id: uuid.trim(),
+          security: vmessSecurity,
+          ...(userLevel > 0 ? { level: userLevel } : {}),
         };
         break;
       case 'trojan':
         settings = {
-          servers: [{
-            address: trimmedAddr, port: numPort, password: uuid.trim(),
-            ...(userEmail.trim() ? { email: userEmail.trim() } : {}),
-            ...(userLevel > 0 ? { level: userLevel } : {}),
-          }],
+          address: trimmedAddr, port: numPort, password: uuid.trim(),
+          ...(userEmail.trim() ? { email: userEmail.trim() } : {}),
+          ...(userLevel > 0 ? { level: userLevel } : {}),
         };
         break;
       case 'hysteria':
@@ -352,11 +369,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
         break;
       case 'shadowsocks':
         settings = {
-          servers: [{
-            address: trimmedAddr, port: numPort, method: ssMethod, password: ssPassword.trim(),
-            ...(userEmail.trim() ? { email: userEmail.trim() } : {}),
-            ...(userLevel > 0 ? { level: userLevel } : {}),
-          }],
+          address: trimmedAddr, port: numPort, method: ssMethod, password: ssPassword.trim(),
+          ...(userEmail.trim() ? { email: userEmail.trim() } : {}),
+          ...(userLevel > 0 ? { level: userLevel } : {}),
         };
         break;
       case 'freedom':
@@ -406,12 +421,14 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
       }
       case 'socks':
         settings = {
-          servers: [{ address: trimmedAddr, port: numPort, users: uuid.trim() ? [{ user: uuid.trim(), pass: ssPassword.trim() }] : [] }],
+          address: trimmedAddr, port: numPort,
+          ...(uuid.trim() ? { user: uuid.trim(), pass: ssPassword.trim() } : {}),
         };
         break;
       case 'http':
         settings = {
-          servers: [{ address: trimmedAddr, port: numPort, users: uuid.trim() ? [{ user: uuid.trim(), pass: ssPassword.trim() }] : [] }],
+          address: trimmedAddr, port: numPort,
+          ...(uuid.trim() ? { user: uuid.trim(), pass: ssPassword.trim() } : {}),
         };
         break;
     }
@@ -593,15 +610,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({
                         <label className={labelCls}><FieldLabel label="用户 UUID" tip="VMess 用户标识，格式为 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx。" /></label>
                         <input type="text" value={uuid} onChange={(e) => setUuid(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className={inputCls} />
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className={labelCls}><FieldLabel label="加密方式" tip="VMess 用户数据的加密方式，推荐 auto 自动选择。" /></label>
-                          <CustomSelect options={VMESS_SECURITY_OPTIONS} value={vmessSecurity} onChange={setVmessSecurity} size="sm" accentColor="blue" />
-                        </div>
-                        <div>
-                          <label className={labelCls}><FieldLabel label="alterId" tip="VMess 额外 ID，用于兼容旧版客户端。建议设为 0。" /></label>
-                          <input type="number" value={vmessAlterId} onChange={(e) => setVmessAlterId(Number(e.target.value) || 0)} className={inputSmall} />
-                        </div>
+                      <div>
+                        <label className={labelCls}><FieldLabel label="加密方式" tip="VMess 用户数据的加密方式，推荐 auto 自动选择。" /></label>
+                        <CustomSelect options={VMESS_SECURITY_OPTIONS} value={vmessSecurity} onChange={setVmessSecurity} size="sm" accentColor="blue" />
                       </div>
                       <div>
                         <label className={labelCls}><FieldLabel label="用户等级" tip="用户等级，用于区分不同用户的策略。" /></label>

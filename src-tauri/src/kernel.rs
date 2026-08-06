@@ -5,6 +5,10 @@ use std::path::Path;
 use std::process::{Command, Child};
 #[cfg(not(target_os = "macos"))]
 use std::process::Stdio;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
 use tauri::{Emitter, Manager};
@@ -151,10 +155,19 @@ pub fn detect_kernel_version(path_str: &str) -> KernelInfo {
         };
     }
 
-    let output = Command::new(path)
-        .arg("version")
+    let mut cmd = Command::new(path);
+    cmd.arg("version");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let output = cmd
         .output()
-        .or_else(|_| Command::new(path).arg("-version").output());
+        .or_else(|_| {
+            let mut cmd2 = Command::new(path);
+            cmd2.arg("-version");
+            #[cfg(target_os = "windows")]
+            cmd2.creation_flags(CREATE_NO_WINDOW);
+            cmd2.output()
+        });
 
     match output {
         Ok(out) => {
@@ -1002,6 +1015,7 @@ pub fn stop_kernel(app_handle: tauri::AppHandle) -> Result<(), String> {
     {
         let _ = Command::new("taskkill")
             .args(["/F", "/IM", "xray.exe"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
     }
     #[cfg(target_os = "linux")]
@@ -1105,8 +1119,10 @@ pub fn start_kernel(
         let mut child = if cfg!(target_os = "windows") {
             Command::new(&bin_path)
                 .args(["run", "-config", config_file_path.to_str().unwrap_or_default()])
+                .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
                 .map_err(|e| format!("无法启动 Xray 进程 ({}): {}", bin_path, e))?
         } else {

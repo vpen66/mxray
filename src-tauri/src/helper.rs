@@ -141,6 +141,7 @@ fn start_xray() -> Result<(), String> {
 
     Command::new(bin)
         .args(["run", "-config", config])
+        .stdin(std::process::Stdio::null())
         .stdout(log_file)
         .stderr(log_err)
         .spawn()
