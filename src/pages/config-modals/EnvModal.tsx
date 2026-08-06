@@ -28,9 +28,14 @@ export const EnvModal: React.FC<EnvModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       const val = initialValue || { XRAY_LOCATION_ASSET: './assets' };
-      const arr: EnvPair[] = Object.entries(val).map(([k, v]) => ({ key: k, value: String(v) }));
+      // enabled 为应用内部启停标志，不作为环境变量编辑
+      const filtered: Record<string, any> = {};
+      Object.entries(val).forEach(([k, v]) => {
+        if (k !== 'enabled') filtered[k] = v;
+      });
+      const arr: EnvPair[] = Object.entries(filtered).map(([k, v]) => ({ key: k, value: String(v) }));
       setPairs(arr.length > 0 ? arr : [{ key: '', value: '' }]);
-      setRawJsonText(JSON.stringify(val, null, 2));
+      setRawJsonText(JSON.stringify(filtered, null, 2));
       setJsonError(null);
       setViewMode('visual');
     }

@@ -15,6 +15,9 @@ interface RoutingSectionProps {
   onAddBalancer?: () => void;
   onEditBalancer?: (index: number) => void;
   onDeleteBalancer?: (index: number) => void;
+  onToggleBalancerEnabled?: (index: number) => void;
+  enabled?: boolean;
+  onToggleEnabled?: () => void;
 }
 
 export const RoutingSection: React.FC<RoutingSectionProps> = ({
@@ -29,9 +32,13 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
   onAddBalancer,
   onEditBalancer,
   onDeleteBalancer,
+  onToggleBalancerEnabled,
+  enabled,
+  onToggleEnabled,
 }) => {
   const rules = Array.isArray(routing?.rules) ? routing.rules : [];
   const balancers = Array.isArray(routing?.balancers) ? routing.balancers : [];
+  const isEnabled = enabled !== false;
 
   const DOMAIN_STRATEGY_OPTIONS = [
     { value: 'AsIs', label: 'AsIs', description: '不解析域名，直接使用目标域名' },
@@ -47,7 +54,7 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
   ];
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4">
+    <div className={`bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4 transition-opacity ${isEnabled ? '' : 'opacity-60'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
@@ -62,6 +69,15 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {onToggleEnabled && (
+            <ToggleSwitch
+              checked={isEnabled}
+              onChange={onToggleEnabled}
+              activeColor="purple"
+              size="sm"
+              ariaLabel="切换路由配置启用状态"
+            />
+          )}
           <div className="flex items-center gap-2 bg-slate-800/40 border border-white/5 rounded-xl px-3 py-1.5">
             <Settings2 className="w-3.5 h-3.5 text-slate-400" />
             {onEditDomainStrategy && (
@@ -226,40 +242,52 @@ export const RoutingSection: React.FC<RoutingSectionProps> = ({
             )}
           </div>
           <div className="space-y-1.5">
-            {balancers.map((b: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-950/40 border border-white/5 rounded-xl hover:border-cyan-500/20 transition-all">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono font-medium shrink-0">
-                    {b.tag || '未命名'}
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-white/5 font-mono">
-                    {b.strategy?.type || 'random'}
-                  </span>
-                  {Array.isArray(b.selector) && b.selector.length > 0 && (
-                    <span className="text-[10px] text-slate-500 truncate">
-                      选择: {b.selector.join(', ')}
+            {balancers.map((b: any, idx: number) => {
+              const isBEnabled = b.enabled !== false;
+              return (
+                <div key={idx} className={`flex items-center justify-between p-2.5 bg-slate-950/40 border border-white/5 rounded-xl hover:border-cyan-500/20 transition-all ${isBEnabled ? '' : 'opacity-50'}`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono font-medium shrink-0">
+                      {b.tag || '未命名'}
                     </span>
-                  )}
-                  {b.fallbackTag && (
-                    <span className="text-[10px] text-amber-400/80 shrink-0">回退: {b.fallbackTag}</span>
-                  )}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-white/5 font-mono">
+                      {b.strategy?.type || 'random'}
+                    </span>
+                    {Array.isArray(b.selector) && b.selector.length > 0 && (
+                      <span className="text-[10px] text-slate-500 truncate">
+                        选择: {b.selector.join(', ')}
+                      </span>
+                    )}
+                    {b.fallbackTag && (
+                      <span className="text-[10px] text-amber-400/80 shrink-0">回退: {b.fallbackTag}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {onToggleBalancerEnabled && (
+                      <ToggleSwitch
+                        checked={isBEnabled}
+                        onChange={() => onToggleBalancerEnabled(idx)}
+                        activeColor="purple"
+                        size="sm"
+                        ariaLabel="切换负载均衡器启用状态"
+                      />
+                    )}
+                    {onEditBalancer && (
+                      <button type="button" onClick={() => onEditBalancer(idx)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                    )}
+                    {onDeleteBalancer && (
+                      <button type="button" onClick={() => onDeleteBalancer(idx)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {onEditBalancer && (
-                    <button type="button" onClick={() => onEditBalancer(idx)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
-                      <Edit3 className="w-3 h-3" />
-                    </button>
-                  )}
-                  {onDeleteBalancer && (
-                    <button type="button" onClick={() => onDeleteBalancer(idx)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

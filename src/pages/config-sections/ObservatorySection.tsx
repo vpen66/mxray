@@ -1,11 +1,14 @@
 import React from 'react';
 import { Eye, Edit3, Trash2 } from 'lucide-react';
+import { ToggleSwitch } from '../../components/ToggleSwitch';
 
 interface ObservatorySectionProps {
   observatory?: any;
   burstObservatory?: any;
   onEdit: () => void;
   onDelete?: () => void;
+  enabled?: boolean;
+  onToggleEnabled?: () => void;
 }
 
 export const ObservatorySection: React.FC<ObservatorySectionProps> = ({
@@ -13,13 +16,16 @@ export const ObservatorySection: React.FC<ObservatorySectionProps> = ({
   burstObservatory,
   onEdit,
   onDelete,
+  enabled,
+  onToggleEnabled,
 }) => {
   const isBurst = !!burstObservatory;
   const targetObj = burstObservatory || observatory || {};
   const selectors = Array.isArray(targetObj.subjectSelector) ? targetObj.subjectSelector.join(', ') : 'proxy';
+  const isEnabled = enabled !== false;
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-3">
+    <div className={`bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-3 transition-opacity ${isEnabled ? '' : 'opacity-60'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-pink-500/20 text-pink-400 border border-pink-500/30 flex items-center justify-center">
@@ -33,6 +39,15 @@ export const ObservatorySection: React.FC<ObservatorySectionProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {onToggleEnabled && (
+            <ToggleSwitch
+              checked={isEnabled}
+              onChange={onToggleEnabled}
+              activeColor="blue"
+              size="sm"
+              ariaLabel="切换连接观测启用状态"
+            />
+          )}
           <button
             type="button"
             onClick={onEdit}

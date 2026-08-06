@@ -47,6 +47,10 @@ import {
   moveArrayItemInConfig,
   reorderArrayItemInConfig,
   getAvailableModules,
+  disabledKeyId,
+  afterRemoveDisabledKey,
+  afterReorderDisabledKeys,
+  migrateEmbeddedEnabledFlags,
   MODULE_DEFINITIONS,
 } from '../utils/configSectionHelper';
 
@@ -287,6 +291,31 @@ export const JsonConfigPage: React.FC = () => {
     }));
   }, [parsedConfig]);
 
+  // 禁用状态独立存储于 Profile（不写入 JSON 内容），启动内核时动态过滤
+  const disabledKeys = selectedProfile?.disabled ?? [];
+
+  const applyDisabledKeys = (next: string[]) => {
+    if (selectedProfile) updateProfile(selectedProfile.id, { disabled: next });
+  };
+
+  // 切换指定标识（模块键或数组条目标识）的禁用状态
+  const toggleDisabledKey = (key: string) => {
+    applyDisabledKeys(
+      disabledKeys.includes(key) ? disabledKeys.filter((k) => k !== key) : [...disabledKeys, key]
+    );
+  };
+
+  // 为展示数组注入虚拟启用标记（仅 UI 显示用，不会写入 JSON 内容）
+  const withEnabled = (items: any[] | undefined, moduleId: string) =>
+    (items || []).map((item, idx) =>
+      item && typeof item === 'object'
+        ? { ...item, enabled: !disabledKeys.includes(disabledKeyId(moduleId, item, idx)) }
+        : item
+    );
+
+  // 连接观测模块实际存储键（observatory 与 burstObservatory 二选一）
+  const observatoryKey = parsedConfig?.burstObservatory ? 'burstObservatory' : 'observatory';
+
   return (
     <div className="flex h-full w-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* Left Profiles Sidebar Panel */}
@@ -457,14 +486,19 @@ export const JsonConfigPage: React.FC = () => {
                     directory: false,
                   });
                   if (filePath && typeof filePath === 'string') {
-                    const content = await invoke('read_text_file', { path: filePath }) as string;
-                    JSON.parse(content);
+                    const rawContent = await invoke('read_text_file', { path: filePath }) as string;
+                    JSON.parse(rawContent);
+                    // 外部导入的配置若内嵌了 enabled 标记，迁移为外部禁用列表并从内容中移除
+                    const { content, disabled } = migrateEmbeddedEnabledFlags(rawContent);
                     const fileName = filePath.split('/').pop()?.replace(/\.json$/i, '') || '导入的配置';
                     const createdId = addProfile({
                       name: fileName,
                       description: '从文件导入的配置',
                       content,
                     });
+                    if (disabled.length > 0) {
+                      updateProfile(createdId, { disabled });
+                    }
                     setSelectedProfileId(createdId);
                   }
                 } catch (err: any) {
@@ -526,17 +560,29 @@ export const JsonConfigPage: React.FC = () => {
                   log={parsedConfig.log}
                   onEdit={() => setActiveModal({ type: 'log', initialValue: parsedConfig.log })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'log'))}
+                  enabled={!disabledKeys.includes('log')}
+                  onToggleEnabled={() => toggleDisabledKey('log')}
                 />
               )}
 
               {/* Inbounds Section */}
               <InboundSection
-                inbounds={parsedConfig?.inbounds || []}
+                inbounds={withEnabled(parsedConfig?.inbounds, 'inbounds')}
                 onAddInbound={() => setActiveModal({ type: 'inbound_add' })}
                 onEditInbound={(idx) => setActiveModal({ type: 'inbound_edit', index: idx, initialValue: parsedConfig.inbounds[idx] })}
-                onDeleteInbound={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'inbounds', idx))}
-                onMoveInbound={(idx, dir) => handleUpdateContent(moveArrayItemInConfig(editorContent, 'inbounds', idx, dir))}
-                onReorderInbound={(from, to) => handleUpdateContent(reorderArrayItemInConfig(editorContent, 'inbounds', from, to))}
+                onDeleteInbound={(idx) => {
+                  handleUpdateContent(removeArrayItemInConfig(editorContent, 'inbounds', idx));
+                  applyDisabledKeys(afterRemoveDisabledKey(disabledKeys, 'inbounds', parsedConfig?.inbounds?.[idx], idx));
+                }}
+                onMoveInbound={(idx, dir) => {
+                  handleUpdateContent(moveArrayItemInConfig(editorContent, 'inbounds', idx, dir));
+                  applyDisabledKeys(afterReorderDisabledKeys(disabledKeys, 'inbounds', idx, dir === 'up' ? idx - 1 : idx + 1));
+                }}
+                onReorderInbound={(from, to) => {
+                  handleUpdateContent(reorderArrayItemInConfig(editorContent, 'inbounds', from, to));
+                  applyDisabledKeys(afterReorderDisabledKeys(disabledKeys, 'inbounds', from, to));
+                }}
+                onToggleInboundEnabled={(idx) => toggleDisabledKey(disabledKeyId('inbounds', parsedConfig?.inbounds?.[idx], idx))}
                 onToggleSniffing={(idx) => {
                   const currentInbounds = parsedConfig?.inbounds || [];
                   const targetIb = currentInbounds[idx];
@@ -558,15 +604,19 @@ export const JsonConfigPage: React.FC = () => {
               {/* DNS Section */}
               {parsedConfig?.dns && (
                 <DnsSection
-                  dns={parsedConfig.dns}
+                  dns={{ ...parsedConfig.dns, servers: withEnabled(parsedConfig.dns.servers, 'dns.servers') }}
                   onEdit={() => setActiveModal({ type: 'dns', initialValue: parsedConfig.dns })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'dns'))}
+                  enabled={!disabledKeys.includes('dns')}
+                  onToggleEnabled={() => toggleDisabledKey('dns')}
+                  onToggleServerEnabled={(idx) => toggleDisabledKey(disabledKeyId('dns.servers', parsedConfig.dns.servers?.[idx], idx))}
                   onDeleteServer={(idx) => {
                     try {
                       const config = JSON.parse(editorContent);
                       if (config.dns?.servers && Array.isArray(config.dns.servers)) {
                         config.dns.servers.splice(idx, 1);
                         handleUpdateContent(JSON.stringify(config, null, 2));
+                        applyDisabledKeys(afterRemoveDisabledKey(disabledKeys, 'dns.servers', parsedConfig.dns.servers?.[idx], idx));
                       }
                     } catch { /* ignore */ }
                   }}
@@ -575,19 +625,24 @@ export const JsonConfigPage: React.FC = () => {
 
               {/* Routing Section */}
               <RoutingSection
-                routing={parsedConfig?.routing}
+                routing={parsedConfig?.routing ? {
+                  ...parsedConfig.routing,
+                  rules: Array.isArray(parsedConfig.routing.rules) ? withEnabled(parsedConfig.routing.rules, 'routing.rules') : parsedConfig.routing.rules,
+                  balancers: Array.isArray(parsedConfig.routing.balancers) ? withEnabled(parsedConfig.routing.balancers, 'routing.balancers') : parsedConfig.routing.balancers,
+                } : parsedConfig?.routing}
                 onAddRule={() => setActiveModal({ type: 'routing_rule_add' })}
                 onEditRule={(idx) => setActiveModal({ type: 'routing_rule_edit', index: idx, initialValue: parsedConfig?.routing?.rules?.[idx] })}
-                onDeleteRule={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'routing.rules', idx))}
-                onToggleRuleEnabled={(idx) => {
-                  const rules = parsedConfig?.routing?.rules || [];
-                  const targetRule = rules[idx];
-                  if (targetRule) {
-                    const updatedRule = { ...targetRule, enabled: targetRule.enabled === false };
-                    handleUpdateContent(updateArrayItemInConfig(editorContent, 'routing.rules', idx, updatedRule));
-                  }
+                onDeleteRule={(idx) => {
+                  handleUpdateContent(removeArrayItemInConfig(editorContent, 'routing.rules', idx));
+                  applyDisabledKeys(afterRemoveDisabledKey(disabledKeys, 'routing.rules', parsedConfig?.routing?.rules?.[idx], idx));
                 }}
-                onMoveRule={(idx, dir) => handleUpdateContent(moveArrayItemInConfig(editorContent, 'routing.rules', idx, dir))}
+                onToggleRuleEnabled={(idx) => toggleDisabledKey(disabledKeyId('routing.rules', parsedConfig?.routing?.rules?.[idx], idx))}
+                enabled={parsedConfig?.routing ? !disabledKeys.includes('routing') : undefined}
+                onToggleEnabled={parsedConfig?.routing ? () => toggleDisabledKey('routing') : undefined}
+                onMoveRule={(idx, dir) => {
+                  handleUpdateContent(moveArrayItemInConfig(editorContent, 'routing.rules', idx, dir));
+                  applyDisabledKeys(afterReorderDisabledKeys(disabledKeys, 'routing.rules', idx, dir === 'up' ? idx - 1 : idx + 1));
+                }}
                 onEditDomainStrategy={(val) => {
                   try {
                     const config = JSON.parse(editorContent || '{}');
@@ -607,17 +662,31 @@ export const JsonConfigPage: React.FC = () => {
                 }}
                 onAddBalancer={() => setActiveModal({ type: 'balancer_add' })}
                 onEditBalancer={(idx) => setActiveModal({ type: 'balancer_edit', index: idx, initialValue: parsedConfig?.routing?.balancers?.[idx] })}
-                onDeleteBalancer={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'routing.balancers', idx))}
+                onDeleteBalancer={(idx) => {
+                  handleUpdateContent(removeArrayItemInConfig(editorContent, 'routing.balancers', idx));
+                  applyDisabledKeys(afterRemoveDisabledKey(disabledKeys, 'routing.balancers', parsedConfig?.routing?.balancers?.[idx], idx));
+                }}
+                onToggleBalancerEnabled={(idx) => toggleDisabledKey(disabledKeyId('routing.balancers', parsedConfig?.routing?.balancers?.[idx], idx))}
               />
 
               {/* Outbounds Section */}
               <OutboundSection
-                outbounds={parsedConfig?.outbounds || []}
+                outbounds={withEnabled(parsedConfig?.outbounds, 'outbounds')}
                 onAddOutbound={() => setActiveModal({ type: 'outbound_add' })}
                 onEditOutbound={(idx) => setActiveModal({ type: 'outbound_edit', index: idx, initialValue: parsedConfig.outbounds[idx] })}
-                onDeleteOutbound={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'outbounds', idx))}
-                onMoveOutbound={(idx, dir) => handleUpdateContent(moveArrayItemInConfig(editorContent, 'outbounds', idx, dir))}
-                onReorderOutbound={(from, to) => handleUpdateContent(reorderArrayItemInConfig(editorContent, 'outbounds', from, to))}
+                onDeleteOutbound={(idx) => {
+                  handleUpdateContent(removeArrayItemInConfig(editorContent, 'outbounds', idx));
+                  applyDisabledKeys(afterRemoveDisabledKey(disabledKeys, 'outbounds', parsedConfig?.outbounds?.[idx], idx));
+                }}
+                onMoveOutbound={(idx, dir) => {
+                  handleUpdateContent(moveArrayItemInConfig(editorContent, 'outbounds', idx, dir));
+                  applyDisabledKeys(afterReorderDisabledKeys(disabledKeys, 'outbounds', idx, dir === 'up' ? idx - 1 : idx + 1));
+                }}
+                onReorderOutbound={(from, to) => {
+                  handleUpdateContent(reorderArrayItemInConfig(editorContent, 'outbounds', from, to));
+                  applyDisabledKeys(afterReorderDisabledKeys(disabledKeys, 'outbounds', from, to));
+                }}
+                onToggleOutboundEnabled={(idx) => toggleDisabledKey(disabledKeyId('outbounds', parsedConfig?.outbounds?.[idx], idx))}
                 onImportSubscription={() => setIsSubscriptionImportOpen(true)}
               />
 
@@ -627,16 +696,22 @@ export const JsonConfigPage: React.FC = () => {
                   api={parsedConfig.api}
                   onEdit={() => setActiveModal({ type: 'api', initialValue: parsedConfig.api })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'api'))}
+                  enabled={!disabledKeys.includes('api')}
+                  onToggleEnabled={() => toggleDisabledKey('api')}
                 />
               )}
 
               {/* FakeDNS Section */}
               {Array.isArray(parsedConfig?.fakedns) && (
                 <FakeDnsSection
-                  fakedns={parsedConfig.fakedns}
+                  fakedns={withEnabled(parsedConfig.fakedns, 'fakedns')}
                   onAdd={() => setActiveModal({ type: 'fakedns_add' })}
                   onEdit={(idx) => setActiveModal({ type: 'fakedns_edit', index: idx, initialValue: parsedConfig.fakedns[idx] })}
-                  onDelete={(idx) => handleUpdateContent(removeArrayItemInConfig(editorContent, 'fakedns', idx))}
+                  onDelete={(idx) => {
+                    handleUpdateContent(removeArrayItemInConfig(editorContent, 'fakedns', idx));
+                    applyDisabledKeys(afterRemoveDisabledKey(disabledKeys, 'fakedns', parsedConfig.fakedns[idx], idx));
+                  }}
+                  onToggleItemEnabled={(idx) => toggleDisabledKey(disabledKeyId('fakedns', parsedConfig.fakedns[idx], idx))}
                   onRemoveModule={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'fakedns'))}
                 />
               )}
@@ -647,6 +722,8 @@ export const JsonConfigPage: React.FC = () => {
                   transport={parsedConfig.transport}
                   onEdit={() => setActiveModal({ type: 'transport', initialValue: parsedConfig.transport })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'transport'))}
+                  enabled={!disabledKeys.includes('transport')}
+                  onToggleEnabled={() => toggleDisabledKey('transport')}
                 />
               )}
 
@@ -656,6 +733,8 @@ export const JsonConfigPage: React.FC = () => {
                   policy={parsedConfig.policy}
                   onEdit={() => setActiveModal({ type: 'policy', initialValue: parsedConfig.policy })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'policy'))}
+                  enabled={!disabledKeys.includes('policy')}
+                  onToggleEnabled={() => toggleDisabledKey('policy')}
                 />
               )}
 
@@ -663,6 +742,8 @@ export const JsonConfigPage: React.FC = () => {
               {parsedConfig?.stats && (
                 <StatsSection
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'stats'))}
+                  enabled={!disabledKeys.includes('stats')}
+                  onToggleEnabled={() => toggleDisabledKey('stats')}
                 />
               )}
 
@@ -672,6 +753,8 @@ export const JsonConfigPage: React.FC = () => {
                   metrics={parsedConfig.metrics}
                   onEdit={() => setActiveModal({ type: 'metrics', initialValue: parsedConfig.metrics })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'metrics'))}
+                  enabled={!disabledKeys.includes('metrics')}
+                  onToggleEnabled={() => toggleDisabledKey('metrics')}
                 />
               )}
 
@@ -686,6 +769,8 @@ export const JsonConfigPage: React.FC = () => {
                     nextStr = removeModuleFromConfig(nextStr, 'burstObservatory');
                     handleUpdateContent(nextStr);
                   }}
+                  enabled={!disabledKeys.includes(observatoryKey)}
+                  onToggleEnabled={() => toggleDisabledKey(observatoryKey)}
                 />
               )}
 
@@ -695,6 +780,8 @@ export const JsonConfigPage: React.FC = () => {
                   geodata={parsedConfig.geodata}
                   onEdit={() => setActiveModal({ type: 'geodata', initialValue: parsedConfig.geodata })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'geodata'))}
+                  enabled={!disabledKeys.includes('geodata')}
+                  onToggleEnabled={() => toggleDisabledKey('geodata')}
                 />
               )}
 
@@ -704,6 +791,8 @@ export const JsonConfigPage: React.FC = () => {
                   version={parsedConfig.version}
                   onEdit={() => setActiveModal({ type: 'version', initialValue: parsedConfig.version })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'version'))}
+                  enabled={!disabledKeys.includes('version')}
+                  onToggleEnabled={() => toggleDisabledKey('version')}
                 />
               )}
 
@@ -713,6 +802,8 @@ export const JsonConfigPage: React.FC = () => {
                   env={parsedConfig.env}
                   onEdit={() => setActiveModal({ type: 'env', initialValue: parsedConfig.env })}
                   onDelete={() => handleUpdateContent(removeModuleFromConfig(editorContent, 'env'))}
+                  enabled={!disabledKeys.includes('env')}
+                  onToggleEnabled={() => toggleDisabledKey('env')}
                 />
               )}
             </div>

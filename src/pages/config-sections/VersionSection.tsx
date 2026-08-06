@@ -1,19 +1,26 @@
 import React from 'react';
 import { Info, Edit3, Trash2 } from 'lucide-react';
+import { ToggleSwitch } from '../../components/ToggleSwitch';
 
 interface VersionSectionProps {
   version: any;
   onEdit: () => void;
   onDelete?: () => void;
+  enabled?: boolean;
+  onToggleEnabled?: () => void;
 }
 
 export const VersionSection: React.FC<VersionSectionProps> = ({
   version,
   onEdit,
   onDelete,
+  enabled,
+  onToggleEnabled,
 }) => {
+  const isEnabled = enabled !== false;
+
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-3">
+    <div className={`bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-3 transition-opacity ${isEnabled ? '' : 'opacity-60'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-slate-700/50 text-slate-300 border border-slate-600/30 flex items-center justify-center">
@@ -27,6 +34,15 @@ export const VersionSection: React.FC<VersionSectionProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {onToggleEnabled && (
+            <ToggleSwitch
+              checked={isEnabled}
+              onChange={onToggleEnabled}
+              activeColor="blue"
+              size="sm"
+              ariaLabel="切换版本约束启用状态"
+            />
+          )}
           <button
             type="button"
             onClick={onEdit}

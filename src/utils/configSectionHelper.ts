@@ -343,118 +343,140 @@ export function reorderArrayItemInConfig(jsonStr: string, moduleId: string, from
   }
 }
 
+/** 支持整体禁用的顶级对象模块集合 */
+export const DISABLED_MODULE_KEYS = new Set([
+  'log', 'api', 'dns', 'transport', 'policy', 'stats', 'metrics',
+  'observatory', 'burstObservatory', 'geodata', 'version', 'env', 'routing',
+]);
+
+/** 支持条目级禁用的数组路径 */
+export const DISABLED_ARRAY_PATHS = [
+  'inbounds', 'outbounds', 'fakedns', 'dns.servers', 'routing.rules', 'routing.balancers',
+];
+
 /**
- * 在原始 JSON 文本层面剔除 routing.rules 中 enabled 为 false 的规则，
- * 不经过 JSON.parse/JSON.stringify，完整保留原配置的字段顺序与格式
+ * 计算数组条目的稳定禁用标识。
+ * 优先使用 tag / address / ipPool 等稳定字段，缺失时回退索引；routing.rules 始终使用索引。
  */
-export function stripDisabledRoutingRules(jsonStr: string): string {
-  if (!jsonStr || !jsonStr.includes('"enabled"')) return jsonStr;
-
-  const routingIdx = jsonStr.indexOf('"routing"');
-  if (routingIdx === -1) return jsonStr;
-  const rulesIdx = jsonStr.indexOf('"rules"', routingIdx);
-  if (rulesIdx === -1) return jsonStr;
-  const arrStart = jsonStr.indexOf('[', rulesIdx);
-  if (arrStart === -1) return jsonStr;
-
-  // 定位 rules 数组的结束位置（括号配平）
-  let depth = 0;
-  let arrEnd = -1;
-  let inStr = false;
-  let esc = false;
-  for (let i = arrStart; i < jsonStr.length; i++) {
-    const ch = jsonStr[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (ch === '\\') esc = true;
-      else if (ch === '"') inStr = false;
-      continue;
-    }
-    if (ch === '"') {
-      inStr = true;
-    } else if (ch === '[' || ch === '{') {
-      depth++;
-    } else if (ch === ']' || ch === '}') {
-      depth--;
-      if (depth === 0) {
-        arrEnd = i;
-        break;
-      }
-    }
+export function disabledKeyId(moduleId: string, item: any, index: number): string {
+  if (moduleId === 'routing.rules') return `routing.rules#${index}`;
+  if (moduleId === 'fakedns' && item?.ipPool) return `fakedns:pool=${item.ipPool}`;
+  if (moduleId === 'dns.servers') {
+    const addr = typeof item === 'string' ? item : item?.address;
+    if (addr) return `dns.servers:addr=${addr}`;
+    return `dns.servers#${index}`;
   }
-  if (arrEnd === -1) return jsonStr;
-
-  // 扫描数组内顶层的每个对象，记录 enabled: false 的对象范围
-  const ranges: Array<{ start: number; end: number }> = [];
-  depth = 0;
-  inStr = false;
-  esc = false;
-  let objStart = -1;
-  let enabledFalse = false;
-  for (let i = arrStart + 1; i < arrEnd; i++) {
-    const ch = jsonStr[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (ch === '\\') esc = true;
-      else if (ch === '"') inStr = false;
-      continue;
-    }
-    if (ch === '"') {
-      // 仅在规则对象顶层（depth === 1）判定 "enabled": false
-      if (depth === 1 && /^"enabled"\s*:\s*false/.test(jsonStr.slice(i))) {
-        enabledFalse = true;
-      }
-      inStr = true;
-      continue;
-    }
-    if (ch === '{' || ch === '[') {
-      if (ch === '{' && depth === 0) {
-        objStart = i;
-        enabledFalse = false;
-      }
-      depth++;
-      continue;
-    }
-    if (ch === '}' || ch === ']') {
-      depth--;
-      if (ch === '}' && depth === 0 && objStart !== -1) {
-        if (enabledFalse) ranges.push({ start: objStart, end: i });
-        objStart = -1;
-      }
-      continue;
-    }
+  if ((moduleId === 'inbounds' || moduleId === 'outbounds' || moduleId === 'routing.balancers') && item?.tag) {
+    return `${moduleId}:tag=${item.tag}`;
   }
+  return `${moduleId}#${index}`;
+}
 
-  if (ranges.length === 0) return jsonStr;
-
-  // 重建文本：跳过被剔除的对象，并清理残留的尾逗号
-  let result = '';
-  let cursor = 0;
-  for (const { start, end } of ranges) {
-    // 追加被剔除对象之前的文本，并清理尾部空白避免残留空行
-    result += jsonStr.slice(cursor, start);
-    result = result.replace(/\s+$/, '');
-    cursor = end + 1;
-    const rest = jsonStr.slice(cursor);
-    const trailing = rest.match(/^\s*,/);
-    if (trailing) {
-      cursor += trailing[0].length;
-    } else {
-      // 被剔除的是最后一项，移除其前面的逗号（尾部空白已清理）
-      if (result.endsWith(',')) {
-        result = result.slice(0, -1);
-      }
-    }
+function getArrayByPath(config: any, moduleId: string): any[] | undefined {
+  if (moduleId.includes('.')) {
+    const [parent, child] = moduleId.split('.');
+    return config?.[parent]?.[child];
   }
-  result += jsonStr.slice(cursor);
+  return config?.[moduleId];
+}
 
-  // 兜底校验：确保结果仍是合法 JSON，否则回退原文
+function setArrayByPath(config: any, moduleId: string, arr: any[]) {
+  if (moduleId.includes('.')) {
+    const [parent, child] = moduleId.split('.');
+    if (config[parent]) config[parent][child] = arr;
+  } else {
+    config[moduleId] = arr;
+  }
+}
+
+/**
+ * 构建启动 Xray 内核时传入的配置：根据禁用列表过滤掉所有被禁用的模块/条目。
+ * 配置内容本身不含任何 enabled 字段，保持 Xray 官方纯净结构。
+ */
+export function buildRuntimeConfig(jsonStr: string, disabledKeys?: string[]): string {
+  if (!disabledKeys || disabledKeys.length === 0) return jsonStr;
   try {
-    JSON.parse(result);
-    return result;
+    const config = JSON.parse(jsonStr || '{}');
+    for (const key of disabledKeys) {
+      if (DISABLED_MODULE_KEYS.has(key)) delete config[key];
+    }
+    for (const moduleId of DISABLED_ARRAY_PATHS) {
+      const arr = getArrayByPath(config, moduleId);
+      if (!Array.isArray(arr)) continue;
+      const filtered = arr.filter(
+        (item: any, idx: number) => !disabledKeys.includes(disabledKeyId(moduleId, item, idx))
+      );
+      if (filtered.length !== arr.length) setArrayByPath(config, moduleId, filtered);
+    }
+    return JSON.stringify(config, null, 2);
   } catch {
     return jsonStr;
   }
+}
+
+/**
+ * 迁移旧版内嵌的 enabled 标记：
+ * 将 enabled: false 提取为外部禁用列表，并从内容中移除所有 enabled 字段，
+ * 保证 JSON 为可直接被 Xray 启动的纯净官方结构。
+ */
+export function migrateEmbeddedEnabledFlags(jsonStr: string): { content: string; disabled: string[] } {
+  try {
+    const config = JSON.parse(jsonStr || '{}');
+    const disabled: string[] = [];
+    for (const m of Array.from(DISABLED_MODULE_KEYS)) {
+      const v = config[m];
+      if (v && typeof v === 'object' && !Array.isArray(v) && 'enabled' in v) {
+        if (v.enabled === false) disabled.push(m);
+        delete v.enabled;
+      }
+    }
+    for (const moduleId of DISABLED_ARRAY_PATHS) {
+      const arr = getArrayByPath(config, moduleId);
+      if (!Array.isArray(arr)) continue;
+      arr.forEach((item: any, idx: number) => {
+        if (item && typeof item === 'object' && 'enabled' in item) {
+          if (item.enabled === false) disabled.push(disabledKeyId(moduleId, item, idx));
+          delete item.enabled;
+        }
+      });
+    }
+    return { content: JSON.stringify(config, null, 2), disabled };
+  } catch {
+    return { content: jsonStr, disabled: [] };
+  }
+}
+
+/**
+ * 数组删除条目后维护禁用列表：移除该条目标识，并将其后的索引型标识前移一位。
+ */
+export function afterRemoveDisabledKey(keys: string[], moduleId: string, item: any, index: number): string[] {
+  const id = disabledKeyId(moduleId, item, index);
+  const prefix = `${moduleId}#`;
+  return keys
+    .filter((k) => k !== id)
+    .map((k) => {
+      if (!k.startsWith(prefix)) return k;
+      const i = parseInt(k.slice(prefix.length), 10);
+      return Number.isNaN(i) || i <= index ? k : `${prefix}${i - 1}`;
+    });
+}
+
+/**
+ * 数组条目移动/重排序后维护禁用列表（仅影响索引型标识）。
+ */
+export function afterReorderDisabledKeys(keys: string[], moduleId: string, from: number, to: number): string[] {
+  if (from === to) return keys;
+  const prefix = `${moduleId}#`;
+  return keys.map((k) => {
+    if (!k.startsWith(prefix)) return k;
+    const i = parseInt(k.slice(prefix.length), 10);
+    if (Number.isNaN(i)) return k;
+    let ni = i;
+    if (i === from) ni = to;
+    else if (from < to && i > from && i <= to) ni = i - 1;
+    else if (from > to && i >= to && i < from) ni = i + 1;
+    return ni === i ? k : `${prefix}${ni}`;
+  });
 }
 
 export interface ModuleStatusItem {

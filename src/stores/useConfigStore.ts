@@ -4,7 +4,7 @@ import type { XrayConfigProfile } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { getShanghaiNowString } from '../utils/date';
 import { useAppStore } from './useAppStore';
-import { stripDisabledRoutingRules } from '../utils/configSectionHelper';
+import { buildRuntimeConfig, migrateEmbeddedEnabledFlags } from '../utils/configSectionHelper';
 
 interface ConfigStore {
   profiles: XrayConfigProfile[];
@@ -253,7 +253,7 @@ export const useConfigStore = create<ConfigStore>()(
         }));
 
         // 若修改的是当前活动配置且内核正在运行，防抖后自动重启内核以重新加载配置
-        if (updates.content !== undefined && id === get().activeProfileId) {
+        if ((updates.content !== undefined || updates.disabled !== undefined) && id === get().activeProfileId) {
           if (autoRestartTimer) {
             clearTimeout(autoRestartTimer);
             autoRestartTimer = null;
@@ -351,10 +351,9 @@ export const useConfigStore = create<ConfigStore>()(
         const state = get();
         const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0];
         if (activeProfile && activeProfile.content) {
-          // Build runtime config: only filter out disabled routing rules
-          // (Xray doesn't understand the `enabled` field, so we must strip disabled rules).
-          // 在原始文本层面过滤，避免 JSON.parse/stringify 打乱字段顺序
-          const runtimeConfigJson = stripDisabledRoutingRules(activeProfile.content);
+          // 根据禁用列表过滤配置：被禁用的模块/条目不会传给内核，
+          // 且配置内容本身保持 Xray 官方纯净结构（不含任何 enabled 字段）
+          const runtimeConfigJson = buildRuntimeConfig(activeProfile.content, activeProfile.disabled);
 
           await invoke('start_kernel', { configJson: runtimeConfigJson });
         }
@@ -363,6 +362,23 @@ export const useConfigStore = create<ConfigStore>()(
     {
       name: 'mxray-config-profiles-storage',
       storage: createJSONStorage(() => localStorage),
+      version: 1,
+      migrate: (persisted: unknown, version: number) => {
+        const state = persisted as { profiles?: XrayConfigProfile[] };
+        // 从旧版升级：将内嵌在 JSON 中的 enabled 标记迁移为外部禁用列表，并从内容中移除
+        if (version < 1 && state?.profiles) {
+          state.profiles = state.profiles.map((p) => {
+            const { content, disabled } = migrateEmbeddedEnabledFlags(p.content || '');
+            const existing = p.disabled || [];
+            return {
+              ...p,
+              content,
+              disabled: [...existing, ...disabled.filter((d) => !existing.includes(d))],
+            };
+          });
+        }
+        return state as any;
+      },
     }
   )
 );

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Globe, Plus, Edit3, Trash2, ShieldCheck, Download, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { useDragSort } from '../../hooks/useDragSort';
+import { ToggleSwitch } from '../../components/ToggleSwitch';
 
 interface OutboundSectionProps {
   outbounds: any[];
@@ -8,6 +9,7 @@ interface OutboundSectionProps {
   onEditOutbound: (index: number) => void;
   onDeleteOutbound: (index: number) => void;
   onImportSubscription?: () => void;
+  onToggleOutboundEnabled?: (index: number) => void;
   onMoveOutbound?: (index: number, direction: 'up' | 'down') => void;
   onReorderOutbound?: (fromIndex: number, toIndex: number) => void;
 }
@@ -18,6 +20,7 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
   onEditOutbound,
   onDeleteOutbound,
   onImportSubscription,
+  onToggleOutboundEnabled,
   onMoveOutbound,
   onReorderOutbound,
 }) => {
@@ -65,6 +68,7 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
           const isDirect = ob.protocol === 'freedom';
           const isBlock = ob.protocol === 'blackhole';
           const isProxyNode = !isDirect && !isBlock;
+          const isObEnabled = ob.enabled !== false;
 
           let address = '系统内置';
           if (ob.settings?.address !== undefined && ob.settings?.port !== undefined) {
@@ -84,7 +88,7 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
                   ? 'bg-slate-950/60 border-cyan-500/20 hover:border-cyan-500/40 shadow-lg shadow-cyan-950/10'
                   : 'bg-slate-950/30 border-white/5 hover:border-white/10'
               } ${onReorderOutbound ? 'cursor-grab active:cursor-grabbing' : ''} ${
-                isDragging(idx) ? 'opacity-30' : ''
+                isDragging(idx) ? 'opacity-30' : !isObEnabled ? 'opacity-50' : ''
               } ${isDropTarget(idx) ? 'ring-2 ring-cyan-400/70 border-cyan-400/70 scale-[1.015]' : ''}`}
               style={{ transition: 'transform 180ms ease-out, opacity 150ms ease-out, border-color 150ms, box-shadow 150ms, scale 180ms ease-out' }}
             >
@@ -100,6 +104,15 @@ export const OutboundSection: React.FC<OutboundSectionProps> = ({
                     </span>
                   </div>
                   <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                    {onToggleOutboundEnabled && (
+                      <ToggleSwitch
+                        checked={isObEnabled}
+                        onChange={() => onToggleOutboundEnabled(idx)}
+                        activeColor="indigo"
+                        size="sm"
+                        ariaLabel="切换出站启用状态"
+                      />
+                    )}
                     {onMoveOutbound && (
                       <div className="flex flex-col">
                         <button

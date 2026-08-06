@@ -1,11 +1,15 @@
 import React from 'react';
 import { Database, Edit3, Trash2, Globe, Shield, Wifi, Layers, Ghost, Server, Zap } from 'lucide-react';
+import { ToggleSwitch } from '../../components/ToggleSwitch';
 
 interface DnsSectionProps {
   dns: any;
   onEdit: () => void;
   onDelete?: () => void;
   onDeleteServer?: (index: number) => void;
+  onToggleServerEnabled?: (index: number) => void;
+  enabled?: boolean;
+  onToggleEnabled?: () => void;
 }
 
 /* ── helpers ── */
@@ -66,12 +70,16 @@ export const DnsSection: React.FC<DnsSectionProps> = ({
   onEdit,
   onDelete,
   onDeleteServer,
+  onToggleServerEnabled,
+  enabled,
+  onToggleEnabled,
 }) => {
   const servers = Array.isArray(dns?.servers) ? dns.servers : [];
   const hosts = dns?.hosts && typeof dns.hosts === 'object' ? Object.entries(dns.hosts) : [];
+  const isEnabled = enabled !== false;
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4">
+    <div className={`bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4 transition-opacity ${isEnabled ? '' : 'opacity-60'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
@@ -95,6 +103,15 @@ export const DnsSection: React.FC<DnsSectionProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {onToggleEnabled && (
+            <ToggleSwitch
+              checked={isEnabled}
+              onChange={onToggleEnabled}
+              activeColor="blue"
+              size="sm"
+              ariaLabel="切换 DNS 配置启用状态"
+            />
+          )}
           <button
             type="button"
             onClick={onEdit}
@@ -119,12 +136,13 @@ export const DnsSection: React.FC<DnsSectionProps> = ({
       <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
         {servers.map((srv: any, idx: number) => {
           const { addr, meta, IconComp, isObj, domains, expectedIPs, skipFallback, finalQuery, qs, port } = summarizeServer(srv);
+          const isSrvEnabled = !isObj || srv.enabled !== false;
           return (
             <div
               key={idx}
-              className="p-3 bg-slate-950/40 border border-white/5 rounded-xl group hover:border-white/10 transition-colors"
+              className={`p-3 bg-slate-950/40 border border-white/5 rounded-xl group hover:border-white/10 transition-all ${isSrvEnabled ? '' : 'opacity-50'}`}
             >
-              {/* top row: type badge + address + delete */}
+              {/* top row: type badge + address + toggle + delete */}
               <div className="flex items-center gap-2">
                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border ${meta.color} shrink-0`}>
                   <IconComp className="w-3 h-3" />
@@ -134,6 +152,15 @@ export const DnsSection: React.FC<DnsSectionProps> = ({
                   {addr}
                   {port ? <span className="text-slate-500">:{port}</span> : null}
                 </span>
+                {onToggleServerEnabled && isObj && (
+                  <ToggleSwitch
+                    checked={isSrvEnabled}
+                    onChange={() => onToggleServerEnabled(idx)}
+                    activeColor="emerald"
+                    size="sm"
+                    ariaLabel="切换 DNS 服务器启用状态"
+                  />
+                )}
                 {onDeleteServer && (
                   <button
                     type="button"

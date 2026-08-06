@@ -9,6 +9,7 @@ interface InboundSectionProps {
   onEditInbound: (index: number) => void;
   onDeleteInbound: (index: number) => void;
   onToggleSniffing: (index: number) => void;
+  onToggleInboundEnabled?: (index: number) => void;
   onMoveInbound?: (index: number, direction: 'up' | 'down') => void;
   onReorderInbound?: (fromIndex: number, toIndex: number) => void;
 }
@@ -19,6 +20,7 @@ export const InboundSection: React.FC<InboundSectionProps> = ({
   onEditInbound,
   onDeleteInbound,
   onToggleSniffing,
+  onToggleInboundEnabled,
   onMoveInbound,
   onReorderInbound,
 }) => {
@@ -52,13 +54,14 @@ export const InboundSection: React.FC<InboundSectionProps> = ({
         {overlayEl}
         {inbounds.map((ib, idx) => {
           const isSniffingEnabled = ib.sniffing?.enabled !== false;
+          const isIbEnabled = ib.enabled !== false;
           return (
             <div
               key={idx}
               {...(onReorderInbound ? getItemDragProps(idx) : {})}
               className={`p-4 bg-slate-950/40 border border-white/5 rounded-xl hover:border-white/10 transition-all flex flex-col justify-between group ${
                 onReorderInbound ? 'cursor-grab active:cursor-grabbing' : ''
-              } ${isDragging(idx) ? 'opacity-30' : ''} ${
+              } ${isDragging(idx) ? 'opacity-30' : !isIbEnabled ? 'opacity-50' : ''} ${
                 isDropTarget(idx) ? 'ring-2 ring-blue-400/70 border-blue-400/70 scale-[1.015]' : ''
               }`}
               style={{ transition: 'transform 180ms ease-out, opacity 150ms ease-out, border-color 150ms, box-shadow 150ms, scale 180ms ease-out' }}
@@ -75,6 +78,15 @@ export const InboundSection: React.FC<InboundSectionProps> = ({
                     </span>
                   </div>
                   <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                    {onToggleInboundEnabled && (
+                      <ToggleSwitch
+                        checked={isIbEnabled}
+                        onChange={() => onToggleInboundEnabled(idx)}
+                        activeColor="blue"
+                        size="sm"
+                        ariaLabel="切换入站启用状态"
+                      />
+                    )}
                     {onMoveInbound && (
                       <div className="flex flex-col">
                         <button

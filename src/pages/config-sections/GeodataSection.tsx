@@ -1,19 +1,26 @@
 import React from 'react';
 import { Globe2, Edit3, Trash2 } from 'lucide-react';
+import { ToggleSwitch } from '../../components/ToggleSwitch';
 
 interface GeodataSectionProps {
   geodata: any;
   onEdit: () => void;
   onDelete?: () => void;
+  enabled?: boolean;
+  onToggleEnabled?: () => void;
 }
 
 export const GeodataSection: React.FC<GeodataSectionProps> = ({
   geodata,
   onEdit,
   onDelete,
+  enabled,
+  onToggleEnabled,
 }) => {
+  const isEnabled = enabled !== false;
+
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-3">
+    <div className={`bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-3 transition-opacity ${isEnabled ? '' : 'opacity-60'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
@@ -27,6 +34,15 @@ export const GeodataSection: React.FC<GeodataSectionProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {onToggleEnabled && (
+            <ToggleSwitch
+              checked={isEnabled}
+              onChange={onToggleEnabled}
+              activeColor="blue"
+              size="sm"
+              ariaLabel="切换地理数据启用状态"
+            />
+          )}
           <button
             type="button"
             onClick={onEdit}

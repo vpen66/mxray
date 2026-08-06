@@ -1,5 +1,6 @@
 import React from 'react';
 import { Layers, Plus, Edit3, Trash2 } from 'lucide-react';
+import { ToggleSwitch } from '../../components/ToggleSwitch';
 
 interface FakeDnsSectionProps {
   fakedns: any[];
@@ -7,6 +8,7 @@ interface FakeDnsSectionProps {
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
   onRemoveModule?: () => void;
+  onToggleItemEnabled?: (index: number) => void;
 }
 
 export const FakeDnsSection: React.FC<FakeDnsSectionProps> = ({
@@ -15,6 +17,7 @@ export const FakeDnsSection: React.FC<FakeDnsSectionProps> = ({
   onEdit,
   onDelete,
   onRemoveModule,
+  onToggleItemEnabled,
 }) => {
   return (
     <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4">
@@ -51,33 +54,45 @@ export const FakeDnsSection: React.FC<FakeDnsSectionProps> = ({
       </div>
 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-        {fakedns.map((item, idx) => (
-          <div
-            key={idx}
-            className="p-4 bg-slate-950/40 border border-white/5 rounded-xl flex items-center justify-between font-mono"
-          >
-            <div>
-              <div className="text-xs text-slate-400">CIDR: <span className="text-teal-300 font-semibold">{item.ipPool || '198.18.0.0/15'}</span></div>
-              <div className="text-xs text-slate-400">Pool Size: <span className="text-slate-200">{item.poolSize || 65535}</span></div>
+        {fakedns.map((item, idx) => {
+          const isItemEnabled = item?.enabled !== false;
+          return (
+            <div
+              key={idx}
+              className={`p-4 bg-slate-950/40 border border-white/5 rounded-xl flex items-center justify-between font-mono transition-opacity ${isItemEnabled ? '' : 'opacity-50'}`}
+            >
+              <div>
+                <div className="text-xs text-slate-400">CIDR: <span className="text-teal-300 font-semibold">{item.ipPool || '198.18.0.0/15'}</span></div>
+                <div className="text-xs text-slate-400">Pool Size: <span className="text-slate-200">{item.poolSize || 65535}</span></div>
+              </div>
+              <div className="flex items-center gap-1">
+                {onToggleItemEnabled && (
+                  <ToggleSwitch
+                    checked={isItemEnabled}
+                    onChange={() => onToggleItemEnabled(idx)}
+                    activeColor="emerald"
+                    size="sm"
+                    ariaLabel="切换地址池启用状态"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => onEdit(idx)}
+                  className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(idx)}
+                  className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => onEdit(idx)}
-                className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onDelete(idx)}
-                className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

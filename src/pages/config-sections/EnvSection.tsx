@@ -1,21 +1,28 @@
 import React from 'react';
 import { Terminal, Edit3, Trash2 } from 'lucide-react';
+import { ToggleSwitch } from '../../components/ToggleSwitch';
 
 interface EnvSectionProps {
   env: Record<string, any>;
   onEdit: () => void;
   onDelete?: () => void;
+  enabled?: boolean;
+  onToggleEnabled?: () => void;
 }
 
 export const EnvSection: React.FC<EnvSectionProps> = ({
   env,
   onEdit,
   onDelete,
+  enabled,
+  onToggleEnabled,
 }) => {
-  const pairs = Object.entries(env || {});
+  // enabled 为应用内部启停标志，不作为环境变量展示
+  const pairs = Object.entries(env || {}).filter(([k]) => k !== 'enabled');
+  const isEnabled = enabled !== false;
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4">
+    <div className={`bg-slate-900/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl space-y-4 transition-opacity ${isEnabled ? '' : 'opacity-60'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
@@ -27,6 +34,15 @@ export const EnvSection: React.FC<EnvSectionProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {onToggleEnabled && (
+            <ToggleSwitch
+              checked={isEnabled}
+              onChange={onToggleEnabled}
+              activeColor="blue"
+              size="sm"
+              ariaLabel="切换环境变量启用状态"
+            />
+          )}
           <button
             type="button"
             onClick={onEdit}
