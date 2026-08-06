@@ -349,28 +349,42 @@ export const DISABLED_MODULE_KEYS = new Set([
   'observatory', 'burstObservatory', 'geodata', 'version', 'env', 'routing',
 ]);
 
+/**
+ * 顶级模块的可视化渲染顺序：JSON 顶级键顺序与此保持一致，
+ * 确保可视化视图中模块的先后位置与 JSON 源码中的位置一一对应。
+ */
+export const VISUAL_MODULE_ORDER = [
+  'log', 'inbounds', 'dns', 'routing', 'outbounds', 'api', 'fakedns',
+  'transport', 'policy', 'stats', 'metrics', 'observatory', 'burstObservatory',
+  'geodata', 'version', 'env',
+];
+
+/**
+ * 按可视化渲染顺序重排 JSON 顶级键（未知键保留在末尾）。
+ * 顺序已正确时原样返回，避免无谓的重格式化。
+ */
+export function sortTopLevelKeys(jsonStr: string): string {
+  try {
+    const config = JSON.parse(jsonStr || '{}');
+    if (!config || typeof config !== 'object' || Array.isArray(config)) return jsonStr;
+    const keys = Object.keys(config);
+    const sorted = [
+      ...VISUAL_MODULE_ORDER.filter((k) => keys.includes(k)),
+      ...keys.filter((k) => !VISUAL_MODULE_ORDER.includes(k)),
+    ];
+    if (sorted.join('\u0000') === keys.join('\u0000')) return jsonStr;
+    const next: Record<string, any> = {};
+    for (const k of sorted) next[k] = config[k];
+    return JSON.stringify(next, null, 2);
+  } catch {
+    return jsonStr;
+  }
+}
+
 /** 支持条目级禁用的数组路径 */
 export const DISABLED_ARRAY_PATHS = [
   'inbounds', 'outbounds', 'fakedns', 'dns.servers', 'routing.rules', 'routing.balancers',
 ];
-
-/**
- * 计算数组条目的稳定禁用标识。
- * 优先使用 tag / address / ipPool 等稳定字段，缺失时回退索引；routing.rules 始终使用索引。
- */
-export function disabledKeyId(moduleId: string, item: any, index: number): string {
-  if (moduleId === 'routing.rules') return `routing.rules#${index}`;
-  if (moduleId === 'fakedns' && item?.ipPool) return `fakedns:pool=${item.ipPool}`;
-  if (moduleId === 'dns.servers') {
-    const addr = typeof item === 'string' ? item : item?.address;
-    if (addr) return `dns.servers:addr=${addr}`;
-    return `dns.servers#${index}`;
-  }
-  if ((moduleId === 'inbounds' || moduleId === 'outbounds' || moduleId === 'routing.balancers') && item?.tag) {
-    return `${moduleId}:tag=${item.tag}`;
-  }
-  return `${moduleId}#${index}`;
-}
 
 function getArrayByPath(config: any, moduleId: string): any[] | undefined {
   if (moduleId.includes('.')) {
@@ -380,53 +394,136 @@ function getArrayByPath(config: any, moduleId: string): any[] | undefined {
   return config?.[moduleId];
 }
 
-function setArrayByPath(config: any, moduleId: string, arr: any[]) {
+function ensureArrayByPath(config: any, moduleId: string): any[] {
   if (moduleId.includes('.')) {
     const [parent, child] = moduleId.split('.');
-    if (config[parent]) config[parent][child] = arr;
-  } else {
-    config[moduleId] = arr;
+    if (!config[parent] || typeof config[parent] !== 'object' || Array.isArray(config[parent])) {
+      config[parent] = {};
+    }
+    if (!Array.isArray(config[parent][child])) config[parent][child] = [];
+    return config[parent][child];
+  }
+  if (!Array.isArray(config[moduleId])) config[moduleId] = [];
+  return config[moduleId];
+}
+
+const genUid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
+/**
+ * 为被禁用的数组条目生成稳定的暂存标识。
+ * 优先使用 tag / address / ipPool 等稳定字段，缺失（如路由规则）时生成随机 uid。
+ */
+export function makeDisabledKey(moduleId: string, item: any): string {
+  if (moduleId === 'fakedns' && item?.ipPool) return `fakedns:pool=${item.ipPool}`;
+  if (moduleId === 'dns.servers') {
+    const addr = typeof item === 'string' ? item : item?.address;
+    if (addr) return `dns.servers:addr=${addr}`;
+  }
+  if (item?.tag) return `${moduleId}:tag=${item.tag}`;
+  return `${moduleId}:uid=${genUid()}`;
+}
+
+/** 从暂存标识解析出所属的数组模块路径（如 inbounds / dns.servers） */
+export function moduleIdOfDisabledKey(key: string): string {
+  const i = key.indexOf(':');
+  return i === -1 ? key : key.slice(0, i);
+}
+
+/**
+ * 禁用一个配置项：将其从 JSON 内容中移除，值与原始位置暂存到禁用记录中（可随时恢复到原位）。
+ * index 为 null 时表示禁用顶级单对象模块；否则禁用数组路径下指定索引的条目。
+ */
+export function disableConfigEntry(
+  content: string,
+  moduleId: string,
+  index: number | null,
+  disabled: Record<string, any>
+): { content: string; disabled: Record<string, any> } | null {
+  try {
+    const config = JSON.parse(content || '{}');
+    let value: any;
+    let key: string;
+    let origIndex = -1;
+    if (index === null) {
+      value = config[moduleId];
+      if (value === undefined) return null;
+      origIndex = Object.keys(config).indexOf(moduleId);
+      delete config[moduleId];
+      key = moduleId;
+    } else {
+      const arr = getArrayByPath(config, moduleId);
+      if (!Array.isArray(arr) || index < 0 || index >= arr.length) return null;
+      value = arr[index];
+      origIndex = index;
+      arr.splice(index, 1);
+      key = makeDisabledKey(moduleId, value);
+    }
+    // 标识冲突时追加随机后缀，避免覆盖已暂存的条目
+    while (disabled[key] !== undefined) key = `${key}#${genUid()}`;
+    return {
+      content: JSON.stringify(config, null, 2),
+      disabled: { ...disabled, [key]: { value, index: origIndex } },
+    };
+  } catch {
+    return null;
   }
 }
 
 /**
- * 构建启动 Xray 内核时传入的配置：根据禁用列表过滤掉所有被禁用的模块/条目。
- * 配置内容本身不含任何 enabled 字段，保持 Xray 官方纯净结构。
+ * 重新启用一个被禁用的配置项：将暂存值写回 JSON 内容的原始位置
+ * （模块插回原顶级键位，数组条目插回原索引；位置未知时追加到末尾）。
  */
-export function buildRuntimeConfig(jsonStr: string, disabledKeys?: string[]): string {
-  if (!disabledKeys || disabledKeys.length === 0) return jsonStr;
+export function enableConfigEntry(
+  content: string,
+  key: string,
+  disabled: Record<string, any>
+): { content: string; disabled: Record<string, any> } | null {
+  const entry = disabled[key];
+  if (entry === undefined) return null;
+  // 兼容旧版裸值暂存格式（无位置信息）
+  const isWrapped = entry && typeof entry === 'object' && !Array.isArray(entry) && 'value' in entry && 'index' in entry;
+  const value = isWrapped ? entry.value : entry;
+  const rawIndex = isWrapped && typeof entry.index === 'number' ? entry.index : -1;
   try {
-    const config = JSON.parse(jsonStr || '{}');
-    for (const key of disabledKeys) {
-      if (DISABLED_MODULE_KEYS.has(key)) delete config[key];
+    let config = JSON.parse(content || '{}');
+    const moduleId = moduleIdOfDisabledKey(key);
+    if (moduleId === key) {
+      // 顶级单对象模块：按原键位顺序插回
+      const keys = Object.keys(config);
+      const pos = rawIndex < 0 ? keys.length : Math.min(rawIndex, keys.length);
+      const newConfig: Record<string, any> = {};
+      keys.forEach((k, i) => {
+        if (i === pos) newConfig[key] = value;
+        newConfig[k] = config[k];
+      });
+      if (pos >= keys.length) newConfig[key] = value;
+      config = newConfig;
+    } else {
+      const arr = ensureArrayByPath(config, moduleId);
+      const pos = rawIndex < 0 ? arr.length : Math.min(rawIndex, arr.length);
+      arr.splice(pos, 0, value);
     }
-    for (const moduleId of DISABLED_ARRAY_PATHS) {
-      const arr = getArrayByPath(config, moduleId);
-      if (!Array.isArray(arr)) continue;
-      const filtered = arr.filter(
-        (item: any, idx: number) => !disabledKeys.includes(disabledKeyId(moduleId, item, idx))
-      );
-      if (filtered.length !== arr.length) setArrayByPath(config, moduleId, filtered);
-    }
-    return JSON.stringify(config, null, 2);
+    const next = { ...disabled };
+    delete next[key];
+    return { content: JSON.stringify(config, null, 2), disabled: next };
   } catch {
-    return jsonStr;
+    return null;
   }
 }
 
 /**
  * 迁移旧版内嵌的 enabled 标记：
- * 将 enabled: false 提取为外部禁用列表，并从内容中移除所有 enabled 字段，
- * 保证 JSON 为可直接被 Xray 启动的纯净官方结构。
+ * 从内容中移除所有 enabled 字段，并将 enabled: false 的项整体移出内容、
+ * 生成禁用标识列表，保证 JSON 为可直接被 Xray 启动的纯净官方结构。
  */
-export function migrateEmbeddedEnabledFlags(jsonStr: string): { content: string; disabled: string[] } {
+export function migrateEmbeddedEnabledFlags(jsonStr: string): { content: string; disabled: Record<string, any> } {
   try {
     const config = JSON.parse(jsonStr || '{}');
-    const disabled: string[] = [];
+    const stash: Array<{ moduleId: string; index: number | null }> = [];
     for (const m of Array.from(DISABLED_MODULE_KEYS)) {
       const v = config[m];
       if (v && typeof v === 'object' && !Array.isArray(v) && 'enabled' in v) {
-        if (v.enabled === false) disabled.push(m);
+        if (v.enabled === false) stash.push({ moduleId: m, index: null });
         delete v.enabled;
       }
     }
@@ -435,48 +532,77 @@ export function migrateEmbeddedEnabledFlags(jsonStr: string): { content: string;
       if (!Array.isArray(arr)) continue;
       arr.forEach((item: any, idx: number) => {
         if (item && typeof item === 'object' && 'enabled' in item) {
-          if (item.enabled === false) disabled.push(disabledKeyId(moduleId, item, idx));
+          if (item.enabled === false) stash.push({ moduleId, index: idx });
           delete item.enabled;
         }
       });
     }
-    return { content: JSON.stringify(config, null, 2), disabled };
+    // 倒序处理数组条目，避免 splice 影响后续索引；累积生成的禁用标识
+    let contentStr = JSON.stringify(config, null, 2);
+    let record: Record<string, any> = {};
+    for (const s of [...stash].reverse()) {
+      const res = disableConfigEntry(contentStr, s.moduleId, s.index, record);
+      if (res) {
+        contentStr = res.content;
+        record = res.disabled;
+      }
+    }
+    return { content: contentStr, disabled: record };
   } catch {
-    return { content: jsonStr, disabled: [] };
+    return { content: jsonStr, disabled: {} };
   }
 }
 
 /**
- * 数组删除条目后维护禁用列表：移除该条目标识，并将其后的索引型标识前移一位。
+ * 按旧版禁用标识列表（字符串数组）从内容中提取对应条目为禁用记录。
+ * 支持模块键、tag/addr/pool 稳定标识与 moduleId#index 索引标识。
  */
-export function afterRemoveDisabledKey(keys: string[], moduleId: string, item: any, index: number): string[] {
-  const id = disabledKeyId(moduleId, item, index);
-  const prefix = `${moduleId}#`;
-  return keys
-    .filter((k) => k !== id)
-    .map((k) => {
-      if (!k.startsWith(prefix)) return k;
-      const i = parseInt(k.slice(prefix.length), 10);
-      return Number.isNaN(i) || i <= index ? k : `${prefix}${i - 1}`;
-    });
-}
-
-/**
- * 数组条目移动/重排序后维护禁用列表（仅影响索引型标识）。
- */
-export function afterReorderDisabledKeys(keys: string[], moduleId: string, from: number, to: number): string[] {
-  if (from === to) return keys;
-  const prefix = `${moduleId}#`;
-  return keys.map((k) => {
-    if (!k.startsWith(prefix)) return k;
-    const i = parseInt(k.slice(prefix.length), 10);
-    if (Number.isNaN(i)) return k;
-    let ni = i;
-    if (i === from) ni = to;
-    else if (from < to && i > from && i <= to) ni = i - 1;
-    else if (from > to && i >= to && i < from) ni = i + 1;
-    return ni === i ? k : `${prefix}${ni}`;
-  });
+export function extractDisabledByKeyList(jsonStr: string, keys: string[]): { content: string; disabled: Record<string, any> } {
+  try {
+    const config = JSON.parse(jsonStr || '{}');
+    const rec: Record<string, any> = {};
+    // 顶级模块键
+    for (const k of keys) {
+      if (!k.includes(':') && !k.includes('#') && config[k] !== undefined) {
+        rec[k] = { value: config[k], index: Object.keys(config).indexOf(k) };
+        delete config[k];
+      }
+    }
+    // 索引型标识按模块分组
+    const indexByModule: Record<string, number[]> = {};
+    for (const k of keys) {
+      const i = k.indexOf('#');
+      if (i === -1) continue;
+      const m = k.slice(0, i);
+      const idx = parseInt(k.slice(i + 1), 10);
+      if (!Number.isNaN(idx)) (indexByModule[m] ||= []).push(idx);
+    }
+    const matchStable = (key: string, moduleId: string, item: any): boolean => {
+      if (moduleId === 'fakedns') return key === `fakedns:pool=${item?.ipPool}`;
+      if (moduleId === 'dns.servers') {
+        const addr = typeof item === 'string' ? item : item?.address;
+        return key === `dns.servers:addr=${addr}`;
+      }
+      return key === `${moduleId}:tag=${item?.tag}`;
+    };
+    for (const moduleId of DISABLED_ARRAY_PATHS) {
+      const arr = getArrayByPath(config, moduleId);
+      if (!Array.isArray(arr)) continue;
+      const indexSet = new Set(indexByModule[moduleId] || []);
+      const stableKeys = keys.filter((k) => k.startsWith(`${moduleId}:`));
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const item = arr[i];
+        const matchedKey = stableKeys.find((k) => matchStable(k, moduleId, item));
+        if (indexSet.has(i) || matchedKey) {
+          rec[matchedKey || makeDisabledKey(moduleId, item)] = { value: item, index: i };
+          arr.splice(i, 1);
+        }
+      }
+    }
+    return { content: JSON.stringify(config, null, 2), disabled: rec };
+  } catch {
+    return { content: jsonStr, disabled: {} };
+  }
 }
 
 export interface ModuleStatusItem {

@@ -48,8 +48,8 @@ export interface XrayConfigProfile {
   content: string;
   updatedAt: string;
   isDefault?: boolean;
-  /** 禁用配置项标识列表（不写入 JSON，启动内核时动态过滤） */
-  disabled?: string[];
+  /** 禁用配置项暂存记录：标识 -> 被移出 JSON 的配置值（可随时恢复） */
+  disabled?: Record<string, any>;
 }
 
 export type KernelSourceType = 'bundled' | 'custom' | 'installed';

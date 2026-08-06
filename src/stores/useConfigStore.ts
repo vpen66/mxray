@@ -4,7 +4,7 @@ import type { XrayConfigProfile } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { getShanghaiNowString } from '../utils/date';
 import { useAppStore } from './useAppStore';
-import { buildRuntimeConfig, migrateEmbeddedEnabledFlags } from '../utils/configSectionHelper';
+import { migrateEmbeddedEnabledFlags, extractDisabledByKeyList, sortTopLevelKeys } from '../utils/configSectionHelper';
 
 interface ConfigStore {
   profiles: XrayConfigProfile[];
@@ -212,7 +212,7 @@ const INITIAL_PROFILES: XrayConfigProfile[] = [
     id: 'cfg-default',
     name: '默认配置',
     description: 'TUN 透明代理 + Mixed 混合入站，国内外分流',
-    content: TEMPLATE_DEFAULT,
+    content: sortTopLevelKeys(TEMPLATE_DEFAULT),
     updatedAt: '2026-07-31 00:00',
     isDefault: true,
   },
@@ -351,30 +351,50 @@ export const useConfigStore = create<ConfigStore>()(
         const state = get();
         const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0];
         if (activeProfile && activeProfile.content) {
-          // 根据禁用列表过滤配置：被禁用的模块/条目不会传给内核，
-          // 且配置内容本身保持 Xray 官方纯净结构（不含任何 enabled 字段）
-          const runtimeConfigJson = buildRuntimeConfig(activeProfile.content, activeProfile.disabled);
-
-          await invoke('start_kernel', { configJson: runtimeConfigJson });
+          // 配置内容本身已是 Xray 官方纯净结构（禁用项已移出内容单独暂存），直接传入内核
+          await invoke('start_kernel', { configJson: activeProfile.content });
         }
       },
     }),
     {
       name: 'mxray-config-profiles-storage',
       storage: createJSONStorage(() => localStorage),
-      version: 1,
+      version: 4,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as { profiles?: XrayConfigProfile[] };
-        // 从旧版升级：将内嵌在 JSON 中的 enabled 标记迁移为外部禁用列表，并从内容中移除
-        if (version < 1 && state?.profiles) {
+        // 从旧版升级：
+        // v0 → 将内嵌在 JSON 中的 enabled 标记移出内容为禁用暂存记录
+        // v1 → 将禁用标识列表（string[]）升级为含值的暂存记录（条目从内容中移出）
+        // v2 → 裸值暂存包装为 { value, index }（位置未知，恢复时追加到末尾）
+        // v3 → 顶级键顺序按可视化渲染顺序统一重排
+        if (version < 4 && state?.profiles) {
           state.profiles = state.profiles.map((p) => {
-            const { content, disabled } = migrateEmbeddedEnabledFlags(p.content || '');
-            const existing = p.disabled || [];
-            return {
-              ...p,
-              content,
-              disabled: [...existing, ...disabled.filter((d) => !existing.includes(d))],
-            };
+            let content = p.content || '';
+            let rec: Record<string, any> | undefined = Array.isArray(p.disabled) ? undefined : (p.disabled as any);
+            if (version < 3 && Array.isArray(p.disabled)) {
+              // v0/v1 遗留：内嵌标记与标识列表 → 提取为暂存记录
+              const legacyKeys = p.disabled as string[];
+              const emb = migrateEmbeddedEnabledFlags(content);
+              content = emb.content;
+              rec = emb.disabled;
+              if (legacyKeys.length > 0) {
+                const ex = extractDisabledByKeyList(content, legacyKeys);
+                content = ex.content;
+                rec = { ...ex.disabled, ...rec };
+              }
+            } else if (version < 3 && rec) {
+              // v2 遗留：裸值暂存 → 包装为含位置的条目
+              const wrapped: Record<string, any> = {};
+              for (const [k, v] of Object.entries(rec)) {
+                wrapped[k] = v && typeof v === 'object' && !Array.isArray(v) && 'value' in v && 'index' in v
+                  ? v
+                  : { value: v, index: -1 };
+              }
+              rec = wrapped;
+            }
+            // 顶级键顺序与可视化布局对齐（如 log 始终在开头）
+            content = sortTopLevelKeys(content);
+            return { ...p, content, disabled: rec };
           });
         }
         return state as any;
