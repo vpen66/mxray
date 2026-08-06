@@ -230,9 +230,9 @@ pub fn set_system_proxy(
 
 #[tauri::command]
 pub fn get_system_proxy_status(app_handle: tauri::AppHandle) -> Result<SystemProxyStatus, String> {
-    let (saved_http, saved_socks) = get_saved_ports_from_runtime_config(&app_handle);
     #[cfg(target_os = "macos")]
     {
+        let (saved_http, saved_socks) = get_saved_ports_from_runtime_config(&app_handle);
         let services = get_active_macos_network_services();
         for service in services {
             if let Ok(out) = Command::new("networksetup")

@@ -1116,23 +1116,23 @@ pub fn start_kernel(
 
     #[cfg(not(target_os = "macos"))]
     {
-        let mut child = if cfg!(target_os = "windows") {
-            Command::new(&bin_path)
-                .args(["run", "-config", config_file_path.to_str().unwrap_or_default()])
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .creation_flags(CREATE_NO_WINDOW)
-                .spawn()
-                .map_err(|e| format!("无法启动 Xray 进程 ({}): {}", bin_path, e))?
-        } else {
-            Command::new("sudo")
-                .args([&bin_path, "run", "-config", config_file_path.to_str().unwrap_or_default()])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .map_err(|e| format!("无法以 sudo 启动 Xray 进程 ({}): {}", bin_path, e))?
-        };
+        #[cfg(target_os = "windows")]
+        let mut child = Command::new(&bin_path)
+            .args(["run", "-config", config_file_path.to_str().unwrap_or_default()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| format!("无法启动 Xray 进程 ({}): {}", bin_path, e))?;
+
+        #[cfg(not(target_os = "windows"))]
+        let mut child = Command::new("sudo")
+            .args([&bin_path, "run", "-config", config_file_path.to_str().unwrap_or_default()])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("无法以 sudo 启动 Xray 进程 ({}): {}", bin_path, e))?;
 
         // Stream stdout
         if let Some(stdout) = child.stdout.take() {
