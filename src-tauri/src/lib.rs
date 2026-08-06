@@ -7,6 +7,66 @@ pub mod sysproxy;
 use std::net::ToSocketAddrs;
 use tauri::Manager;
 
+/// GUI 单实例锁文件句柄：持有期间 flock 独占锁一直有效，
+/// 进程退出（含异常崩溃）后由系统自动释放
+#[cfg(unix)]
+static GUI_LOCK_FILE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
+
+/// 尝试获取 GUI 单实例锁。已有 GUI 存活时返回 false。
+/// 相比 PID 文件探测，flock 不会因进程异常退出残留陈旧状态
+#[cfg(unix)]
+fn acquire_gui_lock() -> bool {
+    use std::os::fd::AsRawFd;
+    let Some(app_dir) = dirs_next_data_dir() else { return true; };
+    let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(app_dir.join("gui.lock"))
+    else {
+        return true;
+    };
+    // LOCK_NB 非阻塞：拿不到锁说明已有 GUI 在运行
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return false;
+    }
+    *GUI_LOCK_FILE.lock().unwrap() = Some(file);
+    true
+}
+
+/// 锁文件目录与 app_data_dir 保持一致（在 Tauri AppHandle 可用前调用）
+#[cfg(unix)]
+fn dirs_next_data_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(
+        std::path::PathBuf::from(home)
+            .join("Library/Application Support/net.mxray.app"),
+    )
+}
+
+/// 解析当前可执行文件所属的 .app 包路径（开发模式下二进制不在包内时返回 None）
+#[cfg(target_os = "macos")]
+pub fn app_bundle_path() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let s = exe.to_str()?;
+    let idx = s.find(".app/").map(|i| i + 4)?;
+    Some(std::path::PathBuf::from(&s[..idx]))
+}
+
+/// 通过 LaunchServices 激活应用：已运行则前置并显示窗口，未运行则由系统启动。
+/// 相比直接 spawn 二进制或 osascript，可避免产生第二个进程实例
+#[cfg(target_os = "macos")]
+pub fn activate_or_open_app() -> bool {
+    if let Some(bundle) = app_bundle_path() {
+        std::process::Command::new("open")
+            .arg(&bundle)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    } else {
+        false
+    }
+}
+
 /// 根据内核运行状态切换菜单栏托盘图标：
 /// 运行中为正常不透明图标，已停止为降低透明度的置灰图标
 pub fn set_tray_kernel_state(app_handle: &tauri::AppHandle, running: bool) {
@@ -173,6 +233,17 @@ fn read_text_file(path: String) -> Result<String, String> {
 }
 
 pub fn run() {
+    // GUI 单实例保护：无论从 Dock、托盘还是命令行重复拉起，
+    // 一律激活已在运行的实例，绝不产生第二个 GUI 进程
+    #[cfg(unix)]
+    if !acquire_gui_lock() {
+        #[cfg(target_os = "macos")]
+        {
+            activate_or_open_app();
+        }
+        std::process::exit(0);
+    }
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
@@ -269,6 +340,14 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|_app_handle, event| {
+        // Dock 图标点击（应用已在运行）：恢复并聚焦主窗口，而非新开窗口
+        if matches!(event, tauri::RunEvent::Reopen { .. }) {
+            if let Some(window) = _app_handle.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
         // 退出时清理 GUI PID 文件（托盘代理据此判断是否需要拉起新 GUI）
         if matches!(event, tauri::RunEvent::Exit) {
             if let Ok(app_dir) = _app_handle.path().app_data_dir() {
