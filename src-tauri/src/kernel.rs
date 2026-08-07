@@ -762,6 +762,8 @@ const TUN_HELPER_INSTALL_PATH: &str = "/Library/Application Support/MXray/mxray-
 #[cfg(target_os = "macos")]
 const TUN_HELPER_SOCKET: &str = "/var/run/mxray-helper.sock";
 #[cfg(target_os = "macos")]
+const TUN_HELPER_VERSION_FILE: &str = "/Library/Application Support/MXray/mxray-helper.version";
+#[cfg(target_os = "macos")]
 const TUN_MANIFEST_PATH: &str = "/Users/Shared/mxray-tun.json";
 
 #[cfg(target_os = "macos")]
@@ -795,7 +797,7 @@ fn tun_helper_command(cmd: &str) -> Result<String, String> {
             Ok(resp) => return Ok(resp),
             Err(e) => {
                 last_err = e;
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                std::thread::sleep(std::time::Duration::from_millis(150));
             }
         }
     }
@@ -826,40 +828,46 @@ fn tun_helper_command_once(cmd: &str) -> Result<String, String> {
     Ok(resp)
 }
 
-/// 计算文件 SHA-256，用于比对已安装的 helper 与当前主程序是否一致
+/// 基于文件大小与修改时间生成身份 token，替代昂贵的 shasum 子进程哈希：
+/// 主程序更新后体积或 mtime 必然变化，足以判断 helper 是否需要重装
 #[cfg(target_os = "macos")]
-fn file_sha256(path: &str) -> Option<String> {
-    let out = Command::new("shasum").args(["-a", "256", path]).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    String::from_utf8_lossy(&out.stdout)
-        .split_whitespace()
-        .next()
-        .map(|s| s.to_string())
+fn helper_identity_token(path: &str) -> Option<String> {
+    let meta = fs::metadata(path).ok()?;
+    let mtime = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos();
+    Some(format!("{}:{}", meta.len(), mtime))
 }
 
 /// 确保特权 helper 守护进程已安装并加载。
 /// 首次安装或 helper 版本更新时需要一次管理员密码，此后每次启停内核均不再需要密码。
 #[cfg(target_os = "macos")]
 fn ensure_tun_helper(app_dir: &Path) -> Result<(), String> {
-    let already_loaded = Command::new("launchctl")
-        .args(["print", &format!("system/{}", TUN_HELPER_LABEL)])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-
     let helper_src = locate_helper_binary()
         .ok_or_else(|| "未找到主程序二进制（特权助手）".to_string())?;
 
-    // 已安装且与当前主程序一致：直接复用，无需密码
-    if already_loaded && Path::new(TUN_HELPER_INSTALL_PATH).exists() {
-        let installed_hash = file_sha256(TUN_HELPER_INSTALL_PATH);
-        let current_hash = file_sha256(&helper_src);
-        match (installed_hash, current_hash) {
-            (Some(a), Some(b)) if a == b => return Ok(()),
-            (None, _) => return Ok(()), // 无法校验时保持现状，避免反复弹密码
-            _ => {}                     // 版本不一致：继续执行重新安装以更新 helper
+    // 快速路径：helper 已安装且版本 token 一致时直接复用。
+    // 不再每次启动内核都执行 launchctl/shasum 子进程（对几十 MB 的主程序
+    // 做两次 SHA-256 是启动卡顿 2~4 秒的主要原因）
+    if Path::new(TUN_HELPER_INSTALL_PATH).exists() {
+        match helper_identity_token(&helper_src) {
+            None => return Ok(()), // 无法计算身份信息时保持现状，避免反复弹密码
+            Some(token) => {
+                let installed_token = fs::read_to_string(TUN_HELPER_VERSION_FILE)
+                    .ok()
+                    .map(|s| s.trim().to_string());
+                // token 一致，或旧版安装未写入 token 文件（无法确认版本时保持现状）
+                let reusable = installed_token.as_deref() == Some(token.as_str())
+                    || installed_token.is_none();
+                // 守护进程在线则直接复用（socket 探测仅毫秒级）；
+                // 离线时继续走完整流程重新加载/安装
+                if reusable && tun_helper_command_once("status").is_ok() {
+                    return Ok(());
+                }
+            }
         }
     }
 
@@ -895,10 +903,14 @@ fn ensure_tun_helper(app_dir: &Path) -> Result<(), String> {
     fs::write(&plist_local, &plist_content)
         .map_err(|e| format!("写入守护进程配置失败: {}", e))?;
 
-    // 一次管理员授权：安装 helper 二进制与 launchd 服务
+    // 一次管理员授权：安装 helper 二进制、版本 token 文件与 launchd 服务
     // 注意：路径含空格必须用 shell_quote 包裹；末尾输出 MXRAY_INSTALL_OK 供结果校验
+    // 安装时写入版本 token，后续启动内核走毫秒级快速路径，无需再做 shasum 哈希
+    let token_cmd = helper_identity_token(&helper_src)
+        .map(|t| format!(" && printf '%s' {} > {}", shell_quote(&t), shell_quote(TUN_HELPER_VERSION_FILE)))
+        .unwrap_or_default();
     let install_cmd = format!(
-        "mkdir -p '/Library/Application Support/MXray' && rm -f {dst} && cp {} {dst} && chmod 755 {dst} && cp {} /Library/LaunchDaemons/{label}.plist && {{ launchctl bootout system/{label} 2>/dev/null || true; }} && launchctl bootstrap system /Library/LaunchDaemons/{label}.plist && echo MXRAY_INSTALL_OK",
+        "mkdir -p '/Library/Application Support/MXray' && rm -f {dst} && cp {} {dst} && chmod 755 {dst} && cp {} /Library/LaunchDaemons/{label}.plist && {{ launchctl bootout system/{label} 2>/dev/null || true; }} && launchctl bootstrap system /Library/LaunchDaemons/{label}.plist{token_cmd} && echo MXRAY_INSTALL_OK",
         shell_quote(&helper_src),
         shell_quote(plist_local.to_str().unwrap_or_default()),
         dst = shell_quote(TUN_HELPER_INSTALL_PATH),
@@ -1000,15 +1012,25 @@ pub fn stop_kernel(app_handle: tauri::AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
-        // macOS: 先尝试无需管理员权限终止（普通代理模式 xray 以当前用户运行）
-        let _ = Command::new("pkill").arg("-x").arg("xray").output();
-        // 通过常驻的 root 权限 helper 终止 TUN 内核，无需密码
-        let _ = stop_kernel_via_helper();
-        std::thread::sleep(std::time::Duration::from_millis(400));
-        // 兜底：仅当存在不受 helper 管理的残留进程（如旧版本遗留）时才请求管理员权限
+        // 快速路径：没有残留 xray 进程时直接跳过，
+        // 避免 pkill/pgrep 子进程开销与固定 400ms 等待（启动内核的主要卡顿点之一）
         if macos_xray_running() {
-            let kill_script = "do shell script \"pkill -x xray || true\" with administrator privileges";
-            let _ = Command::new("osascript").arg("-e").arg(kill_script).output();
+            // macOS: 先尝试无需管理员权限终止（普通代理模式 xray 以当前用户运行）
+            let _ = Command::new("pkill").arg("-x").arg("xray").output();
+            // 通过常驻的 root 权限 helper 终止 TUN 内核，无需密码
+            let _ = stop_kernel_via_helper();
+            // 轮询确认进程退出并提前结束，替代固定 400ms 等待
+            for _ in 0..8 {
+                if !macos_xray_running() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            // 兜底：仅当存在不受 helper 管理的残留进程（如旧版本遗留）时才请求管理员权限
+            if macos_xray_running() {
+                let kill_script = "do shell script \"pkill -x xray || true\" with administrator privileges";
+                let _ = Command::new("osascript").arg("-e").arg(kill_script).output();
+            }
         }
     }
     #[cfg(target_os = "windows")]
