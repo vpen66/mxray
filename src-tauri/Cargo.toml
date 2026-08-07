@@ -34,3 +34,11 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 16
+lto = "thin"
+incremental = false
+strip = true
+
