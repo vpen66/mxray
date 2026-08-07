@@ -40,21 +40,22 @@ fn show_or_create_main_window(app_handle: &tauri::AppHandle) {
 }
 
 /// 根据内核运行状态切换菜单栏托盘图标：
-/// 运行中为正常不透明图标，已停止为降低透明度的置灰图标
+/// 运行中为实心纸飞机图标，已停止为轮廓纸飞机图标
 pub fn set_tray_kernel_state(app_handle: &tauri::AppHandle, running: bool) {
     let Some(tray) = app_handle.tray_by_id(TRAY_ID) else { return; };
-    let Some(base) = app_handle.default_window_icon().cloned() else { return; };
-    let image = if running {
-        base
+    let icon_bytes: &[u8] = if running {
+        include_bytes!("../icons/tray-active.png")
     } else {
-        let mut rgba = base.rgba().to_vec();
-        for px in rgba.chunks_exact_mut(4) {
-            px[3] = ((px[3] as u32) * 85 / 255) as u8;
-        }
-        tauri::image::Image::new_owned(rgba, base.width(), base.height())
+        include_bytes!("../icons/tray-idle.png")
     };
+    let Ok(image) = tauri::image::Image::from_bytes(icon_bytes) else { return; };
     let _ = tray.set_icon(Some(image));
+    #[cfg(target_os = "macos")]
+    {
+        let _ = tray.set_icon_as_template(true);
+    }
 }
+
 
 #[tauri::command]
 fn get_core_version() -> String {
@@ -155,7 +156,7 @@ pub fn run() {
                     }
                 });
 
-            if let Some(icon) = app.default_window_icon().cloned() {
+            if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-idle.png")) {
                 tray_builder = tray_builder.icon(icon);
                 #[cfg(target_os = "macos")]
                 {
