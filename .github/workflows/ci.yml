@@ -33,7 +33,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run sccache
-        uses: Mozilla-Actions/sccache-action@v2
+        uses: mozilla-actions/sccache-action@v0.0.8
 
       - name: Configure sccache & Rust flags
         shell: bash
