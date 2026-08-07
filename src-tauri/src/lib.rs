@@ -12,25 +12,70 @@ use tauri::Manager;
 #[cfg(unix)]
 static GUI_LOCK_FILE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
 
-/// 尝试获取 GUI 单实例锁。已有 GUI 存活时返回 false。
-/// 相比 PID 文件探测，flock 不会因进程异常退出残留陈旧状态
+/// 尝试非阻塞获取 flock 独占锁
 #[cfg(unix)]
-fn acquire_gui_lock() -> bool {
+fn try_flock(file: &std::fs::File) -> bool {
     use std::os::fd::AsRawFd;
-    let Some(app_dir) = dirs_next_data_dir() else { return true; };
-    let Ok(file) = std::fs::OpenOptions::new()
+    unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) == 0 }
+}
+
+/// 将当前进程 PID 写入锁文件，供后续实例判断持锁者是否存活
+#[cfg(unix)]
+fn write_lock_pid(file: &std::fs::File) {
+    use std::io::Write;
+    let _ = file.set_len(0);
+    let mut f = file;
+    let _ = f.write_all(std::process::id().to_string().as_bytes());
+}
+
+/// 打开 GUI 锁文件：O_CLOEXEC 确保托盘代理、Xray 内核等子进程
+/// 不会继承该 fd，避免 GUI 退出后锁被继承者“代持”导致无法再启动
+#[cfg(unix)]
+fn open_gui_lock_file(path: &std::path::Path) -> Option<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new()
         .create(true)
         .write(true)
-        .open(app_dir.join("gui.lock"))
-    else {
+        .custom_flags(libc::O_CLOEXEC)
+        .open(path)
+        .ok()
+}
+
+/// 尝试获取 GUI 单实例锁。已有 GUI 存活时返回 false。
+/// 相比 PID 文件探测，flock 不会因进程异常退出残留陈旧状态；
+/// 锁文件中记录持锁者 PID，用于识别“锁仅被继承 fd 代持”的假占用
+#[cfg(unix)]
+fn acquire_gui_lock() -> bool {
+    let Some(app_dir) = dirs_next_data_dir() else { return true; };
+    let _ = std::fs::create_dir_all(&app_dir);
+    let lock_path = app_dir.join("gui.lock");
+    let Some(file) = open_gui_lock_file(&lock_path) else { return true; };
+    if try_flock(&file) {
+        write_lock_pid(&file);
+        *GUI_LOCK_FILE.lock().unwrap() = Some(file);
         return true;
-    };
-    // LOCK_NB 非阻塞：拿不到锁说明已有 GUI 在运行
-    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+    }
+    // 拿不到锁：检查锁文件中记录的持锁 GUI 是否仍存活。
+    // 若已退出（或文件为空，如旧版本未写入 PID），说明锁只是被
+    // 继承 fd 的子进程（旧版托盘代理/内核）代持——删除并重建锁文件
+    // （新 inode），即可绕过陈旧占用重新获取
+    let holder_alive = std::fs::read_to_string(&lock_path)
+        .ok()
+        .and_then(|c| c.trim().parse::<i32>().ok())
+        .map(|pid| pid > 0 && pid_alive(pid))
+        .unwrap_or(false);
+    if holder_alive {
         return false;
     }
-    *GUI_LOCK_FILE.lock().unwrap() = Some(file);
-    true
+    let _ = std::fs::remove_file(&lock_path);
+    let Some(file) = open_gui_lock_file(&lock_path) else { return true; };
+    if try_flock(&file) {
+        write_lock_pid(&file);
+        *GUI_LOCK_FILE.lock().unwrap() = Some(file);
+        true
+    } else {
+        false
+    }
 }
 
 /// 锁文件目录与 app_data_dir 保持一致（在 Tauri AppHandle 可用前调用）
