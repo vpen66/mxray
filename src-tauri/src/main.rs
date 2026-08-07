@@ -74,6 +74,14 @@ fn show_or_launch_gui(app_handle: &tauri::AppHandle) {
 /// env -u 剥离 MXRAY_TRAY_MODE，防止拉起的 GUI 误入代理模式
 #[cfg(unix)]
 fn launch_gui_detached() {
+    #[cfg(target_os = "macos")]
+    if let Some(bundle) = mxray::app_bundle_path() {
+        let _ = std::process::Command::new("open")
+            .args(["-n", bundle.to_str().unwrap_or("")])
+            .output();
+        return;
+    }
+
     let Ok(exe) = std::env::current_exe() else { return; };
     let Some(exe_str) = exe.to_str() else { return; };
     let cmd = format!(

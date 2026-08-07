@@ -284,7 +284,18 @@ pub fn run() {
     if !acquire_gui_lock() {
         #[cfg(target_os = "macos")]
         {
-            activate_or_open_app();
+            let gui_pid = dirs_next_data_dir()
+                .and_then(|dir| std::fs::read_to_string(dir.join(GUI_PID_FILE_NAME)).ok())
+                .and_then(|c| c.trim().parse::<i32>().ok());
+            if let Some(pid) = gui_pid {
+                let script = format!(
+                    "tell application \"System Events\" to set frontmost of (first process whose unix id is {}) to true",
+                    pid
+                );
+                let _ = std::process::Command::new("osascript").arg("-e").arg(&script).output();
+            } else {
+                activate_or_open_app();
+            }
         }
         std::process::exit(0);
     }
