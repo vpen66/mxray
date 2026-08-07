@@ -14,6 +14,9 @@ static APP_EXIT_ALLOWED: AtomicBool = AtomicBool::new(false);
 
 /// 显示已有的主窗口；如果主窗口已被销毁，则动态重新创建并显示
 fn show_or_create_main_window(app_handle: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
+
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -219,6 +222,8 @@ pub fn run() {
         tauri::RunEvent::ExitRequested { api, .. } => {
             if !APP_EXIT_ALLOWED.load(Ordering::Relaxed) {
                 api.prevent_exit();
+                #[cfg(target_os = "macos")]
+                let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
         }
         tauri::RunEvent::Exit => {
