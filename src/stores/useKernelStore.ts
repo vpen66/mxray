@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { KernelInfo, RemoteRelease } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -38,7 +39,7 @@ const DEFAULT_BUNDLED_KERNEL: KernelInfo = {
 
 const KEEP_ALIVE_STORAGE_KEY = 'mxray.keepKernelAliveOnExit';
 
-export const useKernelStore = create<KernelStore>((set, get) => ({
+export const useKernelStore = create<KernelStore>()(persist((set, get) => ({
   activeKernel: DEFAULT_BUNDLED_KERNEL,
   installedKernels: [],
   remoteReleases: [],
@@ -56,10 +57,15 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
     set({ isLoadingKernels: true });
     try {
       const kernels = await invoke<KernelInfo[]>('list_installed_kernels');
-      // 将 activeKernel 同步为列表中第一个有效内核（获取真实版本号）
+      // 将 activeKernel 同步为已安装列表中的匹配项（更新真实版本号等元数据）
       const currentActive = get().activeKernel;
-      const matched = kernels.find((k) => k.path === currentActive.path) || kernels[0];
-      set({ installedKernels: kernels, activeKernel: matched || currentActive, isLoadingKernels: false });
+      // 优先按 path 精确匹配（持久化恢复的内核路径与已安装列表比对）
+      const matched = kernels.find((k) => k.path === currentActive.path);
+      set({
+        installedKernels: kernels,
+        activeKernel: matched || currentActive,
+        isLoadingKernels: false,
+      });
     } catch {
       // Fallback in web / dev environment
       set({ installedKernels: [DEFAULT_BUNDLED_KERNEL], activeKernel: DEFAULT_BUNDLED_KERNEL, isLoadingKernels: false });
@@ -166,4 +172,13 @@ export const useKernelStore = create<KernelStore>((set, get) => ({
 
   toggleAutoStartKernelDaemon: () =>
     set((state) => ({ autoStartKernelDaemon: !state.autoStartKernelDaemon })),
+}), {
+  name: 'mxray-kernel-store',
+  storage: createJSONStorage(() => localStorage),
+  // 仅持久化内核选择与守护进程开关，不持久化瞬态 UI 状态
+  partialize: (state) => ({
+    activeKernel: state.activeKernel,
+    standaloneKernel: state.standaloneKernel,
+    autoStartKernelDaemon: state.autoStartKernelDaemon,
+  }),
 }));
