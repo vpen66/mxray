@@ -341,6 +341,8 @@ pub fn run() {
 
     app.run(|_app_handle, event| {
         // Dock 图标点击（应用已在运行）：恢复并聚焦主窗口，而非新开窗口
+        // Reopen 变体仅在 macOS 上存在，其他平台条件编译跳过
+        #[cfg(target_os = "macos")]
         if matches!(event, tauri::RunEvent::Reopen { .. }) {
             if let Some(window) = _app_handle.get_webview_window("main") {
                 let _ = window.show();

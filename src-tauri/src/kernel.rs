@@ -1057,6 +1057,8 @@ pub fn start_kernel(
 
     let bin_path = find_xray_binary(binary_path.as_deref(), &app_handle)?;
 
+    // Linux 上暂无使用该变量的分支，条件编译避免未使用变量告警
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let is_tun_enabled = config_json.contains("\"protocol\":\"tun\"")
         || config_json.contains("\"protocol\": \"tun\"")
         || config_json.contains("\"tag\":\"tun-in\"")
@@ -1092,6 +1094,8 @@ pub fn start_kernel(
 
     fs::write(&config_file_path, &config_json)
         .map_err(|e| format!("写入运行时配置文件失败: {}", e))?;
+    // generation 仅用于 macOS 的日志 tail 线程退出判定
+    #[cfg(target_os = "macos")]
     let generation = KERNEL_GENERATION.load(Ordering::Relaxed);
 
     #[cfg(target_os = "macos")]

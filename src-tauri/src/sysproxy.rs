@@ -230,6 +230,9 @@ pub fn set_system_proxy(
 
 #[tauri::command]
 pub fn get_system_proxy_status(app_handle: tauri::AppHandle) -> Result<SystemProxyStatus, String> {
+    // 仅 macOS 分支需要读取运行时配置保存的端口，其他平台显式忽略
+    #[cfg(not(target_os = "macos"))]
+    let _ = &app_handle;
     #[cfg(target_os = "macos")]
     {
         let (saved_http, saved_socks) = get_saved_ports_from_runtime_config(&app_handle);
