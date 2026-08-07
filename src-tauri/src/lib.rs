@@ -348,6 +348,15 @@ pub fn run() {
             #[cfg(unix)]
             spawn_tray_agent(app.handle());
 
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Regular);
+
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+
             // 接管已在后台运行的内核（保活模式残留）：附着运行时日志，
             // 否则本进程未启动过内核，日志页将无任何输出
             if kernel::xray_process_alive() {

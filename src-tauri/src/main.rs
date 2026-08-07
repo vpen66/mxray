@@ -51,10 +51,6 @@ fn running_gui_pid(app_handle: &tauri::AppHandle) -> Option<i32> {
 /// 将已运行的 GUI 窗口置为前台（避免重复拉起第二个实例）
 #[cfg(target_os = "macos")]
 fn activate_gui(pid: i32) {
-    // 优先走 LaunchServices：已运行则激活并显示窗口，不会新开进程
-    if mxray::activate_or_open_app() {
-        return;
-    }
     let script = format!(
         "tell application \"System Events\" to set frontmost of (first process whose unix id is {}) to true",
         pid
@@ -69,11 +65,6 @@ fn show_or_launch_gui(app_handle: &tauri::AppHandle) {
         #[cfg(target_os = "macos")]
         activate_gui(pid);
         let _ = pid;
-        return;
-    }
-    // PID 文件缺失时，macOS 仍可通过 LaunchServices 激活/启动同一应用
-    #[cfg(target_os = "macos")]
-    if mxray::activate_or_open_app() {
         return;
     }
     launch_gui_detached();
@@ -185,6 +176,10 @@ fn run_tray_agent() {
         .expect("error while building tray agent");
 
     app.run(|app_handle, event| match event {
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => {
+            show_or_launch_gui(app_handle);
+        }
         tauri::RunEvent::ExitRequested { api, .. } => {
             // 主窗口销毁会触发退出请求，代理需常驻：仅菜单动作放行
             if !AGENT_EXIT_ALLOWED.load(Ordering::Relaxed) {
